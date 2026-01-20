@@ -75,7 +75,7 @@ Key files:
 - Only available in Interactive mode (require conversation context)
 
 **Autonomous Commands** (local skills in `src/lib/skills.ts`):
-- `install`, `diagnose`, `debug` - defined as `LOCAL_SKILLS` with `isLocal: true`
+- `install`, `doctor`, `debug` - defined as `LOCAL_SKILLS` with `isLocal: true`
 - Can be executed in both Command mode (`clix install`) and Interactive mode (`/install`)
 
 ## TypeScript Patterns
@@ -120,7 +120,7 @@ Rules for separating Command mode and Interactive mode:
 - `SlashCommandMenu`
 
 **Command Mode Only (`@/ui/`)**:
-- `AgentExecutionUI.tsx` - AI agent-based command execution UI (install, diagnose, etc.)
+- `AgentExecutionUI.tsx` - AI agent-based command execution UI (install, doctor, etc.)
 - `ConfigUI.tsx` - Configuration UI
 
 **Rules**:

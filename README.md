@@ -107,7 +107,7 @@ clix
 - `/help` - Show all available commands
 - `/debug` - Interactive debugging assistant
 - `/install` - Autonomous SDK installation
-- `/diagnose` - SDK diagnosis
+- `/doctor` - SDK health check
 - `/integration` - Interactive SDK integration guide
 - `/agent` - Switch AI agents
 - `/transfer` - Transfer session to native CLI
@@ -146,12 +146,12 @@ clix install --platform ios
 
 - `--platform <platform>` - Target platform (ios, android, react-native, flutter)
 
-### `clix diagnose`
+### `clix doctor`
 
 Analyze SDK integration status in your project.
 
 ```bash
-clix diagnose
+clix doctor
 ```
 
 ### Interactive Skills (Chat Mode Only)
@@ -233,7 +233,7 @@ Use these commands within the interactive chat (`clix`):
 | Command | Aliases | Description |
 |---------|---------|-------------|
 | `/install` | | Autonomous SDK installation |
-| `/diagnose` | | Diagnose SDK integration status |
+| `/doctor` | | Check SDK integration status |
 | `/debug` | | Interactive debugging assistant |
 
 ### Interactive Skills
@@ -305,7 +305,7 @@ Switching to Gemini...
 
 Pre-built workflows for common SDK tasks. Skills automatically detect your platform (iOS, Android, React Native, Flutter) and follow Clix SDK best practices.
 
-- **Autonomous Commands** (`/install`, `/diagnose`, `/debug`): Can be run from command-line (`clix install`) or chat mode
+- **Autonomous Commands** (`/install`, `/doctor`, `/debug`): Can be run from command-line (`clix install`) or chat mode
 - **Interactive Skills** (`/integration`, `/event-tracking`, `/user-management`, `/personalization`, `/api-triggered-campaigns`): Require step-by-step guidance, available only in chat mode
 
 ## Development

@@ -1,4 +1,4 @@
-# Clix SDK Diagnosis
+# Clix SDK Doctor
 
 You are analyzing a mobile project for Clix SDK integration status.
 

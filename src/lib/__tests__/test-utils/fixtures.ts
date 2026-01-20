@@ -95,7 +95,7 @@ export const FIXTURES = {
     'event-tracking',
     'user-management',
     'personalization',
-    'diagnose',
+    'doctor',
   ] as const,
 
   /**

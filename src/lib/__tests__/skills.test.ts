@@ -12,7 +12,7 @@ import { createMockExecutorWithResponses, FIXTURES } from './test-utils';
 
 describe('AVAILABLE_SKILLS', () => {
   test('should contain at least 5 skills (embedded + local)', () => {
-    // 5 embedded skills from @clix-so/clix-agent-skills + 1 local (diagnose)
+    // 5 embedded skills from @clix-so/clix-agent-skills + 1 local (doctor)
     expect(AVAILABLE_SKILLS.length).toBeGreaterThanOrEqual(5);
   });
 
@@ -51,10 +51,10 @@ describe('AVAILABLE_SKILLS', () => {
     expect(skill?.name).toBe('Personalization');
   });
 
-  test('should have diagnose skill', () => {
-    const skill = AVAILABLE_SKILLS.find((s) => s.type === 'diagnose');
+  test('should have doctor skill', () => {
+    const skill = AVAILABLE_SKILLS.find((s) => s.type === 'doctor');
     expect(skill).toBeDefined();
-    expect(skill?.name).toBe('SDK Diagnosis');
+    expect(skill?.name).toBe('SDK Doctor');
   });
 
   test('each skill should have type, name, and description', () => {
@@ -82,11 +82,11 @@ describe('getSkillInfo', () => {
     expect(skill).toBeUndefined();
   });
 
-  test('should return correct info for diagnose skill', () => {
-    const skill = getSkillInfo('diagnose');
+  test('should return correct info for doctor skill', () => {
+    const skill = getSkillInfo('doctor');
     expect(skill).toBeDefined();
-    expect(skill?.type).toBe('diagnose');
-    expect(skill?.description).toContain('Diagnose');
+    expect(skill?.type).toBe('doctor');
+    expect(skill?.description).toContain('Check');
   });
 
   test('should return all skill types correctly', () => {
@@ -99,9 +99,9 @@ describe('getSkillInfo', () => {
 });
 
 describe('getSkillPrompt', () => {
-  describe('diagnose skill (local)', () => {
-    test('should return diagnose prompt with project path', async () => {
-      const prompt = await getSkillPrompt('diagnose', {
+  describe('doctor skill (local)', () => {
+    test('should return doctor prompt with project path', async () => {
+      const prompt = await getSkillPrompt('doctor', {
         projectPath: '/test/project',
       });
 
@@ -110,7 +110,7 @@ describe('getSkillPrompt', () => {
     });
 
     test('should include diagnostic JSON structure', async () => {
-      const prompt = await getSkillPrompt('diagnose');
+      const prompt = await getSkillPrompt('doctor');
 
       expect(prompt).toContain('"platform"');
       expect(prompt).toContain('"sdkInstalled"');
@@ -120,7 +120,7 @@ describe('getSkillPrompt', () => {
     });
 
     test('should include platform detection instructions', async () => {
-      const prompt = await getSkillPrompt('diagnose');
+      const prompt = await getSkillPrompt('doctor');
 
       expect(prompt).toContain('package.json');
       expect(prompt).toContain('pubspec.yaml');
@@ -129,7 +129,7 @@ describe('getSkillPrompt', () => {
     });
 
     test('should include SDK installation check instructions', async () => {
-      const prompt = await getSkillPrompt('diagnose');
+      const prompt = await getSkillPrompt('doctor');
 
       expect(prompt).toContain('ClixSDK');
       expect(prompt).toContain('@clix-so/react-native-sdk');
@@ -137,7 +137,7 @@ describe('getSkillPrompt', () => {
     });
 
     test('should use cwd when projectPath not provided', async () => {
-      const prompt = await getSkillPrompt('diagnose');
+      const prompt = await getSkillPrompt('doctor');
       expect(prompt).toContain(`Project path: ${process.cwd()}`);
     });
   });
@@ -192,7 +192,7 @@ describe('executeSkill', () => {
     ]);
 
     const messages: AgentMessage[] = [];
-    for await (const message of executeSkill('diagnose', mockExecutor)) {
+    for await (const message of executeSkill('doctor', mockExecutor)) {
       messages.push(message);
     }
 
@@ -213,7 +213,7 @@ describe('executeSkill', () => {
     };
 
     const messages: AgentMessage[] = [];
-    for await (const message of executeSkill('diagnose', mockExecutor, options)) {
+    for await (const message of executeSkill('doctor', mockExecutor, options)) {
       messages.push(message);
     }
 
@@ -248,7 +248,7 @@ describe('SkillType', () => {
       'event-tracking',
       'user-management',
       'personalization',
-      'diagnose',
+      'doctor',
     ];
 
     for (const type of skillTypes) {
@@ -273,7 +273,7 @@ describe('error handling', () => {
       // This test verifies that when getSkillPrompt fails, it throws with a clear message
       // The actual error would occur in a binary build without @clix-so/clix-agent-skills installed
       // Here we verify the diagnose skill (local) works correctly as a baseline
-      const prompt = await getSkillPrompt('diagnose');
+      const prompt = await getSkillPrompt('doctor');
       expect(prompt).toContain('Project path:');
     });
 
@@ -307,7 +307,7 @@ describe('error handling', () => {
       ]);
 
       const messages: AgentMessage[] = [];
-      for await (const message of executeSkill('diagnose', mockExecutor)) {
+      for await (const message of executeSkill('doctor', mockExecutor)) {
         messages.push(message);
       }
 
@@ -328,7 +328,7 @@ describe('error handling', () => {
 
       try {
         const messages: AgentMessage[] = [];
-        for await (const message of executeSkill('diagnose', mockExecutor)) {
+        for await (const message of executeSkill('doctor', mockExecutor)) {
           messages.push(message);
         }
         // Should not reach here
@@ -353,7 +353,7 @@ describe('error handling', () => {
 
       try {
         const messages: AgentMessage[] = [];
-        for await (const message of executeSkill('diagnose', mockExecutor)) {
+        for await (const message of executeSkill('doctor', mockExecutor)) {
           messages.push(message);
         }
         // Should not reach here

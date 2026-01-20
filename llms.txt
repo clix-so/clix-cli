@@ -133,19 +133,19 @@ clix install [options]
 
 **Note:** Unlike `/integration` (interactive guidance), this command makes changes autonomously without asking for confirmation.
 
-### `clix diagnose`
+### `clix doctor`
 
 Analyze SDK integration status in your project.
 
 ```bash
-clix diagnose
+clix doctor
 ```
 
 **What it does:**
 1. Detects platform automatically
 2. Scans for SDK installation
 3. Checks push configuration
-4. Outputs diagnostic JSON report with issues and recommendations
+4. Outputs doctor JSON report with issues and recommendations
 
 ### `clix debug <problem>`
 
@@ -213,7 +213,7 @@ Type `/` in the chat to see the autocomplete menu. All 17 slash commands are org
 These can be run from command-line (`clix <command>`) or chat mode:
 
 - `/install` - Autonomous SDK installation with automatic file modifications
-- `/diagnose` - Analyze SDK integration status (automatic scan, JSON output)
+- `/doctor` - Analyze SDK integration status (automatic scan, JSON output)
 - `/debug` - Interactive debugging assistant (asks for problem description)
 
 #### Interactive Skills (5 commands)
@@ -245,7 +245,7 @@ These are built-in commands for chat management and tools:
 **How it works:**
 - Type `/` to enter slash command mode
 - Autocomplete menu appears showing matching commands
-- Type letters to filter (e.g., `/d` shows debug, diagnose)
+- Type letters to filter (e.g., `/d` shows debug, doctor)
 - Use ↑/↓ arrows to navigate menu
 - Press Tab to autocomplete selected command
 - Press Enter to execute selected command
@@ -254,7 +254,7 @@ These are built-in commands for chat management and tools:
 **Menu display:**
 ```
 /install                  - Autonomous SDK installation [autonomous]
-/diagnose                 - Diagnose SDK integration status [autonomous]
+/doctor                   - Check SDK integration status [autonomous]
 /debug                    - Interactive debugging assistant [autonomous]
 /integration              - SDK integration guide [skill]
 /event-tracking           - Event tracking setup [skill]
@@ -298,11 +298,11 @@ Detecting platform...
 ✓ Updated app/_layout.tsx with SDK initialization
 ```
 
-#### `/diagnose` - SDK Integration Analysis
+#### `/doctor` - SDK Integration Analysis
 
 **Category:** Autonomous Command
 
-**What it does:** Automatically scans your project to diagnose SDK integration status. Outputs structured JSON report.
+**What it does:** Automatically scans your project to check SDK integration status. Outputs structured JSON report.
 
 **Checks:**
 - Platform detection (iOS/Android/React Native/Flutter)
@@ -314,7 +314,7 @@ Detecting platform...
 
 **Example:**
 ```
-> /diagnose
+> /doctor
 Scanning project for SDK integration...
 {
   "platform": "ios",
@@ -443,7 +443,7 @@ Available Commands:
 
 Autonomous Commands:
   /install         - Autonomous SDK installation
-  /diagnose        - Diagnose SDK integration status
+  /doctor          - Check SDK integration status
   /debug           - Interactive debugging assistant
 
 Interactive Skills:
@@ -1079,7 +1079,7 @@ which claude  # or which codex
    /install           # Autonomous SDK installation
    /integration       # Interactive integration guide
    /debug             # For problem diagnosis
-   /diagnose          # For automated SDK status check
+   /doctor            # For automated SDK status check
    /event-tracking    # Event tracking setup
    /user-management   # User identification setup
    ```
@@ -1124,7 +1124,7 @@ When helping users with Clix CLI, keep these points in mind:
 2. **Interactive > Commands** - The tool is primarily interactive, not command-based
 3. **6 supported agents** - Gemini, Copilot, OpenCode, Cursor, Claude, Codex (recommend starting with Gemini or Copilot for free tiers)
 4. **17 slash commands** - 3 autonomous commands + 5 interactive skills + 9 system commands
-5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/diagnose`, `/debug`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
+5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
 6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
 7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps
 8. **Session transfer** - Saves to `~/.local/state/clix/sessions/`, provides command for native CLI

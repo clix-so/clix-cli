@@ -45,9 +45,9 @@ const LOCAL_SKILLS: SkillInfo[] = [
     isLocal: true,
   },
   {
-    type: 'diagnose',
-    name: 'SDK Diagnosis',
-    description: 'Diagnose Clix SDK integration status',
+    type: 'doctor',
+    name: 'SDK Doctor',
+    description: 'Check Clix SDK integration status',
     isLocal: true,
   },
   {
@@ -281,8 +281,8 @@ async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions)
     case 'install':
       // install uses autonomous installation prompt
       return getInstallPrompt(options);
-    case 'diagnose':
-      return getDiagnosePrompt(options);
+    case 'doctor':
+      return getDoctorPrompt(options);
     case 'debug':
       return getDebugPrompt({
         problemDescription: 'General debugging session',
@@ -295,11 +295,11 @@ async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions)
 }
 
 /**
- * Get prompt for the diagnose skill.
- * Uses the diagnostic prompt for SDK integration status analysis.
- * Prompt is loaded from src/lib/skills/diagnose/SKILL.md
+ * Get prompt for the doctor skill.
+ * Uses the doctor prompt for SDK integration status analysis.
+ * Prompt is loaded from src/lib/skills/doctor/SKILL.md
  */
-function getDiagnosePrompt(options?: SkillOptions): string {
+function getDoctorPrompt(options?: SkillOptions): string {
   const projectPath = options?.projectPath ?? process.cwd();
 
   let prompt = `Project path: ${projectPath}\n\n`;
@@ -309,9 +309,9 @@ function getDiagnosePrompt(options?: SkillOptions): string {
     prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
   }
 
-  // Load the diagnostic prompt from external file
-  const diagnosePrompt = readLocalSkillPrompt('diagnose');
-  prompt += diagnosePrompt;
+  // Load the doctor prompt from external file
+  const doctorPrompt = readLocalSkillPrompt('doctor');
+  prompt += doctorPrompt;
 
   return prompt;
 }

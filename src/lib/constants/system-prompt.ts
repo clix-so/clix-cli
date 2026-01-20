@@ -65,7 +65,7 @@ Platform-specific configs to verify:
 - /user-management - User management
 - /personalization - Personalization templates
 - /api-triggered-campaigns - API-triggered campaign setup
-- /diagnose - Diagnose SDK integration status
+- /doctor - Check SDK integration status
 - /debug - Debug and investigate user-reported problems
 - /install-mcp - Install Clix MCP Server for AI agents
 

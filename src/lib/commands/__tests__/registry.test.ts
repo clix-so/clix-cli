@@ -169,9 +169,9 @@ describe('Command Registry', () => {
       expect(personalization).toBeDefined();
     });
 
-    test('should have diagnose command', () => {
-      const diagnose = getCommand('diagnose');
-      expect(diagnose).toBeDefined();
+    test('should have doctor command', () => {
+      const doctor = getCommand('doctor');
+      expect(doctor).toBeDefined();
     });
 
     test('should have api-triggered-campaigns command (dynamically discovered)', () => {
@@ -199,7 +199,7 @@ describe('Command Registry', () => {
             'debug',
             'install-mcp',
             'update',
-            'diagnose',
+            'doctor',
           ].includes(c.name),
       );
 
@@ -233,7 +233,7 @@ describe('Command Registry', () => {
       // Get the count of embedded skills
       const embeddedSkillCount = EMBEDDED_SKILL_METADATA.length;
 
-      // Get skill commands (excluding local skills like diagnose)
+      // Get skill commands (excluding local skills like doctor)
       const commands = getCommands();
       const skillCommands = commands.filter((c) =>
         EMBEDDED_SKILL_METADATA.some((m) => m.commandName === c.name),

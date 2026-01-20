@@ -1185,7 +1185,7 @@ After completion, report:
 ✓ Placeholders that need replacement
 ✓ Any IDE-only steps required
 `,
-  'local-diagnose': `# Clix SDK Diagnosis
+  'local-doctor': `# Clix SDK Doctor
 
 You are analyzing a mobile project for Clix SDK integration status.
 

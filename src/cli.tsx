@@ -53,7 +53,7 @@ ${localSkillCommands}
     $ clix agent claude
     $ clix resume
     $ clix install
-    $ clix diagnose
+    $ clix doctor
     $ clix debug "Push notifications not working on iOS"
     $ clix install-mcp
     $ clix install-mcp claude

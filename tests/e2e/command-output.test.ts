@@ -53,7 +53,7 @@ describe('Command Mode Output Persistence', () => {
 
       // Verify that command mode commands are listed
       expect(result.stdout).toContain('install');
-      expect(result.stdout).toContain('diagnose');
+      expect(result.stdout).toContain('doctor');
       expect(result.stdout).toContain('debug');
     });
   });
@@ -78,7 +78,7 @@ describe('Final Output Format Verification', () => {
     // Verify commands that support final output are listed
     expect(result.stdout).toContain('install');
     expect(result.stdout).toContain('debug');
-    expect(result.stdout).toContain('diagnose');
+    expect(result.stdout).toContain('doctor');
     // Note: config is not shown in help (interactive command)
 
     // These commands should now persist their output

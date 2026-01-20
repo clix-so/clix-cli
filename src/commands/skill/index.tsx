@@ -50,7 +50,7 @@ Note: Interactive skills require step-by-step guidance.
 
 Examples:
   $ clix ${exampleSkill}
-  $ clix diagnose
+  $ clix doctor
 `;
 }
 

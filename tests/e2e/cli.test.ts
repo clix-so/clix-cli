@@ -30,7 +30,7 @@ describe('CLI E2E Tests', () => {
 
       expect(result.stdout).toContain('agent');
       expect(result.stdout).toContain('install');
-      expect(result.stdout).toContain('diagnose');
+      expect(result.stdout).toContain('doctor');
       expect(result.stdout).toContain('debug');
       expect(result.stdout).toContain('install-mcp');
 
@@ -133,7 +133,7 @@ describe('CLI Help Output Formatting', () => {
     expect(result.stdout).toContain('Start interactive chat');
     expect(result.stdout).toContain('List or switch AI agents');
     expect(result.stdout).toContain('Autonomous SDK installation');
-    expect(result.stdout).toContain('diagnose');
+    expect(result.stdout).toContain('doctor');
     expect(result.stdout).toContain('Interactive debugging assistant');
     expect(result.stdout).toContain('Install Clix MCP Server');
   });

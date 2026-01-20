@@ -83,7 +83,7 @@ body:
         - /track (Event Tracking)
         - /user (User Management)
         - /personalize (Personalization)
-        - /diagnose (SDK Diagnosis)
+        - /doctor (SDK Doctor)
         - /debug (Debugging Assistant)
         - install-mcp
         - config

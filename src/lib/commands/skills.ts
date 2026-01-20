@@ -80,7 +80,7 @@ function generateSkillCommands(): Command[] {
       'install',
     ),
   );
-  commands.push(createLocalSkillCommand('diagnose', 'Diagnose SDK integration status', 'diagnose'));
+  commands.push(createLocalSkillCommand('doctor', 'Check SDK integration status', 'doctor'));
 
   return commands;
 }
@@ -112,4 +112,4 @@ export const personalizationCommand = skillCommands.find((c) => c.name === 'pers
 export const apiTriggeredCampaignsCommand = skillCommands.find(
   (c) => c.name === 'api-triggered-campaigns',
 );
-export const diagnoseCommand = skillCommands.find((c) => c.name === 'diagnose');
+export const doctorCommand = skillCommands.find((c) => c.name === 'doctor');
