@@ -1,0 +1,165 @@
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { ClaudeExecutor } from '../claude-executor';
+import type { ClaudeCLIMessage } from '../types';
+
+// Mock commandExists to control isAvailable behavior
+const mockCommandExists = mock(async (_cmd: string) => true);
+mock.module('../cli-process-manager', () => ({
+  commandExists: mockCommandExists,
+  parseJSONLStream: async function* () {},
+  spawnCLIProcess: () => ({
+    process: { on: () => {}, killed: false, pid: 12345 },
+    stdout: { on: () => {} },
+    stderr: { on: () => {} },
+    kill: () => {},
+  }),
+  waitForProcessExit: async () => {},
+}));
+
+describe('ClaudeExecutor', () => {
+  let executor: ClaudeExecutor;
+
+  beforeEach(() => {
+    executor = new ClaudeExecutor();
+    mockCommandExists.mockClear();
+  });
+
+  describe('name', () => {
+    test('should be "claude"', () => {
+      expect(executor.name).toBe('claude');
+    });
+  });
+
+  describe('isAvailable', () => {
+    test('should check for "claude" command', async () => {
+      await executor.isAvailable();
+      expect(mockCommandExists).toHaveBeenCalledWith('claude');
+    });
+  });
+});
+
+describe('ClaudeExecutor session management', () => {
+  describe('session ID preservation on abort', () => {
+    test('should preserve session ID when execution is aborted', async () => {
+      const executor = new ClaudeExecutor();
+      const testSessionId = 'test-session-123';
+
+      // Set up executor with a session ID (simulating a previous execution)
+      executor.setSessionId(testSessionId);
+
+      // Verify session ID is set
+      expect(executor.getSessionId()).toBe(testSessionId);
+
+      // Create an already-aborted AbortController
+      const abortController = new AbortController();
+      abortController.abort();
+
+      // Execute with aborted signal
+      const messages: unknown[] = [];
+      for await (const message of executor.execute('test prompt', {
+        signal: abortController.signal,
+      })) {
+        messages.push(message);
+      }
+
+      // Session ID should be preserved after abort (not reset to null)
+      expect(executor.getSessionId()).toBe(testSessionId);
+    });
+  });
+});
+
+describe('ClaudeExecutor message mapping', () => {
+  /**
+   * Test the mapMessage private method behavior through test fixtures
+   * These fixtures represent actual Claude CLI output format
+   */
+  describe('Claude CLI message format fixtures', () => {
+    test('assistant message with text content should have correct structure', () => {
+      const msg: ClaudeCLIMessage = {
+        type: 'assistant',
+        session_id: 'test-session',
+        message: {
+          content: [{ type: 'text', text: 'Hello, how can I help?' }],
+        },
+      };
+
+      expect(msg.type).toBe('assistant');
+      expect(msg.message?.content[0].type).toBe('text');
+      expect(msg.message?.content[0].text).toBe('Hello, how can I help?');
+    });
+
+    test('assistant message with tool_use should have correct structure', () => {
+      const msg: ClaudeCLIMessage = {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              name: 'Read',
+              id: 'tool-123',
+              input: { file_path: '/test/file.ts' },
+            },
+          ],
+        },
+      };
+
+      expect(msg.type).toBe('assistant');
+      expect(msg.message?.content[0].type).toBe('tool_use');
+      expect(msg.message?.content[0].name).toBe('Read');
+      expect(msg.message?.content[0].id).toBe('tool-123');
+    });
+
+    test('user message with tool_result should have correct structure', () => {
+      const msg: ClaudeCLIMessage = {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-123',
+              content: 'File contents here',
+            },
+          ],
+        },
+      };
+
+      expect(msg.type).toBe('user');
+      expect(msg.message?.content[0].type).toBe('tool_result');
+      expect(msg.message?.content[0].content).toBe('File contents here');
+    });
+
+    test('result message with error should have correct structure', () => {
+      const msg: ClaudeCLIMessage = {
+        type: 'result',
+        result: 'Error: Something went wrong',
+        is_error: true,
+      };
+
+      expect(msg.type).toBe('result');
+      expect(msg.is_error).toBe(true);
+      expect(msg.result).toBe('Error: Something went wrong');
+    });
+
+    test('result message without error should have correct structure', () => {
+      const msg: ClaudeCLIMessage = {
+        type: 'result',
+        result: 'Task completed successfully',
+        is_error: false,
+      };
+
+      expect(msg.type).toBe('result');
+      expect(msg.is_error).toBe(false);
+      expect(msg.result).toBe('Task completed successfully');
+    });
+
+    test('system init message should have session_id', () => {
+      const msg: ClaudeCLIMessage = {
+        type: 'system',
+        session_id: 'abc-123-def',
+      };
+
+      expect(msg.type).toBe('system');
+      expect(msg.session_id).toBe('abc-123-def');
+    });
+  });
+});

@@ -1,0 +1,374 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      current: ${{ steps.version.outputs.current }}
+      tag_exists: ${{ steps.tag_check.outputs.exists }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Check version change
+        id: version
+        run: |
+          CURRENT_VERSION=$(bun -e "console.log(require('./package.json').version)")
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          git show HEAD^:package.json > /tmp/prev-package.json 2>/dev/null || echo '{"version":"0.0.0"}' > /tmp/prev-package.json
+          PREV_VERSION=$(bun -e "console.log(require('/tmp/prev-package.json').version)")
+          echo "previous=$PREV_VERSION" >> $GITHUB_OUTPUT
+
+          if [ "$CURRENT_VERSION" != "$PREV_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Version changed from $PREV_VERSION to $CURRENT_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged: $CURRENT_VERSION"
+          fi
+
+      - name: Check existing tag
+        id: tag_check
+        run: |
+          VERSION="v${{ steps.version.outputs.current }}"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $VERSION already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $VERSION does not exist"
+          fi
+
+  build-binaries:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        include:
+          # macOS
+          - os: macos-latest
+            target: darwin-arm64
+          - os: macos-15-large
+            target: darwin-x64
+          # Linux glibc
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Compile binary
+        run: bun run build:binary ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clix-${{ matrix.target }}
+          path: dist/bin/clix-${{ matrix.target }}
+
+  build-musl-binaries:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        include:
+          - target: linux-x64-musl
+            platform: linux/amd64
+          - target: linux-arm64-musl
+            platform: linux/arm64
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        if: matrix.platform == 'linux/arm64'
+
+      - name: Build musl binary
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v "$PWD:/app" -w /app \
+            oven/bun:alpine \
+            sh -c "bun install && bun run build:binary ${{ matrix.target }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clix-${{ matrix.target }}
+          path: dist/bin/clix-${{ matrix.target }}
+
+  generate-checksums:
+    needs: [check-version, build-binaries, build-musl-binaries]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+
+      - name: Generate checksums
+        run: |
+          cd binaries
+          # Copy files to temp dir first (to avoid name collision with artifact dirs)
+          mkdir -p ../temp-bins
+          find . -mindepth 2 -name 'clix-*' -type f -exec cp {} ../temp-bins/ \;
+          # Clear and restore
+          rm -rf *
+          mv ../temp-bins/* .
+          rm -rf ../temp-bins
+          # Generate checksums
+          sha256sum clix-* > checksums.sha256
+          echo "Generated checksums:"
+          cat checksums.sha256
+
+      - name: Upload checksums artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: binaries/checksums.sha256
+
+  publish-npm:
+    needs: [check-version, build-binaries, build-musl-binaries]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node.js (for npm publish)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Determine npm tag
+        id: npm_tag
+        run: |
+          VERSION="${{ needs.check-version.outputs.current }}"
+          if [[ "$VERSION" == *"-beta"* ]]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          elif [[ "$VERSION" == *"-alpha"* ]]; then
+            echo "tag=alpha" >> $GITHUB_OUTPUT
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          elif [[ "$VERSION" == *"-rc"* ]]; then
+            echo "tag=rc" >> $GITHUB_OUTPUT
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npm
+        run: |
+          npm publish --access public --tag ${{ steps.npm_tag.outputs.tag }} 2>&1 | tee npm-publish.log || {
+            if grep -q "You cannot publish over the previously published versions" npm-publish.log; then
+              echo "Version already published, skipping..."
+            else
+              exit 1
+            fi
+          }
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Calculate SHA256
+        id: sha256
+        run: |
+          sleep 10
+          VERSION="${{ needs.check-version.outputs.current }}"
+          TARBALL_URL="https://registry.npmjs.org/@clix-so/clix-cli/-/clix-cli-${VERSION}.tgz"
+          curl -sL "$TARBALL_URL" -o package.tgz
+          SHA256=$(shasum -a 256 package.tgz | cut -d ' ' -f 1)
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Update Homebrew formula
+        if: steps.npm_tag.outputs.is_prerelease == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = '${{ needs.check-version.outputs.current }}';
+            const sha256 = '${{ steps.sha256.outputs.sha256 }}';
+
+            const { data: file } = await github.rest.repos.getContent({
+              owner: 'clix-so',
+              repo: 'homebrew-clix-cli',
+              path: 'clix.rb',
+              ref: 'main'
+            });
+
+            let content = Buffer.from(file.content, 'base64').toString('utf-8');
+
+            content = content.replace(
+              /url "https:\/\/registry\.npmjs\.org\/@clix-so\/clix-cli\/-\/clix-cli-[\d.]+\.tgz"/,
+              `url "https://registry.npmjs.org/@clix-so/clix-cli/-/clix-cli-${version}.tgz"`
+            );
+
+            content = content.replace(
+              /sha256 "[a-f0-9]+"/,
+              `sha256 "${sha256}"`
+            );
+
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: 'clix-so',
+              repo: 'homebrew-clix-cli',
+              path: 'clix.rb',
+              message: `chore: update formula to v${version}`,
+              content: Buffer.from(content).toString('base64'),
+              sha: file.sha,
+              branch: 'main'
+            });
+
+    outputs:
+      sha256: ${{ steps.sha256.outputs.sha256 }}
+      is_prerelease: ${{ steps.npm_tag.outputs.is_prerelease }}
+
+  create-release:
+    needs: [check-version, build-binaries, build-musl-binaries, generate-checksums, publish-npm]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(bun scripts/changelog.ts 2>/dev/null || echo "See commit history for changes")
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-files
+          # Move binaries from artifact subdirectories
+          find artifacts -mindepth 2 -name 'clix-*' -type f -exec mv {} release-files/ \;
+          # Move checksums
+          mv artifacts/checksums/checksums.sha256 release-files/
+          echo "Release files:"
+          ls -la release-files/
+
+      - name: Delete existing release and tag (if exists)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="v${{ needs.check-version.outputs.current }}"
+          # Delete existing release if exists
+          gh release delete "$VERSION" --yes || true
+          # Delete remote tag if exists
+          git push origin --delete "$VERSION" || true
+          # Delete local tag if exists
+          git tag -d "$VERSION" || true
+
+      - name: Create Git tag
+        run: |
+          VERSION="v${{ needs.check-version.outputs.current }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check-version.outputs.current }}
+          name: v${{ needs.check-version.outputs.current }}
+          prerelease: ${{ needs.publish-npm.outputs.is_prerelease == 'true' }}
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.notes }}
+
+            ## Installation
+
+            ### Binary (Recommended)
+            ```bash
+            curl -fsSL https://cli.clix.so/install.sh | bash
+            ```
+
+            ### Homebrew (macOS)
+            ```bash
+            brew tap clix-so/clix-cli
+            brew install clix
+            ```
+
+            ### npm
+            ```bash
+            npm install -g @clix-so/clix-cli@${{ needs.check-version.outputs.current }}
+            ```
+
+            ## Checksums
+            Verify your download with:
+            ```bash
+            sha256sum -c checksums.sha256
+            ```
+          files: release-files/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  skip-release:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'false' && github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Skip release
+        run: |
+          if [ "${{ needs.check-version.outputs.changed }}" == "false" ]; then
+            echo "Skipping release: version unchanged"
+          else
+            echo "Skipping release: tag already exists"
+          fi

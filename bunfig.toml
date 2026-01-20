@@ -1,0 +1,11 @@
+[install]
+peer = false
+
+[test]
+coverage = true
+coverageDir = "coverage"
+# Coverage thresholds - gradually increase as test coverage improves
+coverageThreshold = { line = 50, function = 50, branch = 40 }
+
+[build]
+target = "bun"

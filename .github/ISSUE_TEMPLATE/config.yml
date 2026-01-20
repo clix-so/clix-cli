@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/clix-so/clix-cli/discussions
+    about: Ask questions and get help from the community
+  - name: Contributing Guide
+    url: https://github.com/clix-so/clix-cli/blob/main/CONTRIBUTING.md
+    about: Learn how to contribute to Clix CLI
+  - name: Clix Documentation
+    url: https://docs.clix.so
+    about: Read the official Clix SDK documentation

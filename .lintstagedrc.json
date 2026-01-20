@@ -1,0 +1,4 @@
+{
+  "*.{ts,tsx}": ["biome check --write --unsafe", "biome format --write"],
+  "*.json": ["biome format --write"]
+}

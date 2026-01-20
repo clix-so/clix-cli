@@ -1,0 +1,1153 @@
+# Clix CLI
+
+> Interactive AI-powered assistant for Clix SDK development with chat interface, slash commands, and skills-based workflows
+
+## Overview
+
+Clix CLI is an interactive command-line tool that provides a chat interface with AI agents to help developers integrate, debug, and manage the Clix Mobile SDK. Built with React and Ink, it offers natural language conversation, streaming responses, and specialized workflows for common SDK tasks.
+
+**Core Features:**
+- Interactive chat interface as the primary interaction mode
+- Support for 6 AI agents: Claude, Codex, Gemini, OpenCode, Cursor, and GitHub Copilot
+- 17 slash commands for quick actions
+- Skills system with 5 interactive skills + 3 autonomous commands
+- Interactive debug assistant for problem diagnosis
+- Session transfer to native agent CLIs
+- Agent switching with full history preservation
+- Real-time context tracking with automatic compaction
+
+## Installation
+
+### via npm (Recommended)
+```bash
+npm install -g @clix-so/clix-cli
+```
+
+### via Bun
+```bash
+bun add -g @clix-so/clix-cli
+```
+
+### via Homebrew (macOS)
+```bash
+brew tap clix-so/clix-cli
+brew install clix
+```
+
+### via Install Script
+```bash
+curl -fsSL https://cli.clix.so/install.sh | bash
+```
+
+## Prerequisites
+
+- **Node.js 20 or higher** (Bun v1.0+ is optional for faster development)
+- **One of the supported AI agents**:
+  - [Gemini CLI](https://github.com/google-gemini/gemini-cli) - Google Gemini (Free: 1,000 requests/day)
+  - [GitHub Copilot](https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli) - GitHub Copilot (Free: 50 premium requests/month)
+  - [OpenCode](https://opencode.ai/docs/cli/) - Multi-model support (Free: Unlimited with your API keys)
+  - [Cursor](https://cursor.com/cli) - Multi-model support (50 slow requests/month)
+  - [Claude Code](https://code.claude.com/docs) - Anthropic's Claude (Requires Pro $20/mo or API)
+  - [Codex](https://developers.openai.com/codex/cli) - OpenAI's Codex (Requires ChatGPT Plus $20/mo or API)
+
+## Commands
+
+### `clix` (Primary Command)
+
+Launches an interactive chat interface with your configured AI agent. This is the main command for interacting with Clix CLI.
+
+```bash
+clix
+```
+
+**What happens:**
+1. Loads configuration from `~/.clix/config.json`
+2. Detects available AI agents (Claude Code, Codex)
+3. Prompts for agent selection if not configured or multiple available
+4. Initializes executor with selected agent
+5. Opens interactive chat with streaming responses
+
+**Features:**
+- Natural language conversation with AI
+- Real-time streaming responses
+- 13 slash commands (type `/` to see menu)
+- Context usage tracking (200K token window for Claude Sonnet)
+- History navigation with ↑/↓ arrow keys
+- Press Escape to cancel streaming requests
+- Automatic history compaction at 90% context threshold
+
+**Available within chat:**
+- All 17 slash commands (3 autonomous + 5 skills + 9 system)
+- Natural language queries
+- File exploration and code analysis by agent
+- Real-time tool execution visibility
+
+### `clix agent [name]`
+
+List available AI agents or switch to a specific agent.
+
+```bash
+# List available agents
+clix agent
+
+# Switch to a specific agent
+clix agent gemini
+clix agent claude
+```
+
+**What it does:**
+1. Scans system for available AI agents (gemini, copilot, opencode, agent, claude, codex)
+2. Shows interactive selection menu with current agent highlighted
+3. Displays installation guidance if no agents found
+4. Saves selection to `~/.config/clix/config.json` with timestamp
+
+**Configuration stored at:** `~/.config/clix/config.json`
+```json
+{
+  "selectedAgent": "gemini",
+  "lastUsedAt": "2024-01-08T17:30:00.000Z"
+}
+```
+
+**Recommended:** Start with Gemini (1000 free requests/day) or GitHub Copilot (50 free requests/month)
+
+### `clix install`
+
+Autonomous SDK installation with automatic file modifications.
+
+```bash
+clix install [options]
+```
+
+**Options:**
+- `--platform <platform>` - Target platform (ios, android, react-native, flutter)
+
+**What it does:**
+1. Verifies AI agent is configured (prompts to run `clix agent` if not)
+2. Detects platform automatically or uses specified platform
+3. Autonomously modifies files (creates, edits) to integrate SDK
+4. Runs installation commands (npm install, pod install, etc.)
+5. Reports what was done (not what needs to be done manually)
+
+**Platform support:** iOS, Android, React Native, Flutter
+
+**Note:** Unlike `/integration` (interactive guidance), this command makes changes autonomously without asking for confirmation.
+
+### `clix diagnose`
+
+Analyze SDK integration status in your project.
+
+```bash
+clix diagnose
+```
+
+**What it does:**
+1. Detects platform automatically
+2. Scans for SDK installation
+3. Checks push configuration
+4. Outputs diagnostic JSON report with issues and recommendations
+
+### `clix debug <problem>`
+
+Interactive debugging assistant for troubleshooting issues.
+
+```bash
+clix debug "Push notifications not working on iOS"
+```
+
+**What it does:**
+1. Takes problem description as argument
+2. Investigates project structure and code
+3. Provides root cause analysis
+4. Gives recommended fixes with file paths
+
+### `clix install-mcp [agent]`
+
+Install Clix MCP Server for enhanced AI assistance.
+
+```bash
+# Auto-detect agent
+clix install-mcp
+
+# Install for specific agent
+clix install-mcp gemini
+clix install-mcp claude
+```
+
+## Interactive Chat
+
+The interactive chat (`clix` command) is the primary way to interact with Clix CLI. It provides a terminal UI with real-time streaming responses and supports both natural language and slash commands.
+
+### Chat Interface Features
+
+**Message Types:**
+- **User messages**: Your input
+- **Agent messages**: AI responses with streaming
+- **System messages**: Status updates, help text
+- **Tool messages**: Tool execution indicators
+
+**Streaming:**
+- Responses stream in real-time as agent processes
+- Shows tool execution (file reads, searches, etc.)
+- Press Escape to cancel streaming
+- Partial content preserved on interruption
+
+**Context Management:**
+- Claude Sonnet 4.5: 200,000 token context window
+- Real-time usage tracking shown in footer
+- Automatic compaction suggestion at 90% (720K characters)
+- `/compact` command to compress history
+- `/compact force` to bypass confirmation
+
+**History Navigation:**
+- Arrow up (↑) - Previous input
+- Arrow down (↓) - Next input
+- Disabled when slash command menu is visible
+
+### Slash Commands
+
+Type `/` in the chat to see the autocomplete menu. All 17 slash commands are organized into three categories:
+
+#### Autonomous Commands (3 commands)
+
+These can be run from command-line (`clix <command>`) or chat mode:
+
+- `/install` - Autonomous SDK installation with automatic file modifications
+- `/diagnose` - Analyze SDK integration status (automatic scan, JSON output)
+- `/debug` - Interactive debugging assistant (asks for problem description)
+
+#### Interactive Skills (5 commands)
+
+These execute pre-built workflows from the `@clix-so/clix-agent-skills` package and require step-by-step guidance (available only in chat mode):
+
+- `/integration` - SDK integration guide with platform detection
+- `/event-tracking` - Event tracking setup for analytics
+- `/user-management` - User management and identification setup
+- `/personalization` - Personalization template creation and debugging
+- `/api-triggered-campaigns` - API-triggered campaign setup
+
+#### System Commands (9 commands)
+
+These are built-in commands for chat management and tools:
+
+- `/help` (aliases: `/h`, `/?`) - Display all available commands with descriptions
+- `/new` (alias: `/clear`) - Start a new session (clear history)
+- `/compact` (alias: `/c`) - Compress conversation history
+- `/agent` (alias: `/a`) - List available agents or switch to specific agent
+- `/transfer` (alias: `/t`) - Transfer session to agent CLI
+- `/resume` - Resume a previous session
+- `/install-mcp` (alias: `/mcp`) - Install Clix MCP Server for current agent
+- `/update` (alias: `/upgrade`) - Check for available updates
+- `/exit` (aliases: `/quit`, `/q`) - Exit the chat
+
+### Slash Command Autocomplete
+
+**How it works:**
+- Type `/` to enter slash command mode
+- Autocomplete menu appears showing matching commands
+- Type letters to filter (e.g., `/d` shows debug, diagnose)
+- Use ↑/↓ arrows to navigate menu
+- Press Tab to autocomplete selected command
+- Press Enter to execute selected command
+- Press Escape to cancel
+
+**Menu display:**
+```
+/install                  - Autonomous SDK installation [autonomous]
+/diagnose                 - Diagnose SDK integration status [autonomous]
+/debug                    - Interactive debugging assistant [autonomous]
+/integration              - SDK integration guide [skill]
+/event-tracking           - Event tracking setup [skill]
+/user-management          - User management setup [skill]
+/personalization          - Personalization templates [skill]
+/api-triggered-campaigns  - API-triggered campaign setup [skill]
+/help                     - Show available commands
+...
+```
+
+## Slash Commands Reference
+
+### Autonomous Commands
+
+#### `/install` - Autonomous SDK Installation
+
+**Category:** Autonomous Command
+
+**What it does:** Automatically installs and integrates the Clix SDK into your mobile project with file modifications. Unlike `/integration`, this command makes changes autonomously without manual steps.
+
+**Platforms:** iOS, Android, React Native, Flutter
+
+**Usage:**
+```bash
+# From command line
+clix install
+clix install --platform react-native
+
+# Or in chat
+> /install
+```
+
+**Example:**
+```
+> /install
+Detecting platform...
+✓ React Native project detected
+✓ Added @clix-so/react-native-sdk to package.json
+✓ Running npm install...
+✓ Created initialization module
+✓ Updated app/_layout.tsx with SDK initialization
+```
+
+#### `/diagnose` - SDK Integration Analysis
+
+**Category:** Autonomous Command
+
+**What it does:** Automatically scans your project to diagnose SDK integration status. Outputs structured JSON report.
+
+**Checks:**
+- Platform detection (iOS/Android/React Native/Flutter)
+- SDK installation verification
+- Push notification configuration
+- Common integration issues
+
+**Output:** JSON format with findings and recommendations
+
+**Example:**
+```
+> /diagnose
+Scanning project for SDK integration...
+{
+  "platform": "ios",
+  "sdk_installed": true,
+  "push_configured": false,
+  "issues": [{"type": "push", "description": "APNs entitlement missing"}]
+}
+```
+
+#### `/debug` - Interactive Debugging Assistant
+
+**Category:** Autonomous Command
+
+**What it does:** Opens an interactive prompt asking you to describe your problem, then investigates and provides diagnosis with fixes.
+
+**Flow:**
+1. Type `/debug`
+2. Describe your problem (e.g., "Push notifications not working on iOS")
+3. Agent investigates project structure and code
+4. Provides root cause analysis and recommended fixes
+
+**Output format:**
+- Problem Summary
+- Investigation Findings
+- Root Cause
+- Recommended Fixes (with file paths and code snippets)
+- Verification Steps
+
+**Example:**
+```
+> /debug
+Describe the problem: Events not appearing in Clix dashboard
+[Agent explores SDK initialization, event tracking code]
+[Identifies missing SDK.initialize() call]
+[Provides fix with exact file location]
+```
+
+### Interactive Skills
+
+#### `/integration` - SDK Integration Guide
+
+**Category:** Interactive Skill (Chat Mode Only)
+
+**What it does:** Provides step-by-step guidance for manually integrating the Clix SDK. Unlike `/install`, this provides interactive guidance rather than making changes autonomously.
+
+**Platforms:** iOS, Android, React Native, Flutter
+
+**Example:**
+```
+> /integration
+[Agent detects iOS project]
+[Provides step-by-step Podfile updates, SDK initialization guidance]
+```
+
+#### `/event-tracking` - Event Tracking Setup
+
+**Category:** Interactive Skill (Chat Mode Only)
+
+**What it does:** Sets up event tracking with `Clix.trackEvent()` for analytics and user behavior monitoring with guided workflow.
+
+**Platforms:** iOS, Android, React Native, Flutter
+
+**Example:**
+```
+> /event-tracking
+[Agent helps implement event tracking]
+[Shows code examples for custom events]
+[Creates event plan and validation]
+```
+
+#### `/user-management` - User Management Setup
+
+**Category:** Interactive Skill (Chat Mode Only)
+
+**What it does:** Configures user identification and properties management with Clix SDK through guided steps.
+
+**Example:**
+```
+> /user-management
+[Agent guides through setUserId(), setUserProperties()]
+[Explains best practices for user identification and logout handling]
+```
+
+#### `/personalization` - Personalization Templates
+
+**Category:** Interactive Skill (Chat Mode Only)
+
+**What it does:** Creates and debugs personalization templates for push notifications and in-app messages using Liquid-style templates.
+
+**Example:**
+```
+> /personalization
+[Agent helps create templates with variables]
+[Debugs template rendering issues]
+[Validates template syntax]
+```
+
+#### `/api-triggered-campaigns` - API-Triggered Campaign Setup
+
+**Category:** Interactive Skill (Chat Mode Only)
+
+**What it does:** Helps configure API-triggered campaigns in the Clix console and implement backend trigger code.
+
+**Example:**
+```
+> /api-triggered-campaigns
+[Agent guides through campaign configuration]
+[Provides backend integration patterns]
+[Creates API trigger plan]
+```
+
+### System Commands
+
+#### `/help` - Show Commands
+
+**Category:** System Command
+
+**Aliases:** `/h`, `/?`
+
+**What it does:** Displays all available slash commands organized by category.
+
+**Example:**
+```
+> /help
+Available Commands:
+
+Autonomous Commands:
+  /install         - Autonomous SDK installation
+  /diagnose        - Diagnose SDK integration status
+  /debug           - Interactive debugging assistant
+
+Interactive Skills:
+  /integration              - SDK integration guide
+  /event-tracking           - Event tracking setup
+  /user-management          - User management setup
+  /personalization          - Personalization templates
+  /api-triggered-campaigns  - API-triggered campaign setup
+
+System Commands:
+  /help            - Show available commands
+  /new             - Start a new session
+  /compact         - Compress conversation history
+  /agent           - List or switch agents
+  /transfer        - Transfer to agent CLI
+  /resume          - Resume a previous session
+  /install-mcp     - Install Clix MCP Server
+  /update          - Check for available updates
+  /exit            - Exit the chat
+```
+
+#### `/new` - Start New Session
+
+**Category:** System Command
+
+**Aliases:** `/clear`
+
+**What it does:** Clears entire chat history and starts a new session. This resets executor state.
+
+**Warning:** This action cannot be undone.
+
+**Example:**
+```
+> /new
+✓ New session started
+```
+
+#### `/compact` - Compress History
+
+**Category:** System Command
+
+**Aliases:** `/c`
+
+**What it does:** Compresses conversation history by summarizing old messages while preserving recent context.
+
+**Compaction strategy:**
+- Threshold: 90% of 200K token context (720K characters)
+- Preserves last 30% of conversation
+- Summarizes older 70% using AI
+- Creates new history: [summary] + [preserved messages]
+
+**Example:**
+```
+> /compact
+Context usage: 92% (730,000 / 800,000 characters)
+Compressing conversation history...
+✓ Compacted from 45 messages to 12 messages
+Reduced size by 68%
+```
+
+#### `/agent` - Agent Management
+
+**Category:** System Command
+
+**Aliases:** `/a`
+
+**What it does:** Lists available agents or switches to a specific agent.
+
+**Syntax:**
+- `/agent` - Lists all available agents with current selection
+- `/agent claude` - Switches to Claude
+- `/agent gemini` - Switches to Gemini
+- `/agent copilot` - Switches to GitHub Copilot
+
+**History preservation:** Full conversation history is transferred when switching agents.
+
+**Example:**
+```
+> /agent
+Available agents:
+  Claude
+  Gemini (current)
+  Copilot
+  OpenCode
+  Cursor
+
+> /agent claude
+Switching to Claude...
+✓ Agent switched. Conversation history preserved.
+```
+
+#### `/transfer` - Session Transfer
+
+**Category:** System Command
+
+**Aliases:** `/t`
+
+**What it does:** Saves current conversation to a file and provides command to continue in the native agent CLI.
+
+**Syntax:**
+- `/transfer` - Shows interactive selector
+- `/transfer claude` - Transfers to Claude Code
+- `/transfer gemini` - Transfers to Gemini
+
+**Process:**
+1. Conversation history saved to `~/.local/state/clix/sessions/session-{timestamp}.md`
+2. Markdown formatted with full history
+3. Command generated to continue in agent CLI
+4. User exits and runs provided command
+
+**Example:**
+```
+> /transfer claude
+✅ Session saved!
+
+File: ~/.local/state/clix/sessions/session-1704735000000.md
+
+To continue in Claude Code:
+
+claude "$(cat ~/.local/state/clix/sessions/session-1704735000000.md)"
+```
+
+#### `/resume` - Resume Session
+
+**Category:** System Command
+
+**What it does:** Resumes a previously saved session from the sessions directory.
+
+**Example:**
+```
+> /resume
+Select a session to resume:
+  session-1704735000000.md (2024-01-08 17:30:00)
+  session-1704734000000.md (2024-01-08 16:00:00)
+[Select and load previous conversation]
+```
+
+#### `/install-mcp` - Install MCP Server
+
+**Category:** System Command
+
+**Aliases:** `/mcp`
+
+**What it does:** Installs the Clix MCP Server for your configured agent to provide enhanced context and capabilities.
+
+**Supported agents:** Claude, Codex, Gemini, OpenCode, Cursor, Copilot
+
+**Example:**
+```
+> /install-mcp
+Select agent to install MCP server:
+❯ Claude
+  Gemini
+
+✅ Clix MCP Server installed for Claude.
+Restart Claude to activate.
+```
+
+#### `/update` - Check for Updates
+
+**Category:** System Command
+
+**Aliases:** `/upgrade`
+
+**What it does:** Checks for available updates to Clix CLI and provides update instructions.
+
+**Example:**
+```
+> /update
+Checking for updates...
+✓ New version available: 1.2.0 (current: 1.1.0)
+
+To update:
+  npm update -g @clix-so/clix-cli
+```
+
+#### `/exit` - Exit Chat
+
+**Category:** System Command
+
+**What it does:** Exits the interactive chat and returns to terminal.
+
+**Example:**
+```
+> /exit
+Goodbye!
+```
+
+## Agent System
+
+### Supported Agents
+
+Clix CLI supports 6 AI agents. Only one can be active at a time, but you can switch between them with full history preservation.
+
+#### Gemini (Google)
+
+**Command:** `gemini`
+**Package:** `@google/gemini-cli`
+**Free Tier:** 1,000 requests/day
+**Install:** https://github.com/google-gemini/gemini-cli
+
+**Features:**
+- Fast responses
+- Generous free tier
+- Multi-turn conversations
+- Tool execution support
+
+#### GitHub Copilot
+
+**Command:** `copilot`
+**Package:** `@github/copilot`
+**Free Tier:** 50 premium requests/month
+**Install:** https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli
+
+**Features:**
+- Multiple models available
+- MCP support
+- Tool execution
+- GitHub integration
+
+#### OpenCode
+
+**Command:** `opencode`
+**Package:** `opencode-cli`
+**Free Tier:** Unlimited (with your API keys)
+**Install:** https://opencode.ai/docs/cli/
+
+**Features:**
+- Multi-model support
+- Bring your own API keys
+- Tool execution
+- Flexible configuration
+
+#### Cursor
+
+**Command:** `agent`
+**Package:** `cursor-agent`
+**Free Tier:** 50 slow requests/month
+**Install:** https://cursor.com/cli
+
+**Features:**
+- Multi-model support
+- Tool execution
+- IDE integration
+
+#### Claude (Anthropic)
+
+**Command:** `claude`
+**Package:** `@anthropic-ai/claude-agent-sdk`
+**Model:** Claude 3.5 Sonnet
+**Pricing:** Pro ($20/mo) or API
+**Install:** https://code.claude.com/docs
+
+**Features:**
+- Session-based conversations
+- Streaming responses
+- Tool execution support
+- Context window: 200,000 tokens
+
+**Executor:** `ClaudeExecutor` (src/lib/executors/claude-executor.ts)
+
+#### Codex (OpenAI)
+
+**Command:** `codex`
+**Package:** `@openai/codex-sdk`
+**Model:** GPT-4
+**Pricing:** ChatGPT Plus ($20/mo) or API
+**Install:** https://developers.openai.com/codex/cli
+
+**Features:**
+- Thread-based conversations
+- Tool execution support
+- Persistent threads across messages
+
+**Executor:** `CodexExecutor` (src/lib/executors/codex-executor.ts)
+
+### Agent Detection
+
+**How it works:**
+- Uses `which` command to check if agent executables are installed
+- Tests all 6 agent commands: `claude`, `codex`, `gemini`, `opencode`, `agent` (Cursor), `copilot`
+- Returns array of available agents
+
+**Location:** `src/lib/agents.ts` - `detectAvailableAgents()`
+
+### Agent Configuration
+
+**Config file:** `~/.config/clix/config.json` (or `$XDG_CONFIG_HOME/clix/config.json`)
+
+```json
+{
+  "selectedAgent": "claude",
+  "lastUsedAt": "2024-01-08T17:30:00.000Z"
+}
+```
+
+**Management:** `src/lib/config.ts` - `ConfigManager`
+- `load()` - Loads config from disk
+- `save()` - Persists config to disk
+- Migration support for old `selectedCLI` field
+
+### Agent Switching
+
+**Command:** `/agent <name>`
+
+**Process:**
+1. Validates target agent is available
+2. Gets conversation history from current executor
+3. Creates new executor for target agent
+4. Transfers history to new executor
+5. Resets session/thread state
+
+**History preservation:** Full conversation history is maintained when switching.
+
+### Session Management
+
+**Executors maintain:**
+- Conversation history (array of `ConversationMessage`)
+- Session/thread state
+- Context window tracking
+
+**History compaction:**
+- Uses `HistoryCompactionService`
+- Threshold: 90% of context window
+- Preserves recent 30% of conversation
+- Summarizes older 70% using the executor itself
+
+## Usage Scenarios
+
+### Scenario 1: First-Time Setup
+
+```bash
+# Install globally
+npm install -g @clix-so/clix-cli
+
+# Select AI agent (we recommend Gemini for free tier)
+clix agent
+# Shows available agents, select from menu
+
+# Start interactive chat
+clix
+> How do I integrate Clix SDK into my iOS project?
+[Agent provides step-by-step guidance]
+```
+
+### Scenario 2: Autonomous SDK Installation
+
+```bash
+clix install
+Detecting platform...
+✓ React Native project detected
+✓ Added @clix-so/react-native-sdk to package.json
+✓ Running npm install...
+✓ Created initialization module
+✓ Updated app/_layout.tsx with SDK initialization
+Installation complete! Replace placeholder credentials in .env
+```
+
+### Scenario 3: Interactive SDK Integration
+
+```bash
+clix
+> /integration
+[Agent detects iOS project]
+[Guides through Podfile, initialization, configuration]
+> Show me example code for AppDelegate
+[Agent provides Swift code example]
+```
+
+### Scenario 4: Debugging Issues
+
+```bash
+clix
+> /debug
+Describe the problem: Push notifications not working on iOS
+[Agent investigates project]
+[Identifies missing APNs entitlement]
+[Provides fix with exact steps]
+```
+
+### Scenario 5: Event Tracking Setup
+
+```bash
+clix
+> /event-tracking
+[Agent helps implement event tracking]
+[Shows how to use Clix.trackEvent()]
+[Creates event plan and validates schema]
+```
+
+### Scenario 6: Switching Agents
+
+```bash
+clix
+[Currently using Gemini]
+> /agent claude
+Switching to Claude...
+✓ Agent switched. History preserved.
+[Now using Claude with same conversation]
+```
+
+### Scenario 7: Session Transfer
+
+```bash
+clix
+[Having a long conversation]
+> /transfer claude
+✅ Session saved to ~/.local/state/clix/sessions/session-1704735000.md
+
+To continue in Claude Code:
+claude "$(cat ~/.local/state/clix/sessions/session-1704735000.md)"
+
+# Exit and run provided command
+$ claude "$(cat ~/.local/state/clix/sessions/session-1704735000.md)"
+[Conversation continues in native Claude CLI]
+```
+
+### Scenario 8: Managing Context
+
+```bash
+clix
+[Context: 92% used]
+> /compact
+Compressing conversation history...
+✓ Compacted from 45 to 12 messages
+Context: 45% used
+[Continue conversation with more space]
+```
+
+## Architecture
+
+### Chat System
+
+**UI Framework:** React + Ink (terminal UI components)
+
+**Components:**
+- `ChatApp.tsx` - Main chat application
+- `ChatInput.tsx` - Input with slash command autocomplete
+- `SlashCommandMenu.tsx` - Command menu display
+- `MessageList.tsx` - Message history rendering
+- `DebugPrompt.tsx` - Interactive debug modal
+- `AgentSelector.tsx` - Agent selection UI
+- `TransferSelector.tsx` - Transfer target selection
+- `MCPInstallSelector.tsx` - MCP installation UI
+
+**State Management:**
+- `ChatContext.tsx` - React context for chat state
+- `useChatActions.ts` - Chat actions and executor management
+
+### Executor System
+
+**Interface:** `AgentExecutor` (src/lib/executor.ts)
+
+```typescript
+interface AgentExecutor {
+  name: string;
+  execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage>;
+  isAvailable(): Promise<boolean>;
+  clearHistory(): void;
+  getHistory(): ConversationMessage[];
+  setHistory(history: ConversationMessage[]): void;
+  needsCompaction(): boolean;
+  compactHistory(force?: boolean): Promise<CompactionResult>;
+}
+```
+
+**Implementations:**
+- `ClaudeExecutor` - Claude Code integration
+- `CodexExecutor` - Codex integration
+
+**Message flow:**
+- User input → executor.execute() → AsyncGenerator<AgentMessage>
+- Yields: text, tool_call, tool_result, error, complete
+- UI updates in real-time as messages stream
+
+### Services
+
+**Debug Service** (src/lib/services/debug-service.ts)
+- Generates debug prompts with problem description
+- Includes project path and investigation instructions
+- Formats output structure for agent
+
+**Transfer Service** (src/lib/services/transfer-service.ts)
+- Saves conversation history to markdown
+- Generates command for native CLI continuation
+- Checks target CLI availability
+
+**MCP Install Service** (src/lib/services/mcp-install-service.ts)
+- Installs Clix MCP Server for agents
+- Claude: Uses `claude mcp add` command
+- Codex: Updates `~/.codex/config.toml`
+
+**History Compaction Service** (src/lib/services/history-compaction.ts)
+- Compresses conversation history at 90% threshold
+- Preserves recent 30% of messages
+- Summarizes older messages using executor
+- Reduces context usage by ~70%
+
+## Configuration
+
+### User Config
+
+**Location:** `~/.config/clix/config.json` (or `$XDG_CONFIG_HOME/clix/config.json`)
+
+```json
+{
+  "selectedAgent": "gemini",
+  "lastUsedAt": "2024-01-08T17:30:00.000Z"
+}
+```
+
+**Fields:**
+- `selectedAgent`: Name of currently selected agent (claude, codex, gemini, opencode, cursor, copilot)
+- `lastUsedAt`: ISO timestamp of last usage
+
+**Management:** `src/lib/config.ts` - `ConfigManager`
+- Uses XDG base directory specification
+- Migration support for old config paths
+- Automatic directory creation
+
+### Session Files
+
+**Location:** `~/.local/state/clix/sessions/` (or `$XDG_STATE_HOME/clix/sessions/`)
+
+**Format:** Markdown with conversation history
+
+```markdown
+# Clix CLI Session
+
+_Saved: 2024-01-08T17:30:00.000Z_
+
+---
+
+## 👤 User
+[User message content]
+
+## 🤖 Assistant
+[Agent response content]
+
+---
+
+Please review the conversation history above and continue from where we left off.
+```
+
+**Usage:** Transfer sessions to native agent CLIs
+
+**File naming:** `session-{timestamp}.md` where timestamp is Unix milliseconds
+
+### MCP Configuration
+
+Clix MCP Server can be installed for all supported agents using the `/install-mcp` command.
+
+**Configuration locations:**
+- **Claude:** Uses `claude mcp add` command
+- **Gemini:** Agent-specific config
+- **Copilot:** Agent-specific config
+- **OpenCode:** Agent-specific config
+- **Cursor:** Agent-specific config
+- **Codex:** `~/.codex/config.toml`
+
+**Example (Codex):**
+```toml
+[mcp_servers]
+  [mcp_servers.clix]
+  command = "npx"
+  args = ["-y", "@clix-so/clix-mcp-server@latest"]
+```
+
+## Common Issues and Solutions
+
+### Issue: "No AI agent configured"
+
+**Cause:** First time running without configuration
+
+**Solution:**
+```bash
+clix agent
+# Select agent from menu - we recommend starting with Gemini (free, 1000 requests/day)
+```
+
+### Issue: "Agent not found: <agent>"
+
+**Cause:** Configured agent is not installed or not in PATH
+
+**Solution:**
+```bash
+# Install one of the supported agents:
+# - Gemini CLI: https://github.com/google-gemini/gemini-cli (recommended for free tier)
+# - GitHub Copilot: https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli
+# - OpenCode: https://opencode.ai/docs/cli/
+# - Cursor: https://cursor.com/cli
+# - Claude: https://code.claude.com/docs
+# - Codex: https://developers.openai.com/codex/cli
+
+# Or select a different available agent
+clix agent
+```
+
+### Issue: Context limit approaching
+
+**Cause:** Long conversation exceeding 90% of context window
+
+**Solution:**
+```bash
+# In chat:
+> /compact
+# Or force compaction:
+> /compact force
+```
+
+### Issue: Session transfer not working
+
+**Cause:** Target agent CLI not installed or not in PATH
+
+**Solution:**
+```bash
+# Check if agent is available
+which claude  # or which codex
+
+# Install if missing
+# Then try transfer again
+```
+
+## Best Practices
+
+1. **Start with agent selection**
+   ```bash
+   clix agent  # Select agent before first use (Gemini or Copilot recommended for free tier)
+   ```
+
+2. **Use slash commands for quick actions**
+   ```
+   /install           # Autonomous SDK installation
+   /integration       # Interactive integration guide
+   /debug             # For problem diagnosis
+   /diagnose          # For automated SDK status check
+   /event-tracking    # Event tracking setup
+   /user-management   # User identification setup
+   ```
+
+3. **Leverage autonomous commands**
+   ```
+   # Autonomous SDK installation (makes changes directly)
+   clix install
+
+   # Interactive debugging
+   /debug
+   Describe: Specific problem you're facing
+   [Get targeted investigation and fixes]
+   ```
+
+4. **Transfer long sessions**
+   ```
+   # When conversation gets complex:
+   /transfer claude
+   [Continue in native CLI with full context]
+   ```
+
+5. **Manage context proactively**
+   ```
+   # At 90% usage:
+   /compact
+   [Free up space while preserving recent context]
+   ```
+
+6. **Switch agents when needed**
+   ```
+   # Try different agent for fresh perspective:
+   /agent gemini
+   [Same conversation, different agent approach]
+   ```
+
+## For AI Assistants
+
+When helping users with Clix CLI, keep these points in mind:
+
+1. **Primary command is `clix`** - This launches interactive chat, not just a welcome screen
+2. **Interactive > Commands** - The tool is primarily interactive, not command-based
+3. **6 supported agents** - Gemini, Copilot, OpenCode, Cursor, Claude, Codex (recommend starting with Gemini or Copilot for free tiers)
+4. **17 slash commands** - 3 autonomous commands + 5 interactive skills + 9 system commands
+5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/diagnose`, `/debug`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
+6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
+7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps
+8. **Session transfer** - Saves to `~/.local/state/clix/sessions/`, provides command for native CLI
+9. **Agent switching** - Preserves history when switching between any agents
+10. **Context management** - 200K tokens (Claude), auto-compact at 90%
+11. **MCP integration** - Built-in installer for Clix MCP Server supporting all agents
+12. **XDG paths** - Config in `~/.config/clix/`, sessions in `~/.local/state/clix/sessions/`
+
+**When users ask about:**
+- "How to use" → Emphasize `clix` command starts chat, use `/help` for commands
+- "Which agents" → 6 agents supported: Gemini (free, 1000/day), Copilot (free, 50/mo), OpenCode, Cursor, Claude, Codex - configure with `clix agent`
+- "Free tier" → Recommend Gemini (1000 requests/day) or GitHub Copilot (50 premium/month)
+- "Installation" → `/install` for autonomous, `/integration` for guided steps
+- "Debugging" → Recommend `/debug` for interactive diagnosis
+- "SDK integration" → Use `/install` for autonomous installation or `/integration` skill for guided steps
+- "Event tracking" → Use `/event-tracking` skill (interactive, creates event plans)
+- "User management" → Use `/user-management` skill (setUserId, properties, logout handling)
+- "Personalization" → Use `/personalization` skill (Liquid templates for messages)
+- "API campaigns" → Use `/api-triggered-campaigns` skill (backend integration)
+- "Context full" → Suggest `/compact` or `/c` to compress history
+- "Transfer session" → Use `/transfer` or `/t` to continue in native CLI
+- "Start fresh" → Use `/new` to start a new session (not `/clear`, which is legacy alias)
+
+## Keywords
+
+CLI, command-line, interactive chat, mobile SDK, iOS, Android, React Native, Flutter, AI-powered, automation, Gemini, Claude, Codex, GitHub Copilot, OpenCode, Cursor, Anthropic, OpenAI, Google, slash commands, autonomous installation, interactive skills, debug assistant, session transfer, context management, streaming responses, terminal UI, React, Ink, push notifications, SDK integration, developer tools, skills system, agent switching, MCP, Model Context Protocol, XDG, event tracking, user management, personalization, API-triggered campaigns

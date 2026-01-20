@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Package manager lock files (keep only bun.lock)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Editor files
+.vscode/
+.vscode-test/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+bun-debug.log*
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+.DS_Store?
+
+# Bun
+.bun
+.bun-*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# User config (local testing)
+.clix-test/
+
+# Debug
+.vscode-test/
+chrome-debug.log
+
+# Agents
+.claude
