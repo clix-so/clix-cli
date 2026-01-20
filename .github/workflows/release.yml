@@ -321,15 +321,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Trigger Homebrew cask update
-        if: needs.publish-npm.outputs.is_prerelease == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run update-cask.yml \
-            --repo clix-so/homebrew-clix-cli \
-            -f version=${{ needs.check-version.outputs.current }}
-
   skip-release:
     needs: check-version
     if: needs.check-version.outputs.changed == 'false' && github.event_name != 'workflow_dispatch'
