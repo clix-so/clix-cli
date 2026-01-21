@@ -9,8 +9,13 @@ import { printFinalOutput } from '../ui/utils/finalOutput';
 
 type WhoamiPhase = 'loading' | 'complete' | 'not_logged_in' | 'error';
 
+type WhoamiResult =
+  | { status: 'ok'; member: Member }
+  | { status: 'not_logged_in' }
+  | { status: 'error'; message: string };
+
 interface WhoamiUIProps {
-  onComplete?: (member: Member | null) => void;
+  onComplete?: (result: WhoamiResult) => void;
 }
 
 const WhoamiUI: React.FC<WhoamiUIProps> = ({ onComplete }) => {
@@ -22,38 +27,38 @@ const WhoamiUI: React.FC<WhoamiUIProps> = ({ onComplete }) => {
 
   useEffect(() => {
     const runWhoami = async () => {
-      const credentialsManager = getCredentialsManager();
-
-      // Check for environment variable auth
-      const envToken = process.env[AUTH_ENV_VARS.ACCESS_TOKEN];
-      if (envToken) {
-        setIsEnvAuth(true);
-      }
-
-      // Get valid token
-      const token = await credentialsManager.getValidToken();
-
-      if (!token) {
-        setPhase('not_logged_in');
-        setTimeout(() => {
-          if (onComplete) {
-            onComplete(null);
-          } else {
-            exit();
-          }
-        }, 1500);
-        return;
-      }
-
-      // Fetch user info from API
       try {
+        const credentialsManager = getCredentialsManager();
+
+        // Check for environment variable auth
+        const envToken = process.env[AUTH_ENV_VARS.ACCESS_TOKEN];
+        if (envToken) {
+          setIsEnvAuth(true);
+        }
+
+        // Get valid token
+        const token = await credentialsManager.getValidToken();
+
+        if (!token) {
+          setPhase('not_logged_in');
+          setTimeout(() => {
+            if (onComplete) {
+              onComplete({ status: 'not_logged_in' });
+            } else {
+              exit();
+            }
+          }, 1500);
+          return;
+        }
+
+        // Fetch user info from API
         const apiClient = getInternalApiClient();
         const memberInfo = await apiClient.getMe();
         setMember(memberInfo);
         setPhase('complete');
         setTimeout(() => {
           if (onComplete) {
-            onComplete(memberInfo);
+            onComplete({ status: 'ok', member: memberInfo });
           } else {
             exit();
           }
@@ -64,7 +69,7 @@ const WhoamiUI: React.FC<WhoamiUIProps> = ({ onComplete }) => {
         setPhase('error');
         setTimeout(() => {
           if (onComplete) {
-            onComplete(null);
+            onComplete({ status: 'error', message });
           } else {
             exit();
           }
@@ -147,14 +152,21 @@ export async function whoamiCommand(): Promise<void> {
   return new Promise((resolve) => {
     const { unmount } = render(
       <WhoamiUI
-        onComplete={(member) => {
+        onComplete={(result) => {
           unmount();
-          if (member) {
+          if (result.status === 'ok') {
             printFinalOutput({
               type: 'success',
-              title: member.name,
-              message: member.email,
+              title: result.member.name,
+              message: result.member.email,
             });
+          } else if (result.status === 'error') {
+            printFinalOutput({
+              type: 'error',
+              title: 'Authentication failed',
+              message: result.message,
+            });
+            process.exitCode = 1;
           } else {
             printFinalOutput({
               type: 'info',

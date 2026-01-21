@@ -27,6 +27,7 @@ export async function loginCommand(): Promise<void> {
             title: 'Login failed',
             message: error.message,
           });
+          process.exitCode = 1;
           resolve();
         }}
       />,

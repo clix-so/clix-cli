@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { xdg } from '../utils/xdg';
 import { AUTH_ENV_VARS, getAuth0Config } from './config';
@@ -101,6 +101,9 @@ export class CredentialsManager {
       mode: 0o600,
     });
 
+    // Enforce permissions even if file already existed with broader perms
+    await chmod(this.credentialsFilePath, 0o600);
+
     this.cachedCredentials = credentials;
   }
 
@@ -171,9 +174,15 @@ export class CredentialsManager {
 
       const tokenResponse = (await response.json()) as TokenResponse;
 
+      // Preserve existing refresh token if response omits it (RFC 6749 compliant)
+      const mergedTokenResponse: TokenResponse = {
+        ...tokenResponse,
+        refresh_token: tokenResponse.refresh_token ?? credentials.refreshToken,
+      };
+
       // Create new credentials with refreshed tokens
       const newCredentials = createCredentials(
-        tokenResponse,
+        mergedTokenResponse,
         credentials.issuer,
         credentials.audience,
       );

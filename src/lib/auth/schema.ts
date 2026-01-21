@@ -63,7 +63,14 @@ export function createCredentials(
   audience: string,
 ): Credentials {
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + tokenResponse.expires_in * 1000);
+  const expiresInMs = tokenResponse.expires_in * 1000;
+
+  // Guard against invalid expires_in values
+  if (!Number.isFinite(expiresInMs) || expiresInMs < 0) {
+    throw new Error('Invalid expires_in in token response');
+  }
+
+  const expiresAt = new Date(now.getTime() + expiresInMs);
 
   return {
     version: CREDENTIALS_VERSION,

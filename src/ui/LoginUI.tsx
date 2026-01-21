@@ -64,9 +64,10 @@ async function checkExistingLogin(): Promise<{ isLoggedIn: boolean; userName: st
     return { isLoggedIn: false, userName: '' };
   }
 
+  // Token exists - user is logged in. Try to fetch userName but don't fail login on error.
   const config = getAuth0Config();
   const userName = await fetchUserName(new DeviceFlowService(config));
-  return { isLoggedIn: Boolean(userName), userName };
+  return { isLoggedIn: true, userName };
 }
 
 /** Perform device flow login and save credentials */

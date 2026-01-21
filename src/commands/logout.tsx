@@ -7,48 +7,61 @@ import { Header } from '../ui/components/Header';
 import { StatusMessage } from '../ui/components/StatusMessage';
 import { printFinalOutput } from '../ui/utils/finalOutput';
 
-type LogoutPhase = 'checking' | 'deleting' | 'complete' | 'not_logged_in';
+type LogoutPhase = 'checking' | 'deleting' | 'complete' | 'not_logged_in' | 'error';
 
 interface LogoutUIProps {
-  onComplete?: () => void;
+  onComplete?: (success: boolean) => void;
 }
 
 const LogoutUI: React.FC<LogoutUIProps> = ({ onComplete }) => {
   const { exit } = useApp();
   const [phase, setPhase] = useState<LogoutPhase>('checking');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     const runLogout = async () => {
-      const credentialsManager = getCredentialsManager();
+      try {
+        const credentialsManager = getCredentialsManager();
 
-      // Check if logged in
-      setPhase('checking');
-      const credentials = await credentialsManager.load();
+        // Check if logged in
+        setPhase('checking');
+        const credentials = await credentialsManager.load();
 
-      if (!credentials) {
-        setPhase('not_logged_in');
+        if (!credentials) {
+          setPhase('not_logged_in');
+          setTimeout(() => {
+            if (onComplete) {
+              onComplete(true);
+            } else {
+              exit();
+            }
+          }, 1500);
+          return;
+        }
+
+        // Delete credentials
+        setPhase('deleting');
+        await credentialsManager.delete();
+
+        setPhase('complete');
         setTimeout(() => {
           if (onComplete) {
-            onComplete();
+            onComplete(true);
           } else {
             exit();
           }
         }, 1500);
-        return;
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to remove credentials');
+        setPhase('error');
+        setTimeout(() => {
+          if (onComplete) {
+            onComplete(false);
+          } else {
+            exit();
+          }
+        }, 2000);
       }
-
-      // Delete credentials
-      setPhase('deleting');
-      await credentialsManager.delete();
-
-      setPhase('complete');
-      setTimeout(() => {
-        if (onComplete) {
-          onComplete();
-        } else {
-          exit();
-        }
-      }, 1500);
     };
 
     runLogout();
@@ -76,6 +89,8 @@ const LogoutUI: React.FC<LogoutUIProps> = ({ onComplete }) => {
           <Text dimColor>You are not logged in.</Text>
         </Box>
       )}
+
+      {phase === 'error' && <StatusMessage type="error" message={errorMessage} />}
     </Box>
   );
 };
@@ -89,13 +104,22 @@ export async function logoutCommand(): Promise<void> {
   return new Promise((resolve) => {
     const { unmount } = render(
       <LogoutUI
-        onComplete={() => {
+        onComplete={(success) => {
           unmount();
-          printFinalOutput({
-            type: 'success',
-            title: 'Logged out',
-            message: 'Credentials have been removed',
-          });
+          if (success) {
+            printFinalOutput({
+              type: 'success',
+              title: 'Logged out',
+              message: 'Credentials have been removed',
+            });
+          } else {
+            printFinalOutput({
+              type: 'error',
+              title: 'Logout failed',
+              message: 'Failed to remove credentials',
+            });
+            process.exitCode = 1;
+          }
           resolve();
         }}
       />,
