@@ -6,12 +6,14 @@
  * - useMessageSending: Message sending, cancellation, skills execution
  * - useHistoryManagement: History navigation, clearing, compaction, transfer
  * - useSlashCommands: Slash command parsing
+ * - useBashExecution: Bash command execution
  */
 import { useCallback, useRef } from 'react';
 import type { AgentExecutor } from '../../../lib/executor';
 import { useChatContext } from '../context/ChatContext';
 import type { ChatRefs } from './types';
 import { useAgentManagement } from './useAgentManagement';
+import { useBashExecution } from './useBashExecution';
 import { useHistoryManagement } from './useHistoryManagement';
 import { useMessageSending } from './useMessageSending';
 import { useSessionPersistence } from './useSessionPersistence';
@@ -60,6 +62,7 @@ export function useChatActions(options?: ChatActionsOptions) {
   const messageSending = useMessageSending(refs, sessionPersistence);
   const historyManagement = useHistoryManagement(refs, sessionPersistence);
   const slashCommands = useSlashCommands();
+  const bashExecution = useBashExecution(refs, sessionPersistence);
 
   const resumeSession = useCallback(
     async (sessionId: string): Promise<boolean> => {
@@ -114,6 +117,10 @@ export function useChatActions(options?: ChatActionsOptions) {
 
     // Slash commands
     parseSlashCommand: slashCommands.parseSlashCommand,
+
+    // Bash execution
+    executeBashCommand: bashExecution.executeBashCommand,
+    cancelBashCommand: bashExecution.cancelBashCommand,
 
     // State
     messages: state.messages,
