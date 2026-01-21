@@ -6,45 +6,20 @@
 import { useApp } from 'ink';
 import { useCallback } from 'react';
 import { generateHelpText, getCommand, getCommands } from '../../../lib/commands';
-import {
-  checkForUpdate,
-  detectInstallationMethod,
-  getUpdateCommand,
-} from '../../../lib/services/update-service';
 import { getAvailableSkillTypes, type SkillType } from '../../../lib/skills';
 import type { useChatActions } from './useChatActions';
 import type { useOverlays } from './useOverlays';
 
 /**
- * Handle the /update command - checks for available updates.
+ * Handle the /update command - directs user to CLI for actual update.
  */
-async function handleUpdateCommand(addSystemMessage: (msg: string) => void): Promise<void> {
-  addSystemMessage('Checking for updates...');
-  try {
-    const [updateResult, installInfo] = await Promise.all([
-      checkForUpdate(5000),
-      detectInstallationMethod(),
-    ]);
-
-    if (updateResult.error) {
-      addSystemMessage(`Failed to check for updates: ${updateResult.error}`);
-      return;
-    }
-
-    if (!updateResult.hasUpdate) {
-      addSystemMessage(`You're on the latest version (${updateResult.currentVersion})`);
-      return;
-    }
-
-    const updateCmd = getUpdateCommand(installInfo);
-    addSystemMessage(
-      `Update available: ${updateResult.currentVersion} -> ${updateResult.latestVersion}\n` +
-        `Run: ${updateCmd}`,
-    );
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    addSystemMessage(`Failed to check for updates: ${errorMessage}`);
-  }
+function handleUpdateCommand(addSystemMessage: (msg: string) => void): void {
+  addSystemMessage(
+    'To update Clix CLI, run `clix update` from the terminal.\n\n' +
+      'Available options:\n' +
+      '  --dry-run  Preview update without executing\n' +
+      '  --force    Skip confirmation prompt',
+  );
 }
 
 interface UseCommandHandlerOptions {
@@ -176,7 +151,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
           return;
 
         case 'update':
-          await handleUpdateCommand(addSystemMessage);
+          handleUpdateCommand(addSystemMessage);
           return;
 
         case 'exit':

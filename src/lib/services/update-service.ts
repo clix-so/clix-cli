@@ -57,6 +57,26 @@ export interface UpdateExecutionResult {
 }
 
 /**
+ * Options for update command.
+ */
+export interface UpdateOptions {
+  dryRun: boolean;
+  force: boolean;
+}
+
+/**
+ * Update plan with all necessary information.
+ */
+export interface UpdatePlan {
+  installMethod: InstallationMethod;
+  currentVersion: string;
+  latestVersion: string;
+  updateCommand: string;
+  canAutoUpdate: boolean;
+  hasUpdate: boolean;
+}
+
+/**
  * NPM registry response structure.
  */
 interface NpmRegistryResponse {
@@ -260,41 +280,74 @@ export function getUpdateCommand(info: InstallationInfo): string {
 }
 
 /**
- * Execute an update using the detected installation method.
- * Spawns a detached process to allow the parent to exit.
+ * Execute an update using the update plan.
  *
- * @param info - Installation information
+ * @param plan - Update plan from planUpdate()
+ * @param options - Update options (dryRun, force)
  * @returns Execution result
  */
-export async function executeUpdate(info: InstallationInfo): Promise<UpdateExecutionResult> {
-  const command = getUpdateCommand(info);
+export async function executeUpdate(
+  plan: UpdatePlan,
+  options: UpdateOptions,
+): Promise<UpdateExecutionResult> {
+  debugLog('Executing update', { method: plan.installMethod, command: plan.updateCommand });
 
-  debugLog('Executing update', { method: info.method, command });
+  // Dry run - don't actually execute
+  if (options.dryRun) {
+    return {
+      success: true,
+      message: `[DRY RUN] Would execute: ${plan.updateCommand}`,
+    };
+  }
 
-  // Binary installations can't be auto-updated
-  if (info.method === 'binary' || info.method === 'unknown') {
+  // Binary/unknown installations can't be auto-updated
+  if (!plan.canAutoUpdate) {
     return {
       success: false,
-      message: `Auto-update not supported. Please run:\n  ${command}`,
+      message: `Auto-update not supported for ${plan.installMethod} installation.\nPlease run manually:\n  ${plan.updateCommand}`,
     };
   }
 
   try {
-    // For package managers, spawn a detached process
-    const [cmd, ...args] = command.split(' ');
+    // For binary installations, use CLIX_VERSION environment variable
+    const env =
+      plan.installMethod === 'binary'
+        ? { ...process.env, CLIX_VERSION: `v${plan.latestVersion}` }
+        : process.env;
 
-    const updateProcess = spawn(cmd, args, {
-      stdio: 'ignore',
-      shell: true,
-      detached: true,
+    const [cmd, ...args] = plan.updateCommand.split(' ');
+
+    return new Promise((resolve) => {
+      const updateProcess = spawn(cmd, args, {
+        stdio: 'inherit',
+        shell: true,
+        env,
+      });
+
+      updateProcess.on('close', (code) => {
+        if (code === 0) {
+          resolve({
+            success: true,
+            message: `Successfully updated to ${plan.latestVersion}`,
+          });
+        } else {
+          resolve({
+            success: false,
+            message: `Update failed with exit code ${code}`,
+            error: `Exit code: ${code}`,
+          });
+        }
+      });
+
+      updateProcess.on('error', (err) => {
+        debugLog('Update execution failed', { error: err.message });
+        resolve({
+          success: false,
+          message: `Failed to execute update: ${err.message}`,
+          error: err.message,
+        });
+      });
     });
-
-    updateProcess.unref();
-
-    return {
-      success: true,
-      message: 'Update started. The new version will be available on your next run.',
-    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
@@ -326,4 +379,28 @@ export function formatUpdateMessage(
   const command = getUpdateCommand(info);
 
   return `Update available: ${result.currentVersion} -> ${result.latestVersion}\nRun: ${command}`;
+}
+
+/**
+ * Create an update plan by checking for updates and detecting installation method.
+ *
+ * @returns Update plan with all necessary information
+ */
+export async function planUpdate(): Promise<UpdatePlan> {
+  const [updateResult, installInfo] = await Promise.all([
+    checkForUpdate(5000),
+    detectInstallationMethod(),
+  ]);
+
+  // binary는 CLIX_VERSION 환경변수로 자동 업데이트 가능
+  const canAutoUpdate = installInfo.method !== 'unknown';
+
+  return {
+    installMethod: installInfo.method,
+    currentVersion: updateResult.currentVersion,
+    latestVersion: updateResult.latestVersion ?? updateResult.currentVersion,
+    updateCommand: getUpdateCommand(installInfo),
+    canAutoUpdate,
+    hasUpdate: updateResult.hasUpdate,
+  };
 }
