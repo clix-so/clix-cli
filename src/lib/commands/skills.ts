@@ -81,6 +81,14 @@ function generateSkillCommands(): Command[] {
     ),
   );
   commands.push(createLocalSkillCommand('doctor', 'Check SDK integration status', 'doctor'));
+  commands.push(
+    createLocalSkillCommand(
+      'ios-setup',
+      'Configure iOS capabilities for push notifications and app groups',
+      'ios-setup',
+      ['capabilities', 'ios-capabilities'],
+    ),
+  );
 
   return commands;
 }
