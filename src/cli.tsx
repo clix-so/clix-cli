@@ -172,7 +172,13 @@ async function main() {
       case 'ios-setup':
       case 'capabilities':
       case 'ios-capabilities': {
-        const pushEnv = cli.flags.pushEnv as 'development' | 'production' | undefined;
+        const pushEnvRaw = cli.flags.pushEnv;
+        if (pushEnvRaw && !['development', 'production'].includes(pushEnvRaw)) {
+          console.error(`Invalid --push-env value: ${pushEnvRaw}`);
+          console.error('Expected: development | production');
+          process.exit(1);
+        }
+        const pushEnv = pushEnvRaw as 'development' | 'production' | undefined;
         await iosSetupCommand({
           apiKeyPath: cli.flags.apiKey,
           keyId: cli.flags.keyId,

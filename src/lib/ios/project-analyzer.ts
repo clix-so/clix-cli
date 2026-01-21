@@ -255,7 +255,7 @@ async function searchForEntitlements(dir: string, results: string[], depth = 0):
 }
 
 /**
- * Get the iOS project directory (either cwd or cwd/ios)
+ * Get the iOS project directory (either cwd or cwd/ios or cwd/iOS)
  */
 export function getIosProjectDir(cwd: string): string | null {
   // Check if current directory has .xcodeproj
@@ -266,13 +266,16 @@ export function getIosProjectDir(cwd: string): string | null {
     }
   }
 
-  // Check ios subdirectory
-  const iosDir = path.join(cwd, 'ios');
-  if (fs.existsSync(iosDir)) {
-    const iosEntries = fs.readdirSync(iosDir, { withFileTypes: true });
-    for (const entry of iosEntries) {
-      if (entry.isDirectory() && entry.name.endsWith('.xcodeproj')) {
-        return iosDir;
+  // Check ios subdirectories (both casings for case-sensitive filesystems)
+  const iosSubdirs = ['ios', 'iOS'];
+  for (const subdir of iosSubdirs) {
+    const iosDir = path.join(cwd, subdir);
+    if (fs.existsSync(iosDir) && fs.statSync(iosDir).isDirectory()) {
+      const iosEntries = fs.readdirSync(iosDir, { withFileTypes: true });
+      for (const entry of iosEntries) {
+        if (entry.isDirectory() && entry.name.endsWith('.xcodeproj')) {
+          return iosDir;
+        }
       }
     }
   }

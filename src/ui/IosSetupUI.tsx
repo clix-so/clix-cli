@@ -75,16 +75,31 @@ async function syncWithPortal(
   appGroupId: string,
   setPhase: (phase: SetupPhase) => void,
 ): Promise<CapabilitySyncResult | null> {
-  if (options.skipPortal || !options.apiKeyPath || !options.keyId || !options.issuerId) {
+  // Check for partial credentials - user provided some but not all
+  const hasAnyCreds = !!(options.apiKeyPath || options.keyId || options.issuerId);
+  const hasAllCreds = !!(options.apiKeyPath && options.keyId && options.issuerId);
+
+  if (!options.skipPortal && hasAnyCreds && !hasAllCreds) {
+    throw new Error(
+      'Incomplete portal credentials. Provide --api-key, --key-id, and --issuer-id together, or use --skip-portal.',
+    );
+  }
+
+  if (options.skipPortal || !hasAllCreds) {
     return null;
   }
 
+  // At this point, hasAllCreds is true, so all credentials are defined
+  const { apiKeyPath, keyId, issuerId } = options as Required<
+    Pick<IosSetupOptions, 'apiKeyPath' | 'keyId' | 'issuerId'>
+  >;
+
   setPhase('authenticating');
-  const keyP8 = loadApiKeyFromFile(options.apiKeyPath);
+  const keyP8 = loadApiKeyFromFile(apiKeyPath);
   const authContext = await createAuthContext({
     apiKey: {
-      keyId: options.keyId,
-      issuerId: options.issuerId,
+      keyId,
+      issuerId,
       keyP8,
     },
   });
@@ -169,20 +184,25 @@ async function runSetup(
   // Phase 3: Update local entitlements files
   setState((s) => ({ ...s, phase: 'updating_entitlements' }));
   const entitlementsResult = await updateEntitlements(project, bundleId, options);
-  const files = entitlementsResult?.files ?? [];
+
+  if (!entitlementsResult) {
+    throw new Error(
+      'Failed to update entitlements files. No iOS project directory or targets found.',
+    );
+  }
+
+  const files = entitlementsResult.files;
   setState((s) => ({ ...s, updatedFiles: files }));
   result.entitlementsUpdated = files;
 
   // Build agent context for remaining tasks
-  if (entitlementsResult) {
-    result.agentContext = buildAgentContext(
-      project,
-      bundleId,
-      appGroupId,
-      entitlementsResult.entitlementsPath,
-      entitlementsResult.iosDir,
-    );
-  }
+  result.agentContext = buildAgentContext(
+    project,
+    bundleId,
+    appGroupId,
+    entitlementsResult.entitlementsPath,
+    entitlementsResult.iosDir,
+  );
 
   result.success = true;
   setState((s) => ({ ...s, phase: 'complete' }));

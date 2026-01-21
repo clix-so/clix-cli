@@ -44,7 +44,7 @@ You are an AI agent that configures iOS capabilities required for the Clix SDK.
 
 4. **Report Current State**
    Output findings:
-   ```
+   ```text
    Project: {project_name}
    Bundle ID: {bundle_id}
    Push Notifications: {configured/not configured}
@@ -57,7 +57,7 @@ You are an AI agent that configures iOS capabilities required for the Clix SDK.
 Provide clear instructions for adding capabilities in Xcode. These steps CANNOT be automated and require user action in Xcode IDE.
 
 **Add Push Notifications:**
-```
+```text
 1. Open your project in Xcode
 2. Select your main app target in the Navigator (left sidebar)
 3. Go to the "Signing & Capabilities" tab
@@ -67,7 +67,7 @@ Provide clear instructions for adding capabilities in Xcode. These steps CANNOT 
 ```
 
 **Add Background Modes (Recommended):**
-```
+```text
 1. In "Signing & Capabilities", click "+ Capability"
 2. Select "Background Modes"
 3. Enable "Remote notifications" checkbox
@@ -75,7 +75,7 @@ Provide clear instructions for adding capabilities in Xcode. These steps CANNOT 
 ```
 
 **Add App Groups:**
-```
+```text
 1. Click "+ Capability"
 2. Select "App Groups"
 3. Click the "+" button under App Groups
@@ -133,7 +133,7 @@ Create or modify entitlements files. Use Write/Edit tools for these operations.
 Guide user through manual portal configuration. These steps CANNOT be automated.
 
 **Enable Capabilities on App ID:**
-```
+```text
 1. Go to https://developer.apple.com/account
 2. Navigate to "Certificates, Identifiers & Profiles"
 3. Select "Identifiers" from the sidebar
@@ -146,7 +146,7 @@ Guide user through manual portal configuration. These steps CANNOT be automated.
 ```
 
 **Register App Group ID:**
-```
+```text
 1. In the sidebar, select "Identifiers"
 2. Click the "+" button
 3. Select "App Groups" and click "Continue"
@@ -162,7 +162,7 @@ Guide user through manual portal configuration. These steps CANNOT be automated.
 ```
 
 **Regenerate Provisioning Profile:**
-```
+```text
 After enabling capabilities, your provisioning profiles become invalid.
 
 1. Navigate to "Profiles" in the sidebar

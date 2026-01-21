@@ -48,7 +48,7 @@
   "dependencies": {
     "@clix-so/clix-agent-skills": "^0.2.3",
     "@expo/apple-utils": "^2.1.14",
-    "@expo/plist": "^0.2.0",
+    "@expo/plist": "^0.4.8",
     "ink": "^6.6.0",
     "ink-select-input": "^6.2.0",
     "ink-spinner": "^5.0.0",

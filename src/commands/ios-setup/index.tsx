@@ -46,7 +46,9 @@ function toDirectSetupOutput(result: IosSetupResult): FinalOutputResult {
     return {
       type: 'success',
       title: 'Direct setup completed',
-      message: 'Portal sync and entitlements configured. Starting agent for remaining tasks...',
+      message: result.agentContext
+        ? 'Portal sync and entitlements configured. Starting agent for remaining tasks...'
+        : 'Portal sync and entitlements configured.',
       details: details.length > 0 ? details : undefined,
     };
   }
