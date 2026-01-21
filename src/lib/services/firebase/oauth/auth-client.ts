@@ -35,6 +35,7 @@ export class GoogleAuthClient {
   private client: OAuth2Client;
   private tokenStore: TokenStore;
   private codeVerifier: string | null = null;
+  private oauthState: string | null = null;
 
   constructor() {
     this.client = new OAuth2Client({
@@ -75,6 +76,7 @@ export class GoogleAuthClient {
   generateAuthUrl(): string {
     // Generate PKCE code verifier and challenge
     this.codeVerifier = generateCodeVerifier();
+    this.oauthState = crypto.randomBytes(16).toString('hex');
     const codeChallenge = generateCodeChallenge(this.codeVerifier);
 
     const url = this.client.generateAuthUrl({
@@ -82,6 +84,7 @@ export class GoogleAuthClient {
       scope: [...GOOGLE_OAUTH_CONFIG.scopes],
       code_challenge_method: 'S256' as CodeChallengeMethod,
       code_challenge: codeChallenge,
+      state: this.oauthState,
       prompt: 'consent', // Always show consent to get refresh token
     });
 
@@ -114,8 +117,25 @@ export class GoogleAuthClient {
                 </body>
               </html>
             `);
-            server.close();
+            cleanup();
             reject(new Error(`OAuth error: ${error}`));
+            return;
+          }
+
+          // Validate OAuth state to prevent CSRF attacks
+          if (!this.oauthState || state !== this.oauthState) {
+            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.end(`
+              <html>
+                <body style="font-family: system-ui; text-align: center; padding: 50px;">
+                  <h1>❌ Authentication Failed</h1>
+                  <p>Invalid OAuth state.</p>
+                  <p>You can close this window.</p>
+                </body>
+              </html>
+            `);
+            cleanup();
+            reject(new Error('OAuth state mismatch'));
             return;
           }
 
@@ -130,7 +150,7 @@ export class GoogleAuthClient {
                 </body>
               </html>
             `);
-            server.close();
+            cleanup();
             reject(new Error('No authorization code received'));
             return;
           }
@@ -144,7 +164,8 @@ export class GoogleAuthClient {
               </body>
             </html>
           `);
-          server.close();
+          cleanup();
+          this.oauthState = null;
           resolve({ code, state });
         } else {
           res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -152,17 +173,21 @@ export class GoogleAuthClient {
         }
       });
 
-      server.listen(GOOGLE_OAUTH_CONFIG.callbackPort, () => {
-        // Server started
-      });
-
-      // Timeout
-      setTimeout(() => {
-        server.close();
+      const timeout = setTimeout(() => {
+        cleanup();
         reject(new Error('OAuth callback timeout'));
       }, GOOGLE_OAUTH_CONFIG.timeoutMs);
 
+      const cleanup = () => {
+        clearTimeout(timeout);
+        server.close();
+      };
+
+      // Bind to localhost only for security
+      server.listen(GOOGLE_OAUTH_CONFIG.callbackPort, '127.0.0.1');
+
       server.on('error', (err) => {
+        cleanup();
         reject(new Error(`Failed to start OAuth callback server: ${err.message}`));
       });
     });

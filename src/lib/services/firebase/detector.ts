@@ -161,7 +161,9 @@ export async function detectPlatform(projectPath: string): Promise<Platform> {
     const { hasIos, hasAndroid } = await detectNativePlatforms(projectPath);
 
     if (hasIos && hasAndroid) {
-      return 'react-native'; // Default to RN for dual-platform projects
+      // For dual-platform native projects without cross-platform framework,
+      // return 'unknown' to check all common locations
+      return 'unknown';
     }
     if (hasIos) {
       return 'ios';
@@ -318,6 +320,24 @@ export async function findGoogleServiceInfoPlist(
     // iOS directory doesn't exist or can't be read
   }
 
+  // Search for native iOS projects at root level (sibling directories to .xcodeproj)
+  try {
+    const rootEntries = await fs.readdir(projectPath, { withFileTypes: true });
+    for (const entry of rootEntries) {
+      if (entry.isDirectory() && !IGNORE_DIRS.has(entry.name) && entry.name !== 'ios') {
+        const plistPath = path.join(entry.name, 'GoogleService-Info.plist');
+        const fullPath = path.join(projectPath, plistPath);
+        if (await fileExists(fullPath)) {
+          if (!results.some((r) => r.path === plistPath)) {
+            results.push({ path: plistPath, inExpectedLocation: true });
+          }
+        }
+      }
+    }
+  } catch {
+    // Root directory can't be read
+  }
+
   return results;
 }
 
@@ -334,9 +354,11 @@ async function detectAndroidCredential(
     return null;
   }
 
-  // Use the first found file (prefer expected locations)
-  const expectedFile = found.find((f) => f.inExpectedLocation);
+  // Use the first found file (prefer platform-specific expected locations)
+  const expectedFile = found.find((f) => expectedPaths.includes(f.path));
   const file = expectedFile || found[0];
+  const inExpectedLocation =
+    expectedPaths.length === 0 ? file.inExpectedLocation : expectedPaths.includes(file.path);
   const absolutePath = path.join(projectPath, file.path);
 
   try {
@@ -354,8 +376,8 @@ async function detectAndroidCredential(
       content: validation.valid
         ? (validation.data as FirebaseCredentialFile['content'])
         : undefined,
-      inExpectedLocation: file.inExpectedLocation,
-      expectedPath: !file.inExpectedLocation ? expectedPaths[0] : undefined,
+      inExpectedLocation,
+      expectedPath: !inExpectedLocation ? expectedPaths[0] : undefined,
     };
   } catch (error) {
     return {
@@ -375,8 +397,8 @@ async function detectAndroidCredential(
           code: 'PARSE_ERROR',
         },
       ],
-      inExpectedLocation: file.inExpectedLocation,
-      expectedPath: !file.inExpectedLocation ? expectedPaths[0] : undefined,
+      inExpectedLocation,
+      expectedPath: !inExpectedLocation ? expectedPaths[0] : undefined,
     };
   }
 }
@@ -394,10 +416,13 @@ async function detectIosCredential(
     return null;
   }
 
-  // Use the first found file (prefer expected locations)
-  const expectedFile = found.find((f) => f.inExpectedLocation);
+  // Use file in expected location if available, otherwise first found
+  const expectedFile = found.find((f) => expectedPaths.includes(f.path));
   const file = expectedFile || found[0];
   const absolutePath = path.join(projectPath, file.path);
+  // Determine if file is in expected location based on expectedPaths parameter
+  const inExpectedLocation =
+    expectedPaths.length === 0 ? file.inExpectedLocation : expectedPaths.includes(file.path);
 
   try {
     const content = await readPlistFile(absolutePath);
@@ -414,8 +439,8 @@ async function detectIosCredential(
       content: validation.valid
         ? (validation.data as FirebaseCredentialFile['content'])
         : undefined,
-      inExpectedLocation: file.inExpectedLocation,
-      expectedPath: !file.inExpectedLocation ? expectedPaths[0] : undefined,
+      inExpectedLocation,
+      expectedPath: !inExpectedLocation ? expectedPaths[0] : undefined,
     };
   } catch (error) {
     return {
@@ -432,8 +457,8 @@ async function detectIosCredential(
           code: 'PARSE_ERROR',
         },
       ],
-      inExpectedLocation: file.inExpectedLocation,
-      expectedPath: !file.inExpectedLocation ? expectedPaths[0] : undefined,
+      inExpectedLocation,
+      expectedPath: !inExpectedLocation ? expectedPaths[0] : undefined,
     };
   }
 }

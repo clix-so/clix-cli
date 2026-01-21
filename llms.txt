@@ -9,7 +9,7 @@ Clix CLI is an interactive command-line tool that provides a chat interface with
 **Core Features:**
 - Interactive chat interface as the primary interaction mode
 - Support for 6 AI agents: Claude, Codex, Gemini, OpenCode, Cursor, and GitHub Copilot
-- 17 slash commands for quick actions
+- 18 slash commands for quick actions
 - Skills system with 5 interactive skills + 3 autonomous commands
 - Interactive debug assistant for problem diagnosis
 - Session transfer to native agent CLIs
@@ -70,14 +70,14 @@ clix
 **Features:**
 - Natural language conversation with AI
 - Real-time streaming responses
-- 13 slash commands (type `/` to see menu)
+- 18 slash commands (type `/` to see menu)
 - Context usage tracking (200K token window for Claude Sonnet)
 - History navigation with ↑/↓ arrow keys
 - Press Escape to cancel streaming requests
 - Automatic history compaction at 90% context threshold
 
 **Available within chat:**
-- All 17 slash commands (3 autonomous + 5 skills + 9 system)
+- All 18 slash commands (3 autonomous + 5 skills + 10 system)
 - Natural language queries
 - File exploration and code analysis by agent
 - Real-time tool execution visibility
@@ -206,7 +206,7 @@ The interactive chat (`clix` command) is the primary way to interact with Clix C
 
 ### Slash Commands
 
-Type `/` in the chat to see the autocomplete menu. All 17 slash commands are organized into three categories:
+Type `/` in the chat to see the autocomplete menu. All 18 slash commands are organized into three categories:
 
 #### Autonomous Commands (3 commands)
 
@@ -1158,7 +1158,7 @@ When helping users with Clix CLI, keep these points in mind:
 1. **Primary command is `clix`** - This launches interactive chat, not just a welcome screen
 2. **Interactive > Commands** - The tool is primarily interactive, not command-based
 3. **6 supported agents** - Gemini, Copilot, OpenCode, Cursor, Claude, Codex (recommend starting with Gemini or Copilot for free tiers)
-4. **17 slash commands** - 3 autonomous commands + 5 interactive skills + 9 system commands
+4. **18 slash commands** - 3 autonomous commands + 5 interactive skills + 10 system commands
 5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
 6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
 7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps

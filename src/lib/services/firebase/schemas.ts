@@ -13,7 +13,7 @@ const AndroidClientInfoSchema = z.object({
   package_name: z
     .string()
     .min(1, 'Package name is required')
-    .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/i, 'Invalid Android package name format'),
+    .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/, 'Invalid Android package name format'),
 });
 
 /**
