@@ -29,8 +29,13 @@ When running in one-shot mode (command-line skill execution):
 When analyzing a project, check in this order:
 1. **Cross-platform first**: Check for package.json (React Native/Expo)
    or pubspec.yaml (Flutter)
-2. **Native fallback**: *.xcodeproj/xcworkspace (iOS) or
-   build.gradle/AndroidManifest.xml (Android)
+2. **Native fallback**:
+   - **iOS** (detect dependency manager in order):
+     - Package.swift → Pure SPM project (recommended)
+     - Podfile → CocoaPods project
+     - *.xcodeproj with XCRemoteSwiftPackageReference in .pbxproj → Xcode with SPM
+     - *.xcodeproj/xcworkspace only → Suggest SPM (modern approach)
+   - build.gradle/AndroidManifest.xml (Android)
 
 ## Installation Flow
 1. Detect platform from project files

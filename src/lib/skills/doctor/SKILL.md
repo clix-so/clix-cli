@@ -9,6 +9,7 @@ Analyze the project and output a diagnostic JSON report:
 ```json
 {
   "platform": "ios" | "android" | "react-native" | "flutter" | "unknown",
+  "installationMethod": "spm-package-swift" | "spm-xcode" | "cocoapods" | "npm" | "gradle" | "pubspec" | "none",
   "sdkInstalled": true | false,
   "sdkVersion": "version string or null",
   "pushConfigured": true | false,
@@ -41,10 +42,13 @@ Analyze the project and output a diagnostic JSON report:
 4. Check for build.gradle or AndroidManifest.xml (Android)
 
 ### SDK Installation Check
-- iOS: Check Podfile for 'ClixSDK'
-- Android: Check build.gradle for clix dependency
-- React Native: Check package.json for '@clix-so/react-native-sdk'
-- Flutter: Check pubspec.yaml for 'clix_flutter_sdk'
+- **iOS**: Check in order of priority:
+  1. `Package.swift` for package dependency containing `clix-ios-sdk` or `clix` → `installationMethod: "spm-package-swift"`
+  2. `*.xcodeproj/project.pbxproj` for `XCRemoteSwiftPackageReference` containing `clix` → `installationMethod: "spm-xcode"`
+  3. `Podfile` for 'ClixSDK' or 'Clix' pod → `installationMethod: "cocoapods"`
+- Android: Check build.gradle for clix dependency → `installationMethod: "gradle"`
+- React Native: Check package.json for '@clix-so/react-native-sdk' → `installationMethod: "npm"`
+- Flutter: Check pubspec.yaml for 'clix_flutter_sdk' → `installationMethod: "pubspec"`
 
 ### Push Configuration Check
 - iOS: Check entitlements for 'aps-environment'

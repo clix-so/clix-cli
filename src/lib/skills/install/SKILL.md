@@ -19,7 +19,11 @@ You are an autonomous AI agent that installs and integrates the Clix mobile push
    - `package.json` with React Native/Expo dependencies
    - `pubspec.yaml` for Flutter
 2. Then check native platforms:
-   - `*.xcodeproj` or `*.xcworkspace` for iOS
+   - **iOS (in order of priority):**
+     1. `Package.swift` at project root → **Pure SPM project**
+     2. `Podfile` exists → **CocoaPods project**
+     3. `*.xcodeproj/project.pbxproj` containing `XCRemoteSwiftPackageReference` → **Xcode with SPM**
+     4. `*.xcodeproj` or `*.xcworkspace` only → **Suggest SPM** (modern, recommended)
    - `build.gradle` or `AndroidManifest.xml` for Android
 
 ## Installation Steps
@@ -28,10 +32,49 @@ You are an autonomous AI agent that installs and integrates the Clix mobile push
 Analyze project files to identify the platform.
 
 ### 2. Install SDK Package
-- React Native: Add `@clix-so/react-native-sdk` to package.json, run npm/yarn install
-- iOS: Add to Podfile, run pod install
-- Android: Add to build.gradle
-- Flutter: Add to pubspec.yaml, run flutter pub get
+
+**React Native:**
+- Add `@clix-so/react-native-sdk` to package.json
+- Run npm/yarn install
+
+**iOS (Dependency Manager Detection):**
+
+First, detect the dependency manager being used:
+
+1. **Pure SPM Project** (has `Package.swift`):
+   - Read Package.swift
+   - Add to dependencies array:
+     ```swift
+     .package(url: "https://github.com/clix-so/clix-ios-sdk.git", from: "1.0.0")
+     ```
+   - Add to target dependencies:
+     ```swift
+     .product(name: "Clix", package: "clix-ios-sdk")
+     ```
+   - Run `swift package resolve`
+
+2. **Xcode Project with SPM** (has `project.pbxproj` with `XCRemoteSwiftPackageReference`):
+   - Inform user to add via Xcode: File > Add Package Dependencies
+   - URL: `https://github.com/clix-so/clix-ios-sdk`
+   - Note: Direct .pbxproj modification is complex; prefer Xcode UI
+
+3. **CocoaPods Project** (has `Podfile`):
+   - Add to Podfile:
+     ```ruby
+     pod 'Clix', :git => 'https://github.com/clix-so/clix-ios-sdk.git'
+     ```
+   - Run: `cd ios && pod install`
+
+4. **Bare Xcode Project** (only `*.xcodeproj` or `*.xcworkspace`):
+   - Recommend SPM: Guide user to add via Xcode (File > Add Package Dependencies)
+   - Alternative: Create Podfile and use CocoaPods
+
+**Android:**
+- Add to build.gradle
+
+**Flutter:**
+- Add to pubspec.yaml
+- Run flutter pub get
 
 ### 3. Create/Modify Files Directly
 

@@ -1140,6 +1140,8 @@ When helping users with Clix CLI, keep these points in mind:
 - "Installation" → `/install` for autonomous, `/integration` for guided steps
 - "Debugging" → Recommend `/debug` for interactive diagnosis
 - "SDK integration" → Use `/install` for autonomous installation or `/integration` skill for guided steps
+- "iOS installation" → Detect: Package.swift (SPM, preferred), Podfile (CocoaPods), or suggest SPM for bare Xcode projects. SPM is the modern, recommended approach.
+- "SPM/Swift Package Manager" → Guide through Package.swift modification or Xcode UI (File > Add Package Dependencies) for adding packages
 - "Event tracking" → Use `/event-tracking` skill (interactive, creates event plans)
 - "User management" → Use `/user-management` skill (setUserId, properties, logout handling)
 - "Personalization" → Use `/personalization` skill (Liquid templates for messages)
@@ -1150,4 +1152,4 @@ When helping users with Clix CLI, keep these points in mind:
 
 ## Keywords
 
-CLI, command-line, interactive chat, mobile SDK, iOS, Android, React Native, Flutter, AI-powered, automation, Gemini, Claude, Codex, GitHub Copilot, OpenCode, Cursor, Anthropic, OpenAI, Google, slash commands, autonomous installation, interactive skills, debug assistant, session transfer, context management, streaming responses, terminal UI, React, Ink, push notifications, SDK integration, developer tools, skills system, agent switching, MCP, Model Context Protocol, XDG, event tracking, user management, personalization, API-triggered campaigns
+CLI, command-line, interactive chat, mobile SDK, iOS, Android, React Native, Flutter, AI-powered, automation, Gemini, Claude, Codex, GitHub Copilot, OpenCode, Cursor, Anthropic, OpenAI, Google, slash commands, autonomous installation, interactive skills, debug assistant, session transfer, context management, streaming responses, terminal UI, React, Ink, push notifications, SDK integration, developer tools, skills system, agent switching, MCP, Model Context Protocol, XDG, event tracking, user management, personalization, API-triggered campaigns, Swift Package Manager, SPM, CocoaPods, Xcode
