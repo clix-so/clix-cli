@@ -26,7 +26,11 @@ Analyze the project and output a diagnostic JSON report:
     "apiKeyConfigured": true | false,
     "pushPermissions": true | false,
     "entitlements": true | false,
-    "firebaseConfig": true | false
+    "firebaseConfig": true | false,
+    "firebaseAndroid": true | false,
+    "firebaseIos": true | false,
+    "firebasePackageMatch": true | false,
+    "firebaseBundleMatch": true | false
   },
   "nextSteps": ["Step 1", "Step 2"]
 }
@@ -51,6 +55,30 @@ Analyze the project and output a diagnostic JSON report:
 - Android: Check AndroidManifest.xml for FCM service
 - Check for google-services.json (Android) or GoogleService-Info.plist (iOS)
 
+### Firebase Configuration Check (Detailed)
+
+**Android (google-services.json):**
+- Check file presence in expected locations:
+  - Standard Android: `app/google-services.json`
+  - React Native/Flutter: `android/app/google-services.json`
+- Validate JSON structure against Firebase schema
+- Verify `project_info.project_id` exists
+- Verify `client[].client_info.android_client_info.package_name` matches AndroidManifest.xml
+- Report if file found in wrong location (e.g., project root)
+
+**iOS (GoogleService-Info.plist):**
+- Check file presence in expected locations:
+  - React Native: `ios/GoogleService-Info.plist`
+  - Flutter: `ios/Runner/GoogleService-Info.plist`
+  - Native iOS: `<AppName>/GoogleService-Info.plist`
+- Validate plist structure (API_KEY, GCM_SENDER_ID, GOOGLE_APP_ID, PROJECT_ID, BUNDLE_ID)
+- Verify BUNDLE_ID matches Xcode project bundle identifier
+- Report if file found in wrong location
+
+**Cross-Platform Validation:**
+- For React Native/Flutter projects, verify both Android and iOS configs exist
+- Verify PROJECT_ID matches between platforms
+
 ### Common Issues to Detect
 - Missing SDK dependency
 - Missing or invalid API key
@@ -58,5 +86,12 @@ Analyze the project and output a diagnostic JSON report:
 - Missing capabilities/entitlements
 - Outdated SDK version
 - Incomplete Firebase/APNs setup
+- Firebase config file missing
+- Firebase config file in wrong location
+- Firebase config file invalid (malformed JSON/plist)
+- Firebase package name / bundle ID mismatch
+- Firebase project ID mismatch between platforms
 
 Output the JSON diagnostic, then provide a brief summary with actionable recommendations.
+
+Use `/firebase` command to interactively check and configure Firebase credentials.

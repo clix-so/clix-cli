@@ -34,6 +34,13 @@ export const ERROR_CODES = {
   // General errors
   UNKNOWN_ERROR: 'UNKNOWN_ERROR',
   OPERATION_CANCELLED: 'OPERATION_CANCELLED',
+
+  // Firebase errors
+  FIREBASE_CONFIG_MISSING: 'FIREBASE_CONFIG_MISSING',
+  FIREBASE_CONFIG_INVALID: 'FIREBASE_CONFIG_INVALID',
+  FIREBASE_PACKAGE_MISMATCH: 'FIREBASE_PACKAGE_MISMATCH',
+  FIREBASE_BUNDLE_MISMATCH: 'FIREBASE_BUNDLE_MISMATCH',
+  FIREBASE_DETECTION_FAILED: 'FIREBASE_DETECTION_FAILED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -174,5 +181,23 @@ export class SessionError extends ClixError {
     super(message, code ?? ERROR_CODES.SESSION_EXPIRED, true, { sessionId });
     this.name = 'SessionError';
     this.sessionId = sessionId;
+  }
+}
+
+/**
+ * Error for Firebase configuration failures.
+ */
+export class FirebaseError extends ClixError {
+  public readonly platform: 'android' | 'ios';
+  public readonly file?: string;
+
+  constructor(message: string, platform: 'android' | 'ios', code?: ErrorCode, file?: string) {
+    super(message, code ?? ERROR_CODES.FIREBASE_CONFIG_INVALID, true, {
+      platform,
+      file,
+    });
+    this.name = 'FirebaseError';
+    this.platform = platform;
+    this.file = file;
   }
 }

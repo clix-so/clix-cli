@@ -226,7 +226,7 @@ These execute pre-built workflows from the `@clix-so/clix-agent-skills` package 
 - `/personalization` - Personalization template creation and debugging
 - `/api-triggered-campaigns` - API-triggered campaign setup
 
-#### System Commands (9 commands)
+#### System Commands (10 commands)
 
 These are built-in commands for chat management and tools:
 
@@ -234,6 +234,7 @@ These are built-in commands for chat management and tools:
 - `/new` (alias: `/clear`) - Start a new session (clear history)
 - `/compact` (alias: `/c`) - Compress conversation history
 - `/agent` (alias: `/a`) - List available agents or switch to specific agent
+- `/firebase` - Check and configure Firebase credentials
 - `/transfer` (alias: `/t`) - Transfer session to agent CLI
 - `/resume` - Resume a previous session
 - `/install-mcp` (alias: `/mcp`) - Install Clix MCP Server for current agent
@@ -458,6 +459,7 @@ System Commands:
   /new             - Start a new session
   /compact         - Compress conversation history
   /agent           - List or switch agents
+  /firebase        - Check and configure Firebase credentials
   /transfer        - Transfer to agent CLI
   /resume          - Resume a previous session
   /install-mcp     - Install Clix MCP Server
@@ -502,6 +504,39 @@ Context usage: 92% (730,000 / 800,000 characters)
 Compressing conversation history...
 ✓ Compacted from 45 messages to 12 messages
 Reduced size by 68%
+```
+
+#### `/firebase` - Firebase Configuration
+
+**Category:** System Command
+
+**What it does:** Opens an interactive wizard to check and configure Firebase credentials (google-services.json for Android, GoogleService-Info.plist for iOS).
+
+**Features:**
+- Auto-detects Firebase credential files in project
+- Validates JSON/plist structure against Firebase schema
+- Reports issues (missing files, invalid format, wrong location)
+- Provides recommendations with help URLs
+- Supports React Native, Flutter, iOS, and Android projects
+
+**Detection locations:**
+- Android: `app/google-services.json`, `android/app/google-services.json`
+- iOS: `ios/GoogleService-Info.plist`, `ios/Runner/GoogleService-Info.plist`
+
+**Example:**
+```
+> /firebase
+Firebase Configuration (react-native)
+
+✓ Android (google-services.json): valid
+  Location: android/app/google-services.json
+  Project ID: my-project-12345
+
+✗ iOS (GoogleService-Info.plist): not found
+  → Expected: ios/GoogleService-Info.plist
+  → Download from Firebase Console
+
+Press Enter to configure, Esc to skip
 ```
 
 #### `/agent` - Agent Management
