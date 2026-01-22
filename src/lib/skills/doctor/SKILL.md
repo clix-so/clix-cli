@@ -43,9 +43,9 @@ Analyze the project and output a diagnostic JSON report:
 
 ### SDK Installation Check
 - **iOS**: Check in order of priority:
-  1. `Package.swift` for package dependency containing `clix-ios-sdk` or `clix` → `installationMethod: "spm-package-swift"`
-  2. `*.xcodeproj/project.pbxproj` for `XCRemoteSwiftPackageReference` containing `clix` → `installationMethod: "spm-xcode"`
-  3. `Podfile` for 'ClixSDK' or 'Clix' pod → `installationMethod: "cocoapods"`
+  1. `Package.swift` with iOS platform target (contains `.iOS` or `platforms: [.iOS`) for package dependency containing `clix-ios-sdk` or `clix` → `installationMethod: "spm-package-swift"`
+  2. `Podfile` for 'ClixSDK' or 'Clix' pod → `installationMethod: "cocoapods"`
+  3. `*.xcodeproj/project.pbxproj` for `XCRemoteSwiftPackageReference` containing `clix` → `installationMethod: "spm-xcode"`
 - Android: Check build.gradle for clix dependency → `installationMethod: "gradle"`
 - React Native: Check package.json for '@clix-so/react-native-sdk' → `installationMethod: "npm"`
 - Flutter: Check pubspec.yaml for 'clix_flutter_sdk' → `installationMethod: "pubspec"`

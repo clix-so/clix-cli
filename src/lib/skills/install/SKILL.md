@@ -20,10 +20,11 @@ You are an autonomous AI agent that installs and integrates the Clix mobile push
    - `pubspec.yaml` for Flutter
 2. Then check native platforms:
    - **iOS (in order of priority):**
-     1. `Package.swift` at project root → **Pure SPM project**
+     1. `Package.swift` with iOS platform target (contains `.iOS` or `platforms: [.iOS`) → **Pure SPM iOS project**
      2. `Podfile` exists → **CocoaPods project**
      3. `*.xcodeproj/project.pbxproj` containing `XCRemoteSwiftPackageReference` → **Xcode with SPM**
      4. `*.xcodeproj` or `*.xcworkspace` only → **Suggest SPM** (modern, recommended)
+   - Note: `Package.swift` without iOS platform is likely a server-side Swift or CLI project, not iOS
    - `build.gradle` or `AndroidManifest.xml` for Android
 
 ## Installation Steps
@@ -41,9 +42,10 @@ Analyze project files to identify the platform.
 
 First, detect the dependency manager being used:
 
-1. **Pure SPM Project** (has `Package.swift`):
-   - Read Package.swift
-   - Add to dependencies array:
+1. **Pure SPM iOS Project** (has `Package.swift` with iOS platform target):
+   - First verify Package.swift contains iOS platform (`.iOS` or `platforms: [.iOS`)
+   - If no iOS platform found, this is likely a server-side Swift project - skip iOS installation
+   - Read Package.swift and add to dependencies array:
      ```swift
      .package(url: "https://github.com/clix-so/clix-ios-sdk.git", from: "1.0.0")
      ```

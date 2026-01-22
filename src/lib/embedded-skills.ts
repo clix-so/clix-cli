@@ -1107,10 +1107,11 @@ You are an autonomous AI agent that installs and integrates the Clix mobile push
    - \`pubspec.yaml\` for Flutter
 2. Then check native platforms:
    - **iOS (in order of priority):**
-     1. \`Package.swift\` at project root → **Pure SPM project**
+     1. \`Package.swift\` with iOS platform target (contains \`.iOS\` or \`platforms: [.iOS\`) → **Pure SPM iOS project**
      2. \`Podfile\` exists → **CocoaPods project**
      3. \`*.xcodeproj/project.pbxproj\` containing \`XCRemoteSwiftPackageReference\` → **Xcode with SPM**
      4. \`*.xcodeproj\` or \`*.xcworkspace\` only → **Suggest SPM** (modern, recommended)
+   - Note: \`Package.swift\` without iOS platform is likely a server-side Swift or CLI project, not iOS
    - \`build.gradle\` or \`AndroidManifest.xml\` for Android
 
 ## Installation Steps
@@ -1128,9 +1129,10 @@ Analyze project files to identify the platform.
 
 First, detect the dependency manager being used:
 
-1. **Pure SPM Project** (has \`Package.swift\`):
-   - Read Package.swift
-   - Add to dependencies array:
+1. **Pure SPM iOS Project** (has \`Package.swift\` with iOS platform target):
+   - First verify Package.swift contains iOS platform (\`.iOS\` or \`platforms: [.iOS\`)
+   - If no iOS platform found, this is likely a server-side Swift project - skip iOS installation
+   - Read Package.swift and add to dependencies array:
      \`\`\`swift
      .package(url: "https://github.com/clix-so/clix-ios-sdk.git", from: "1.0.0")
      \`\`\`
@@ -1273,9 +1275,9 @@ Analyze the project and output a diagnostic JSON report:
 
 ### SDK Installation Check
 - **iOS**: Check in order of priority:
-  1. \`Package.swift\` for package dependency containing \`clix-ios-sdk\` or \`clix\` → \`installationMethod: "spm-package-swift"\`
-  2. \`*.xcodeproj/project.pbxproj\` for \`XCRemoteSwiftPackageReference\` containing \`clix\` → \`installationMethod: "spm-xcode"\`
-  3. \`Podfile\` for 'ClixSDK' or 'Clix' pod → \`installationMethod: "cocoapods"\`
+  1. \`Package.swift\` with iOS platform target (contains \`.iOS\` or \`platforms: [.iOS\`) for package dependency containing \`clix-ios-sdk\` or \`clix\` → \`installationMethod: "spm-package-swift"\`
+  2. \`Podfile\` for 'ClixSDK' or 'Clix' pod → \`installationMethod: "cocoapods"\`
+  3. \`*.xcodeproj/project.pbxproj\` for \`XCRemoteSwiftPackageReference\` containing \`clix\` → \`installationMethod: "spm-xcode"\`
 - Android: Check build.gradle for clix dependency → \`installationMethod: "gradle"\`
 - React Native: Check package.json for '@clix-so/react-native-sdk' → \`installationMethod: "npm"\`
 - Flutter: Check pubspec.yaml for 'clix_flutter_sdk' → \`installationMethod: "pubspec"\`

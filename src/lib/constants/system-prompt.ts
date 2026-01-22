@@ -31,10 +31,11 @@ When analyzing a project, check in this order:
    or pubspec.yaml (Flutter)
 2. **Native fallback**:
    - **iOS** (detect dependency manager in order):
-     - Package.swift → Pure SPM project (recommended)
+     - Package.swift with iOS platform target (.iOS or platforms: [.iOS) → Pure SPM iOS project
      - Podfile → CocoaPods project
      - *.xcodeproj with XCRemoteSwiftPackageReference in .pbxproj → Xcode with SPM
      - *.xcodeproj/xcworkspace only → Suggest SPM (modern approach)
+     - Note: Package.swift without iOS platform is server-side Swift, not iOS
    - build.gradle/AndroidManifest.xml (Android)
 
 ## Installation Flow
