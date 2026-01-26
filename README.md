@@ -146,6 +146,12 @@ clix install --platform ios
 
 - `--platform <platform>` - Target platform (ios, android, react-native, flutter)
 
+**iOS Dependency Managers:**
+
+The install command automatically detects and supports both Swift Package Manager (SPM) and CocoaPods:
+- **SPM (Recommended)**: Detected via `Package.swift` or Xcode project with SPM packages
+- **CocoaPods**: Detected via `Podfile`
+
 ### `clix doctor`
 
 Analyze SDK integration status in your project.
