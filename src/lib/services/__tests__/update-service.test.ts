@@ -83,6 +83,7 @@ describe('executeUpdate', () => {
     updateCommand: 'npm install -g @clix-so/clix-cli@latest',
     canAutoUpdate: true,
     hasUpdate: true,
+    error: undefined,
   };
 
   test('should return dry run message when dryRun is true', async () => {

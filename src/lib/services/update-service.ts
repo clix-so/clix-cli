@@ -74,6 +74,7 @@ export interface UpdatePlan {
   updateCommand: string;
   canAutoUpdate: boolean;
   hasUpdate: boolean;
+  error?: string;
 }
 
 /**
@@ -402,5 +403,6 @@ export async function planUpdate(): Promise<UpdatePlan> {
     updateCommand: getUpdateCommand(installInfo),
     canAutoUpdate,
     hasUpdate: updateResult.hasUpdate,
+    error: updateResult.error,
   };
 }

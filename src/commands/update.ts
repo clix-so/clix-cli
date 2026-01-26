@@ -86,6 +86,12 @@ export async function updateCommand(
     // Plan the update (checks for updates and detects installation method)
     const plan = await planUpdate();
 
+    // Check for update-check errors (network/registry failures)
+    if (plan.error) {
+      console.error(`Failed to check for updates: ${plan.error}`);
+      process.exit(1);
+    }
+
     // No update available
     if (!plan.hasUpdate) {
       console.log(`You're on the latest version (${plan.currentVersion})`);
