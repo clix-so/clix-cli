@@ -176,6 +176,26 @@ clix ios-setup
 
 **Note:** Some steps require manual action in Xcode and Apple Developer Portal.
 
+### `clix update`
+
+Check for and install CLI updates.
+
+```bash
+# Check for updates and install with confirmation
+clix update
+
+# Preview update without executing
+clix update --dry-run
+
+# Skip confirmation prompt
+clix update --force
+```
+
+**Options:**
+
+- `--dry-run` - Preview update without executing
+- `--force` - Skip confirmation prompt
+
 ### Interactive Skills (Chat Mode Only)
 
 The following skills require step-by-step guidance and are only available in chat mode. Run `clix` to start interactive chat, then use `/<skill>` commands.

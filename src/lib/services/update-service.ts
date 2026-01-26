@@ -316,10 +316,9 @@ export async function executeUpdate(
         ? { ...process.env, CLIX_VERSION: `v${plan.latestVersion}` }
         : process.env;
 
-    const [cmd, ...args] = plan.updateCommand.split(' ');
-
     return new Promise((resolve) => {
-      const updateProcess = spawn(cmd, args, {
+      // Use full command string with shell: true to properly handle pipes and other shell operators
+      const updateProcess = spawn(plan.updateCommand, [], {
         stdio: 'inherit',
         shell: true,
         env,
