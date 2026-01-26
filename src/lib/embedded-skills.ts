@@ -1107,7 +1107,8 @@ You are an autonomous AI agent that installs and integrates the Clix mobile push
    - \`pubspec.yaml\` for Flutter
 2. Then check native platforms:
    - **iOS (in order of priority):**
-     1. \`Package.swift\` with iOS platform target (contains \`.iOS\` or \`platforms: [.iOS\`) → **Pure SPM iOS project**
+     1. \`Package.swift\` with iOS platform target → **Pure SPM iOS project**
+        - Look for patterns: \`.iOS\`, \`.iOS(.v13)\`, \`.iOS(.v14)\`, \`platforms: [.iOS]\`, \`platforms: [.iOS(.v13)]\`
      2. \`Podfile\` exists → **CocoaPods project**
      3. \`*.xcodeproj/project.pbxproj\` containing \`XCRemoteSwiftPackageReference\` → **Xcode with SPM**
      4. \`*.xcodeproj\` or \`*.xcworkspace\` only → **Suggest SPM** (modern, recommended)
@@ -1130,7 +1131,7 @@ Analyze project files to identify the platform.
 First, detect the dependency manager being used:
 
 1. **Pure SPM iOS Project** (has \`Package.swift\` with iOS platform target):
-   - First verify Package.swift contains iOS platform (\`.iOS\` or \`platforms: [.iOS\`)
+   - First verify Package.swift contains iOS platform (\`.iOS\`, \`.iOS(.v13)\`, \`platforms: [.iOS]\`, etc.)
    - If no iOS platform found, this is likely a server-side Swift project - skip iOS installation
    - Read Package.swift and add to dependencies array:
      \`\`\`swift
@@ -1142,17 +1143,17 @@ First, detect the dependency manager being used:
      \`\`\`
    - Run \`swift package resolve\`
 
-2. **Xcode Project with SPM** (has \`project.pbxproj\` with \`XCRemoteSwiftPackageReference\`):
-   - Inform user to add via Xcode: File > Add Package Dependencies
-   - URL: \`https://github.com/clix-so/clix-ios-sdk\`
-   - Note: Direct .pbxproj modification is complex; prefer Xcode UI
-
-3. **CocoaPods Project** (has \`Podfile\`):
+2. **CocoaPods Project** (has \`Podfile\`):
    - Add to Podfile:
      \`\`\`ruby
      pod 'Clix', :git => 'https://github.com/clix-so/clix-ios-sdk.git'
      \`\`\`
    - Run: \`cd ios && pod install\`
+
+3. **Xcode Project with SPM** (has \`project.pbxproj\` with \`XCRemoteSwiftPackageReference\`):
+   - Inform user to add via Xcode: File > Add Package Dependencies
+   - URL: \`https://github.com/clix-so/clix-ios-sdk\`
+   - Note: Direct .pbxproj modification is complex; prefer Xcode UI
 
 4. **Bare Xcode Project** (only \`*.xcodeproj\` or \`*.xcworkspace\`):
    - Recommend SPM: Guide user to add via Xcode (File > Add Package Dependencies)
