@@ -31,6 +31,8 @@ export interface SkillInfo {
   description: string;
   /** Whether this is a local skill (not from @clix-so/clix-agent-skills) */
   isLocal?: boolean;
+  /** Whether this skill uses an AI agent (default: true). Set to false for direct implementation. */
+  usesAgent?: boolean;
 }
 
 /**
@@ -55,6 +57,13 @@ const LOCAL_SKILLS: SkillInfo[] = [
     name: 'Debug Assistant',
     description: 'Interactive debugging assistant',
     isLocal: true,
+  },
+  {
+    type: 'ios-setup',
+    name: 'iOS Setup',
+    description: 'Configure iOS capabilities for push notifications and app groups',
+    isLocal: true,
+    usesAgent: false, // Direct implementation without AI agent
   },
 ];
 
@@ -313,6 +322,8 @@ async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions)
         projectPath: options?.projectPath ?? process.cwd(),
         oneShot: options?.oneShot,
       });
+    case 'ios-setup':
+      return getIosSetupPrompt(options);
     default:
       throw new Error(`Unknown local skill: ${skillType}`);
   }
@@ -336,6 +347,28 @@ function getDoctorPrompt(options?: SkillOptions): string {
   // Load the doctor prompt from external file
   const doctorPrompt = readLocalSkillPrompt('doctor');
   prompt += doctorPrompt;
+
+  return prompt;
+}
+
+/**
+ * Get prompt for the ios-setup skill.
+ * Configures iOS capabilities for push notifications and app groups.
+ * Prompt is loaded from src/lib/skills/ios-setup/SKILL.md
+ */
+function getIosSetupPrompt(options?: SkillOptions): string {
+  const projectPath = options?.projectPath ?? process.cwd();
+
+  let prompt = `Project path: ${projectPath}\n\n`;
+
+  // Add one-shot instruction for autonomous execution
+  if (options?.oneShot) {
+    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
+  }
+
+  // Load the ios-setup prompt from external file
+  const iosSetupPrompt = readLocalSkillPrompt('ios-setup');
+  prompt += iosSetupPrompt;
 
   return prompt;
 }

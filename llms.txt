@@ -9,8 +9,8 @@ Clix CLI is an interactive command-line tool that provides a chat interface with
 **Core Features:**
 - Interactive chat interface as the primary interaction mode
 - Support for 6 AI agents: Claude, Codex, Gemini, OpenCode, Cursor, and GitHub Copilot
-- 17 slash commands for quick actions
-- Skills system with 5 interactive skills + 3 autonomous commands
+- 18 slash commands for quick actions
+- Skills system with 5 interactive skills + 4 autonomous commands
 - Interactive debug assistant for problem diagnosis
 - Session transfer to native agent CLIs
 - Agent switching with full history preservation
@@ -208,13 +208,14 @@ The interactive chat (`clix` command) is the primary way to interact with Clix C
 
 Type `/` in the chat to see the autocomplete menu. All 17 slash commands are organized into three categories:
 
-#### Autonomous Commands (3 commands)
+#### Autonomous Commands (4 commands)
 
 These can be run from command-line (`clix <command>`) or chat mode:
 
 - `/install` - Autonomous SDK installation with automatic file modifications
 - `/doctor` - Analyze SDK integration status (automatic scan, JSON output)
 - `/debug` - Interactive debugging assistant (asks for problem description)
+- `/ios-setup` (aliases: `/capabilities`, `/ios-capabilities`) - Configure iOS capabilities for push notifications and app groups
 
 #### Interactive Skills (5 commands)
 
@@ -350,6 +351,56 @@ Describe the problem: Events not appearing in Clix dashboard
 [Agent explores SDK initialization, event tracking code]
 [Identifies missing SDK.initialize() call]
 [Provides fix with exact file location]
+```
+
+#### `/ios-setup` - iOS Setup & Capabilities Configuration
+
+**Category:** Autonomous Command
+
+**Aliases:** `/capabilities`, `/ios-capabilities`
+
+**What it does:** Configures iOS capabilities required for the Clix SDK, specifically Push Notifications and App Groups.
+
+**Capabilities configured:**
+- **Push Notifications** - Enables APNs communication (entitlement: `aps-environment`)
+- **App Groups** - Enables data sharing between app and Notification Service Extension (entitlement: `com.apple.security.application-groups`, format: `group.clix.{BUNDLE_ID}`)
+
+**Workflow:**
+1. Analyzes iOS project structure (finds .xcodeproj/.xcworkspace)
+2. Detects Bundle ID and checks current capabilities status
+3. Creates/modifies entitlements files for main app and extension
+4. Provides step-by-step instructions for Xcode configuration
+5. Guides through Apple Developer Portal setup
+6. Outputs verification report
+
+**What can be automated:**
+- Creating/modifying entitlements files
+- Reading project configuration
+
+**What requires manual action:**
+- Adding capabilities in Xcode UI (Signing & Capabilities)
+- Enabling capabilities in Apple Developer Portal
+- Registering App Group IDs
+- Regenerating provisioning profiles
+
+**Example:**
+```
+> /ios-setup
+Analyzing iOS project...
+Bundle ID: com.example.myapp
+Push Notifications: not configured
+App Groups: not configured
+
+Creating entitlements files...
+✓ Created MyApp.entitlements
+✓ Created NotificationServiceExtension.entitlements
+
+Manual steps required in Xcode:
+1. Add Push Notifications capability to main target
+2. Add App Groups capability with ID: group.clix.com.example.myapp
+3. Add same App Group to extension target
+
+{verification report JSON}
 ```
 
 ### Interactive Skills
@@ -1123,8 +1174,8 @@ When helping users with Clix CLI, keep these points in mind:
 1. **Primary command is `clix`** - This launches interactive chat, not just a welcome screen
 2. **Interactive > Commands** - The tool is primarily interactive, not command-based
 3. **6 supported agents** - Gemini, Copilot, OpenCode, Cursor, Claude, Codex (recommend starting with Gemini or Copilot for free tiers)
-4. **17 slash commands** - 3 autonomous commands + 5 interactive skills + 9 system commands
-5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
+4. **18 slash commands** - 4 autonomous commands + 5 interactive skills + 9 system commands
+5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`, `/ios-setup`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
 6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
 7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps
 8. **Session transfer** - Saves to `~/.local/state/clix/sessions/`, provides command for native CLI
@@ -1142,6 +1193,7 @@ When helping users with Clix CLI, keep these points in mind:
 - "SDK integration" → Use `/install` for autonomous installation or `/integration` skill for guided steps
 - "iOS installation" → Detect: Package.swift (SPM, preferred), Podfile (CocoaPods), or suggest SPM for bare Xcode projects. SPM is the modern, recommended approach.
 - "SPM/Swift Package Manager" → Guide through Package.swift modification or Xcode UI (File > Add Package Dependencies) for adding packages
+- "iOS capabilities" → Use `/ios-setup` to configure Push Notifications and App Groups
 - "Event tracking" → Use `/event-tracking` skill (interactive, creates event plans)
 - "User management" → Use `/user-management` skill (setUserId, properties, logout handling)
 - "Personalization" → Use `/personalization` skill (Liquid templates for messages)
