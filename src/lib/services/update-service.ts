@@ -293,19 +293,21 @@ export async function executeUpdate(
 ): Promise<UpdateExecutionResult> {
   debugLog('Executing update', { method: plan.installMethod, command: plan.updateCommand });
 
+  // Unknown installations can't be auto-updated (binary is supported via CLIX_VERSION env var)
+  // Check this first so dry-run also reflects the real execution behavior
+  if (!plan.canAutoUpdate) {
+    const prefix = options.dryRun ? '[DRY RUN] ' : '';
+    return {
+      success: false,
+      message: `${prefix}Auto-update not supported for ${plan.installMethod} installation.\nPlease run manually:\n  ${plan.updateCommand}`,
+    };
+  }
+
   // Dry run - don't actually execute
   if (options.dryRun) {
     return {
       success: true,
       message: `[DRY RUN] Would execute: ${plan.updateCommand}`,
-    };
-  }
-
-  // Unknown installations can't be auto-updated (binary is supported via CLIX_VERSION env var)
-  if (!plan.canAutoUpdate) {
-    return {
-      success: false,
-      message: `Auto-update not supported for ${plan.installMethod} installation.\nPlease run manually:\n  ${plan.updateCommand}`,
     };
   }
 

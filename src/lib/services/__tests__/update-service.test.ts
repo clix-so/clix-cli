@@ -117,4 +117,17 @@ describe('executeUpdate', () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain('Auto-update not supported');
   });
+
+  test('should return failure with dry-run prefix for unknown installation when dryRun is true', async () => {
+    const unknownPlan: UpdatePlan = {
+      ...basePlan,
+      installMethod: 'unknown',
+      canAutoUpdate: false,
+    };
+    // Dry-run should also fail for unsupported installations (reflects real execution behavior)
+    const result = await executeUpdate(unknownPlan, { dryRun: true, force: false });
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('DRY RUN');
+    expect(result.message).toContain('Auto-update not supported');
+  });
 });
