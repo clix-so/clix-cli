@@ -5,6 +5,7 @@ import type { AgentInfo } from '../../lib/agents';
 import type { InstallationMethod, UpdateCheckResult } from '../../lib/services/update-service';
 import { AgentSelector } from '../components/AgentSelector';
 import { DebugPrompt } from '../components/DebugPrompt';
+import { FirebaseWizard } from '../components/FirebaseWizard';
 import { MCPInstallSelector } from '../components/MCPInstallSelector';
 import { SessionSelector } from '../components/SessionSelector';
 import { TransferSelector } from '../components/TransferSelector';
@@ -216,6 +217,13 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
       )}
       {overlays.activeOverlay === 'debug' && (
         <DebugPrompt onSubmit={overlays.handleDebugPromptSubmit} onCancel={overlays.hideOverlay} />
+      )}
+      {overlays.activeOverlay === 'firebase' && (
+        <FirebaseWizard
+          projectPath={process.cwd()}
+          onComplete={overlays.handleFirebaseComplete}
+          onCancel={overlays.handleFirebaseCancel}
+        />
       )}
 
       {/* Input (hidden when overlay is active) */}

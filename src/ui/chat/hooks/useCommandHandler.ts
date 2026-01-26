@@ -68,6 +68,7 @@ interface UseCommandHandlerOptions {
     | 'showResumeSelector'
     | 'showMCPInstallSelector'
     | 'showDebugPrompt'
+    | 'showFirebaseWizard'
   >;
 }
 
@@ -106,6 +107,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
     showResumeSelector,
     showMCPInstallSelector,
     showDebugPrompt,
+    showFirebaseWizard,
   } = overlays;
 
   const handleSlashCommand = useCallback(
@@ -175,6 +177,10 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
           showDebugPrompt();
           return;
 
+        case 'firebase':
+          showFirebaseWizard();
+          return;
+
         case 'update':
           await handleUpdateCommand(addSystemMessage);
           return;
@@ -208,6 +214,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
       showResumeSelector,
       showMCPInstallSelector,
       showDebugPrompt,
+      showFirebaseWizard,
       onTransferWithAgent,
       onExit,
       exit,
