@@ -301,7 +301,7 @@ export async function executeUpdate(
     };
   }
 
-  // Binary/unknown installations can't be auto-updated
+  // Unknown installations can't be auto-updated (binary is supported via CLIX_VERSION env var)
   if (!plan.canAutoUpdate) {
     return {
       success: false,
