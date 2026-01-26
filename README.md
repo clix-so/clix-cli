@@ -146,6 +146,12 @@ clix install --platform ios
 
 - `--platform <platform>` - Target platform (ios, android, react-native, flutter)
 
+**iOS Dependency Managers:**
+
+The install command automatically detects and supports both Swift Package Manager (SPM) and CocoaPods:
+- **SPM (Recommended)**: Detected via `Package.swift` or Xcode project with SPM packages
+- **CocoaPods**: Detected via `Podfile`
+
 ### `clix doctor`
 
 Analyze SDK integration status in your project.
@@ -153,6 +159,22 @@ Analyze SDK integration status in your project.
 ```bash
 clix doctor
 ```
+
+### `clix ios-setup`
+
+Configure iOS capabilities required for the Clix SDK (Push Notifications and App Groups).
+
+```bash
+clix ios-setup
+```
+
+**What it does:**
+1. Analyzes your iOS project structure
+2. Checks current capabilities status
+3. Creates/modifies entitlements files
+4. Guides you through Xcode and Apple Developer Portal configuration
+
+**Note:** Some steps require manual action in Xcode and Apple Developer Portal.
 
 ### Interactive Skills (Chat Mode Only)
 
@@ -235,6 +257,7 @@ Use these commands within the interactive chat (`clix`):
 | `/install` | | Autonomous SDK installation |
 | `/doctor` | | Check SDK integration status |
 | `/debug` | | Interactive debugging assistant |
+| `/ios-setup` | `/capabilities`, `/ios-capabilities` | Configure iOS capabilities |
 
 ### Interactive Skills
 

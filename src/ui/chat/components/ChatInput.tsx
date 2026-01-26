@@ -107,6 +107,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const slashFilter = isSlashMode ? value.slice(1).split(' ')[0] : '';
   const hasArgs = isSlashMode && value.includes(' ');
 
+  // Check if we're in bash mode (! prefix)
+  const isBashMode = value.startsWith('!');
+
   // Only show menu when typing a command (no space yet)
   const showMenu = isSlashMode && !hasArgs && !disabled;
 
@@ -225,15 +228,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         ) : (
           // Active state: normal input
           <>
-            <Text color="blue" bold>
-              {'> '}
+            <Text color={isBashMode ? 'yellow' : 'blue'} bold>
+              {isBashMode ? '! ' : '> '}
             </Text>
             <TextInput
               key={inputKey}
               value={value}
               onChange={handleChange}
               onSubmit={handleSubmit}
-              placeholder="Ask anything or type / for commands"
+              placeholder={
+                isBashMode
+                  ? 'Enter bash command...'
+                  : 'Ask anything or type / for commands, ! for bash'
+              }
             />
           </>
         )}

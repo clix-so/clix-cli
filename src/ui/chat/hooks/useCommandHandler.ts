@@ -7,6 +7,7 @@ import { useApp } from 'ink';
 import { useCallback } from 'react';
 import { generateHelpText, getCommand, getCommands } from '../../../lib/commands';
 import { getAvailableSkillTypes, type SkillType } from '../../../lib/skills';
+import { parseBashCommand } from './useBashExecution';
 import type { useChatActions } from './useChatActions';
 import type { useOverlays } from './useOverlays';
 
@@ -32,6 +33,7 @@ interface UseCommandHandlerOptions {
     | 'clearMessages'
     | 'compactHistory'
     | 'executeSkill'
+    | 'executeBashCommand'
     | 'parseSlashCommand'
     | 'switchAgent'
     | 'resumeSession'
@@ -70,6 +72,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
     clearMessages,
     compactHistory,
     executeSkill,
+    executeBashCommand,
     parseSlashCommand,
     switchAgent,
     resumeSession,
@@ -191,8 +194,15 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
 
   const handleSubmit = useCallback(
     async (input: string) => {
-      const slashResult = parseSlashCommand(input);
+      // Check for bash command first (! prefix)
+      const bashResult = parseBashCommand(input);
+      if (bashResult.handled && bashResult.command) {
+        await executeBashCommand(bashResult.command);
+        return;
+      }
 
+      // Check for slash command
+      const slashResult = parseSlashCommand(input);
       if (slashResult.handled && slashResult.command) {
         await handleSlashCommand(slashResult.command, slashResult.args ?? []);
         return;
@@ -200,7 +210,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
 
       await sendMessage(input);
     },
-    [parseSlashCommand, handleSlashCommand, sendMessage],
+    [executeBashCommand, parseSlashCommand, handleSlashCommand, sendMessage],
   );
 
   return { handleSubmit };
