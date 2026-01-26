@@ -63,7 +63,6 @@ const LOCAL_SKILLS: SkillInfo[] = [
     name: 'iOS Setup',
     description: 'Configure iOS capabilities for push notifications and app groups',
     isLocal: true,
-    usesAgent: false, // Direct implementation without AI agent
   },
 ];
 
