@@ -307,8 +307,9 @@ export async function findGoogleServiceInfoPlist(
     const entries = await fs.readdir(iosDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory() && !IGNORE_DIRS.has(entry.name)) {
-        const plistPath = path.join('ios', entry.name, 'GoogleService-Info.plist');
-        const fullPath = path.join(projectPath, plistPath);
+        // Use POSIX join for relative path to ensure consistent forward slashes across platforms
+        const plistPath = path.posix.join('ios', entry.name, 'GoogleService-Info.plist');
+        const fullPath = path.join(projectPath, 'ios', entry.name, 'GoogleService-Info.plist');
         if (await fileExists(fullPath)) {
           if (!results.some((r) => r.path === plistPath)) {
             results.push({ path: plistPath, inExpectedLocation: true });
@@ -325,8 +326,9 @@ export async function findGoogleServiceInfoPlist(
     const rootEntries = await fs.readdir(projectPath, { withFileTypes: true });
     for (const entry of rootEntries) {
       if (entry.isDirectory() && !IGNORE_DIRS.has(entry.name) && entry.name !== 'ios') {
-        const plistPath = path.join(entry.name, 'GoogleService-Info.plist');
-        const fullPath = path.join(projectPath, plistPath);
+        // Use POSIX join for relative path to ensure consistent forward slashes across platforms
+        const plistPath = path.posix.join(entry.name, 'GoogleService-Info.plist');
+        const fullPath = path.join(projectPath, entry.name, 'GoogleService-Info.plist');
         if (await fileExists(fullPath)) {
           if (!results.some((r) => r.path === plistPath)) {
             results.push({ path: plistPath, inExpectedLocation: true });
