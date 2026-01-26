@@ -34,8 +34,7 @@ export const EMBEDDED_SKILLS: Record<string, string> = {
 name: clix-personalization
 display-name: Personalization
 short-description: Personalization templates
-description:
-  Helps developers author and debug Clix personalization templates
+description: Helps developers author and debug Clix personalization templates
   (Liquid-style) for message content, deep links/URLs, and audience targeting.
   Use when the user mentions personalization variables, Liquid, templates,
   conditional logic, loops, filters, deep links, message logs, or when the user
@@ -166,8 +165,7 @@ variables exist — you still need a payload + console verification.
 name: clix-integration
 display-name: SDK Integration
 short-description: SDK integration guide
-description:
-  Integrates Clix Mobile SDK into iOS, Android, Flutter, and React Native
+description: Integrates Clix Mobile SDK into iOS, Android, Flutter, and React Native
   projects. Provides step-by-step guidance for installation, initialization, and
   verification. Use when the user asks to install, setup, integrate Clix or when
   the user types \`clix-integration\` / "clix integration".
@@ -646,12 +644,207 @@ Utility scripts available in \`scripts/\` directory:
 Run scripts with \`--help\` first to see usage. Do not read source code unless
 customization is absolutely necessary.
 `,
+  'skill-creator': `---
+name: clix-skill-creator
+display-name: Skill Creator
+short-description: Generate new Clix agent skills
+description: Helps authors create new Clix agent skills by first researching the latest Clix
+  SDK + docs via the Clix MCP Server, then generating a complete skill folder
+  (SKILL.md, references, scripts, examples) aligned with the conventions in this
+  repository. Use when the user asks to create/author a new Clix skill, extend
+  the skills library, or when the user types \`clix-skill-creator\`.
+user-invocable: true
+---
+
+# Clix Skill Creator
+
+Use this skill to **create a new Clix skill** that matches a user's need, while
+avoiding duplicated scope and **preventing hallucinated API usage** by relying
+on the Clix MCP server as the source of truth.
+
+This is a “meta-skill”: it does not integrate an SDK directly; it guides you to
+produce **another skill folder** (docs + deterministic scripts) that does.
+
+## When to use this skill
+
+- User says: “Create a new skill for Clix that helps with X”
+- Internal request: “We need a new skill for feature X in Clix”
+- User provides a workflow that is not well-covered by existing skills
+- User types: \`clix-skill-creator\`
+
+## Non-goals (important)
+
+- Do **not** create a new skill if the request can be satisfied by combining
+  existing skills (integration + event tracking + personalization + user
+  management + API-triggered campaigns).
+- Do **not** invent SDK methods, endpoints, or constraints. If you can’t confirm
+  via MCP, treat it as unknown and ask the user or add a TODO note.
+- Do **not** embed secrets, project IDs, API keys, or customer data in the skill.
+
+## MCP-first (mandatory source of truth)
+
+Before writing any new “Clix API behavior” or “SDK signature” into a newly
+generated skill:
+
+- **MUST** use \`clix-mcp-server:search_docs\` to confirm conceptual behavior,
+  limits, and console semantics.
+- **MUST** use \`clix-mcp-server:search_sdk\` to confirm exact method signatures
+  for each platform (iOS/Android/Flutter/React Native) that the new skill will
+  mention.
+
+If \`clix-mcp-server\` tools are not available:
+
+- Ask the user whether to install the MCP server (prefer using the existing
+  installer in \`skills/integration/scripts/install-mcp.sh\`).
+- If the user declines, proceed with an explicit “static fallback may be
+  outdated” warning and minimize hard claims.
+
+## Workflow (copy + check off)
+
+\`\`\`
+Clix skill creation progress:
+- [ ] 1) Intake: user need → crisp problem statement + acceptance criteria
+- [ ] 2) Scope check: confirm this isn’t already covered by existing skills
+- [ ] 3) MCP research: gather evidence (docs + SDK signatures) for the target scope
+- [ ] 4) Draft a Skill Brief (name, trigger phrases, inputs/outputs, guardrails)
+- [ ] 5) Generate scaffold (SKILL.md + references/ + scripts/ + examples/)
+- [ ] 6) Validate scaffold (structure + frontmatter + MCP-first section)
+- [ ] 7) Wire-in (README + llms index + tests if needed)
+\`\`\`
+
+## 1) Intake: minimum questions
+
+Ask only what’s needed to define a stable skill boundary:
+
+- **Goal**: what outcome should the skill reliably produce?
+- **Audience**: app devs, backend devs, marketers/ops, or mixed?
+- **Platform** (if SDK-related): iOS / Android / Flutter / React Native
+- **Clix capability**: push / in-app / email / audiences / journeys / etc.
+- **Constraints**: PII policy, compliance, performance limits, rate limits
+- **Success criteria**: what does “done” look like?
+
+## 2) Reference official skills (match repo style)
+
+Before creating a new skill, use the existing **official Clix skills** in this
+repo as your style guide so the generated skill matches the standards here
+(format, tone, workflow, validators), while still being tailored to the user’s
+need.
+
+- Study how they are written:
+  - YAML frontmatter conventions
+  - MCP-first “source of truth” behavior
+  - Progressive disclosure (\`references/\`, \`scripts/\`, \`examples/\`)
+  - Plan artifacts + deterministic validators (bash scripts)
+- Then generate the new skill based on the user’s need using the same patterns.
+  If the need is clearly a tiny addition to an existing skill, prefer adding a
+  \`references/\` doc or \`examples/\` file there instead of creating a new skill.
+
+- \`clix-integration\`
+- \`clix-event-tracking\`
+- \`clix-user-management\`
+- \`clix-personalization\`
+- \`clix-api-triggered-campaigns\`
+
+## 3) MCP research: build an “Evidence Pack”
+
+Create a short evidence pack that you will cite while writing the new skill:
+
+- **Docs evidence** (from \`clix-mcp-server:search_docs\`)
+  - behavior guarantees
+  - constraints/limits
+  - console terminology
+- **SDK evidence** (from \`clix-mcp-server:search_sdk\`)
+  - exact signatures per platform
+  - initialization / required params
+  - error behavior (throws? returns promise?)
+
+Store the evidence in your notes (or as a \`references/\` markdown file in the new
+skill), with the search queries you used so future maintainers can refresh it.
+
+## 4) Draft a Skill Brief (output format)
+
+Produce this brief for approval _before_ generating files:
+
+\`\`\`yaml
+skill:
+  folder_name: "<kebab-case>" # e.g. "push-troubleshooting"
+  name: "clix-<kebab-case>" # e.g. "clix-push-troubleshooting"
+  display_name: "<Title Case>"
+  short_description: "<short>"
+  description: "<2-3 lines>"
+  user_invocable: true
+
+triggers:
+  - "phrases the user might say"
+
+inputs:
+  - "minimal inputs the skill will ask for"
+
+outputs:
+  - "artifacts the skill produces (plan JSON, code changes, checklists)"
+
+guardrails:
+  - "MCP-first requirements"
+  - "security / PII constraints"
+
+files_to_generate:
+  skill_md: true
+  references:
+    - "<doc>.md"
+  scripts:
+    - "<script>.sh"
+  examples:
+    - "<optional>"
+\`\`\`
+
+## 5) Generate scaffold (repo conventions)
+
+In this repository, a “complete” skill folder should include:
+
+- \`SKILL.md\` (with YAML frontmatter; MCP-first; workflow; progressive disclosure)
+- \`LICENSE.txt\`
+- \`references/\` (markdown docs; not empty)
+- \`scripts/\` (deterministic bash scripts; not empty)
+- \`examples/\` (optional, but recommended when copy/paste code is useful)
+
+## 6) Validate scaffold (fast feedback loop)
+
+After generating a new skill folder, validate it:
+
+\`\`\`bash
+bash <skill-dir>/scripts/validate-same-scope.sh path/to/installed/skill-creator path/to/new-skill-folder
+bash <skill-dir>/scripts/validate-skill-location.sh path/to/new-skill-folder --mode repo
+bash <skill-dir>/scripts/validate-skill-scaffold.sh path/to/new-skill-folder
+\`\`\`
+
+This should check:
+
+- the new skill is installed at the **same scope** as \`skill-creator\` (project-level
+  vs user-level), i.e. the new skill folder lives next to the installed
+  \`skill-creator\` under the same \`.../skills/\` directory
+- the skill folder is in the correct \`skills/<name>/\` location (for this repo)
+- required files exist
+- \`references/\` and \`scripts/\` are present and non-empty
+- \`SKILL.md\` has valid frontmatter keys
+- the skill includes an MCP-first section referencing \`clix-mcp-server\`
+
+## Progressive Disclosure
+
+- **Level 1**: This \`SKILL.md\` (always loaded)
+- **Level 2**: \`references/\` (load when authoring the new skill)
+- **Level 3**: \`examples/\` (load when copy/pasting scaffolds)
+- **Level 4**: \`scripts/\` (execute directly; do not load into context)
+
+## References
+
+- \`references/skill-template.md\`
+- \`references/mcp-research-playbook.md\`
+`,
   'api-triggered-campaigns': `---
 name: clix-api-triggered-campaigns
 display-name: API-Triggered Campaigns
 short-description: API-triggered campaign setup
-description:
-  Helps developers configure API-triggered campaigns in the Clix console and
+description: Helps developers configure API-triggered campaigns in the Clix console and
   trigger them from backend services with safe auth, payload schemas, dynamic
   audience filters (trigger.*), and personalization best practices. Use when the
   user mentions transactional notifications, backend-triggered sends,
@@ -840,8 +1033,7 @@ See \`references/debugging.md\`.
 name: clix-event-tracking
 display-name: Event Tracking
 short-description: Event tracking setup
-description:
-  Implements Clix event tracking (Clix.trackEvent) with consistent naming, safe
+description: Implements Clix event tracking (Clix.trackEvent) with consistent naming, safe
   property schemas, and campaign-ready validation. Use when adding, reviewing,
   or debugging event tracking; when configuring event-triggered campaigns; or
   when the user mentions events, tracking, funnels, or properties — or when the
@@ -939,7 +1131,8 @@ The skill directory is typically:
 
 - \`.cursor/skills/event-tracking/\` (Cursor)
 - \`.claude/skills/event-tracking/\` (Claude Code)
-- \`.vscode/skills/event-tracking/\` (VS Code/Amp)
+- \`.vscode/skills/event-tracking/\` (VS Code)
+- \`.agents/skills/event-tracking/\` (Amp)
 - Or check where this skill was installed
 
 If validation fails: fix the plan first, then implement.
@@ -971,8 +1164,7 @@ For troubleshooting steps, see \`references/debugging.md\`.
 name: clix-user-management
 display-name: User Management
 short-description: User management setup
-description:
-  Implements Clix user identification and user properties (setUserId,
+description: Implements Clix user identification and user properties (setUserId,
   removeUserId, setUserProperty/setUserProperties,
   removeUserProperty/removeUserProperties) with safe schemas, logout best
   practices, and campaign-ready personalization/audience usage. Use when the
@@ -1106,7 +1298,13 @@ You are an autonomous AI agent that installs and integrates the Clix mobile push
    - \`package.json\` with React Native/Expo dependencies
    - \`pubspec.yaml\` for Flutter
 2. Then check native platforms:
-   - \`*.xcodeproj\` or \`*.xcworkspace\` for iOS
+   - **iOS (in order of priority):**
+     1. \`Package.swift\` with iOS platform target → **Pure SPM iOS project**
+        - Look for patterns: \`.iOS\`, \`.iOS(.v13)\`, \`.iOS(.v14)\`, \`platforms: [.iOS]\`, \`platforms: [.iOS(.v13)]\`
+     2. \`Podfile\` exists → **CocoaPods project**
+     3. \`*.xcodeproj/project.pbxproj\` containing \`XCRemoteSwiftPackageReference\` → **Xcode with SPM**
+     4. \`*.xcodeproj\` or \`*.xcworkspace\` only → **Suggest SPM** (modern, recommended)
+   - Note: \`Package.swift\` without iOS platform is likely a server-side Swift or CLI project, not iOS
    - \`build.gradle\` or \`AndroidManifest.xml\` for Android
 
 ## Installation Steps
@@ -1115,10 +1313,50 @@ You are an autonomous AI agent that installs and integrates the Clix mobile push
 Analyze project files to identify the platform.
 
 ### 2. Install SDK Package
-- React Native: Add \`@clix-so/react-native-sdk\` to package.json, run npm/yarn install
-- iOS: Add to Podfile, run pod install
-- Android: Add to build.gradle
-- Flutter: Add to pubspec.yaml, run flutter pub get
+
+**React Native:**
+- Add \`@clix-so/react-native-sdk\` to package.json
+- Run npm/yarn install
+
+**iOS (Dependency Manager Detection):**
+
+First, detect the dependency manager being used:
+
+1. **Pure SPM iOS Project** (has \`Package.swift\` with iOS platform target):
+   - First verify Package.swift contains iOS platform (\`.iOS\`, \`.iOS(.v13)\`, \`platforms: [.iOS]\`, etc.)
+   - If no iOS platform found, this is likely a server-side Swift project - skip iOS installation
+   - Read Package.swift and add to dependencies array:
+     \`\`\`swift
+     .package(url: "https://github.com/clix-so/clix-ios-sdk.git", from: "1.0.0")
+     \`\`\`
+   - Add to target dependencies:
+     \`\`\`swift
+     .product(name: "Clix", package: "clix-ios-sdk")
+     \`\`\`
+   - Run \`swift package resolve\`
+
+2. **CocoaPods Project** (has \`Podfile\`):
+   - Add to Podfile:
+     \`\`\`ruby
+     pod 'Clix', :git => 'https://github.com/clix-so/clix-ios-sdk.git'
+     \`\`\`
+   - Run: \`cd ios && pod install\`
+
+3. **Xcode Project with SPM** (has \`project.pbxproj\` with \`XCRemoteSwiftPackageReference\`):
+   - Inform user to add via Xcode: File > Add Package Dependencies
+   - URL: \`https://github.com/clix-so/clix-ios-sdk\`
+   - Note: Direct .pbxproj modification is complex; prefer Xcode UI
+
+4. **Bare Xcode Project** (only \`*.xcodeproj\` or \`*.xcworkspace\`):
+   - Recommend SPM: Guide user to add via Xcode (File > Add Package Dependencies)
+   - Alternative: Create Podfile and use CocoaPods
+
+**Android:**
+- Add to build.gradle
+
+**Flutter:**
+- Add to pubspec.yaml
+- Run flutter pub get
 
 ### 3. Create/Modify Files Directly
 
@@ -1223,6 +1461,7 @@ Analyze the project and output a diagnostic JSON report:
 \`\`\`json
 {
   "platform": "ios" | "android" | "react-native" | "flutter" | "unknown",
+  "installationMethod": "spm-package-swift" | "spm-xcode" | "cocoapods" | "npm" | "gradle" | "pubspec" | "none",
   "sdkInstalled": true | false,
   "sdkVersion": "version string or null",
   "pushConfigured": true | false,
@@ -1259,10 +1498,13 @@ Analyze the project and output a diagnostic JSON report:
 4. Check for build.gradle or AndroidManifest.xml (Android)
 
 ### SDK Installation Check
-- iOS: Check Podfile for 'ClixSDK'
-- Android: Check build.gradle for clix dependency
-- React Native: Check package.json for '@clix-so/react-native-sdk'
-- Flutter: Check pubspec.yaml for 'clix_flutter_sdk'
+- **iOS**: Check in order of priority:
+  1. \`Package.swift\` with iOS platform target (contains \`.iOS\` or \`platforms: [.iOS\`) for package dependency containing \`clix-ios-sdk\` or \`clix\` → \`installationMethod: "spm-package-swift"\`
+  2. \`Podfile\` for 'ClixSDK' or 'Clix' pod → \`installationMethod: "cocoapods"\`
+  3. \`*.xcodeproj/project.pbxproj\` for \`XCRemoteSwiftPackageReference\` containing \`clix\` → \`installationMethod: "spm-xcode"\`
+- Android: Check build.gradle for clix dependency → \`installationMethod: "gradle"\`
+- React Native: Check package.json for '@clix-so/react-native-sdk' → \`installationMethod: "npm"\`
+- Flutter: Check pubspec.yaml for 'clix_flutter_sdk' → \`installationMethod: "pubspec"\`
 
 ### Push Configuration Check
 - iOS: Check entitlements for 'aps-environment'
@@ -1310,6 +1552,322 @@ Output the JSON diagnostic, then provide a brief summary with actionable recomme
 
 Use \`/firebase\` command to interactively check and configure Firebase credentials.
 `,
+  'local-ios-setup': `# iOS Capabilities Configuration
+
+You are an AI agent that configures iOS capabilities required for the Clix SDK.
+
+## Core Directive
+
+**GUIDE USERS** through iOS capability configuration for push notifications and data sharing. For file modifications, use Edit/Write tools when possible. For Xcode-only steps, provide clear step-by-step instructions.
+
+## Required Capabilities for Clix iOS SDK
+
+### 1. Push Notifications
+
+- **Purpose:** Enable APNs (Apple Push Notification service) communication
+- **Entitlement Key:** \`aps-environment\`
+- **Values:** \`development\` (debug builds) or \`production\` (release builds)
+- **Xcode Capability:** Push Notifications
+
+### 2. App Groups
+
+- **Purpose:** Share data between main app and Notification Service Extension using MMKV
+- **Entitlement Key:** \`com.apple.security.application-groups\`
+- **ID Format:** \`group.clix.{BUNDLE_ID}\` (e.g., \`group.clix.com.example.myapp\`)
+- **Xcode Capability:** App Groups
+- **Important:** Must be configured for BOTH main app AND Notification Service Extension targets
+
+## Workflow
+
+### Phase 1: Project Analysis
+
+1. **Detect iOS Project**
+   - Search for \`*.xcodeproj\` or \`*.xcworkspace\` files
+   - Identify the main app target name
+   - Check if this is a native iOS, React Native, or Flutter project
+
+2. **Find Bundle Identifier**
+   - Check \`Info.plist\` for \`CFBundleIdentifier\`
+   - Or parse \`project.pbxproj\` for \`PRODUCT_BUNDLE_IDENTIFIER\`
+
+3. **Check Current Capabilities Status**
+   - Search for existing \`*.entitlements\` files
+   - Check for \`aps-environment\` entitlement (Push Notifications configured)
+   - Check for \`com.apple.security.application-groups\` (App Groups configured)
+   - Check \`project.pbxproj\` for \`SystemCapabilities\` section
+
+4. **Report Current State**
+   Output findings:
+   \`\`\`text
+   Project: {project_name}
+   Bundle ID: {bundle_id}
+   Push Notifications: {configured/not configured}
+   App Groups: {configured/not configured}
+   Existing entitlements files: {list}
+   \`\`\`
+
+### Phase 2: Xcode Configuration (Manual Steps)
+
+Provide clear instructions for adding capabilities in Xcode. These steps CANNOT be automated and require user action in Xcode IDE.
+
+**Add Push Notifications:**
+\`\`\`text
+1. Open your project in Xcode
+2. Select your main app target in the Navigator (left sidebar)
+3. Go to the "Signing & Capabilities" tab
+4. Click the "+ Capability" button
+5. Search for and select "Push Notifications"
+6. Xcode will automatically create an entitlements file if one doesn't exist
+\`\`\`
+
+**Add Background Modes (Recommended):**
+\`\`\`text
+1. In "Signing & Capabilities", click "+ Capability"
+2. Select "Background Modes"
+3. Enable "Remote notifications" checkbox
+   - This allows the app to process push notifications in the background
+\`\`\`
+
+**Add App Groups:**
+\`\`\`text
+1. Click "+ Capability"
+2. Select "App Groups"
+3. Click the "+" button under App Groups
+4. Enter the App Group ID: group.clix.{BUNDLE_ID}
+   Example: group.clix.com.example.myapp
+5. Click OK to create the group
+
+IMPORTANT: Repeat steps 1-5 for the Notification Service Extension target:
+1. Select the extension target (usually named "{AppName}NotificationServiceExtension")
+2. Go to "Signing & Capabilities"
+3. Add "App Groups" capability
+4. Select the SAME App Group ID you created above
+\`\`\`
+
+### Phase 3: Entitlements Files
+
+Create or modify entitlements files. Use Write/Edit tools for these operations.
+
+**Main App Entitlements** (\`{AppName}.entitlements\` or \`{AppName}/{AppName}.entitlements\`):
+
+\`\`\`xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>aps-environment</key>
+    <string>development</string>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.clix.{BUNDLE_ID}</string>
+    </array>
+</dict>
+</plist>
+\`\`\`
+
+**Notification Service Extension Entitlements** (\`{ExtensionName}/{ExtensionName}.entitlements\`):
+
+\`\`\`xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.clix.{BUNDLE_ID}</string>
+    </array>
+</dict>
+</plist>
+\`\`\`
+
+**Note:** Replace \`{BUNDLE_ID}\` with the actual bundle identifier (e.g., \`com.example.myapp\`).
+
+### Phase 4: Apple Developer Portal Configuration
+
+Guide user through manual portal configuration. These steps CANNOT be automated.
+
+**Enable Capabilities on App ID:**
+\`\`\`text
+1. Go to https://developer.apple.com/account
+2. Navigate to "Certificates, Identifiers & Profiles"
+3. Select "Identifiers" from the sidebar
+4. Find and click your App ID (Bundle ID)
+5. Scroll down to "Capabilities" section
+6. Enable "Push Notifications"
+   - You may need to configure certificates (Development/Production)
+7. Enable "App Groups"
+8. Click "Save"
+\`\`\`
+
+**Register App Group ID:**
+\`\`\`text
+1. In the sidebar, select "Identifiers"
+2. Click the "+" button
+3. Select "App Groups" and click "Continue"
+4. Enter:
+   - Description: Clix SDK App Group for {App Name}
+   - Identifier: group.clix.{BUNDLE_ID}
+5. Click "Continue" then "Register"
+6. Go back to your App ID and associate the App Group:
+   - Edit your App ID
+   - Under "App Groups", click "Configure"
+   - Select the App Group you just created
+   - Click "Save"
+\`\`\`
+
+**Regenerate Provisioning Profile:**
+\`\`\`text
+After enabling capabilities, your provisioning profiles become invalid.
+
+1. Navigate to "Profiles" in the sidebar
+2. Find your Development and/or Distribution profile
+3. Click on the profile
+4. Click "Edit" or delete and recreate the profile
+5. Ensure the updated App ID is selected
+6. Download the new profile
+
+In Xcode:
+1. Go to Xcode > Settings (or Preferences) > Accounts
+2. Select your Apple ID
+3. Click "Download Manual Profiles"
+   Or: Delete old profiles and let Xcode auto-manage
+\`\`\`
+
+### Phase 5: Verification
+
+After configuration, verify the setup and output a report.
+
+**Check Entitlements Files:**
+- Main app entitlements contains \`aps-environment\`
+- Main app entitlements contains \`com.apple.security.application-groups\`
+- Extension entitlements contains matching App Group ID
+
+**Check project.pbxproj (if accessible):**
+- Look for \`SystemCapabilities\` dictionary
+- Verify \`com.apple.Push\` is enabled
+- Verify \`com.apple.ApplicationGroups.iOS\` is enabled
+
+**Output Verification Report:**
+
+\`\`\`json
+{
+  "project": "{project_name}",
+  "bundleId": "{bundle_id}",
+  "capabilities": {
+    "pushNotifications": {
+      "entitlementFile": true,
+      "environment": "development",
+      "xcodeCapability": "verify manually in Xcode",
+      "developerPortal": "verify manually at developer.apple.com"
+    },
+    "appGroups": {
+      "groupId": "group.clix.{bundle_id}",
+      "mainAppEntitlement": true,
+      "extensionEntitlement": true,
+      "developerPortal": "verify manually at developer.apple.com"
+    }
+  },
+  "nextSteps": [
+    "Verify capabilities are added in Xcode Signing & Capabilities",
+    "Confirm App Group ID is registered in Apple Developer Portal",
+    "Regenerate provisioning profiles if needed",
+    "Build and run to verify no signing errors"
+  ]
+}
+\`\`\`
+
+## Common Issues and Solutions
+
+### Missing Entitlements File
+
+**Symptom:** No \`.entitlements\` file exists in the project.
+
+**Solution:**
+- Xcode automatically creates one when you add your first capability
+- Or create manually and link in Build Settings:
+  1. Create \`{AppName}.entitlements\` file
+  2. In Xcode, select target > Build Settings
+  3. Search for "Code Signing Entitlements"
+  4. Set the path to your entitlements file
+
+### App Group ID Mismatch
+
+**Symptom:** Data not shared between app and extension.
+
+**Solution:**
+- Verify the App Group ID is EXACTLY the same in both targets
+- Format must be: \`group.clix.{BUNDLE_ID}\`
+- Check both entitlements files have identical values
+
+### Provisioning Profile Invalid
+
+**Symptom:** "Provisioning profile doesn't include the X capability" error.
+
+**Solution:**
+1. Go to Apple Developer Portal
+2. Delete the old provisioning profile
+3. Create a new one with the updated App ID
+4. Download and install in Xcode
+5. Or enable "Automatically manage signing" in Xcode
+
+### Push Notifications Not Working
+
+**Symptom:** Push notifications not received.
+
+**Checklist:**
+- [ ] Push Notifications capability added in Xcode
+- [ ] \`aps-environment\` in entitlements (check value matches build config)
+- [ ] Push Notifications enabled on App ID in Developer Portal
+- [ ] APNs certificate or key configured in Clix console
+- [ ] Provisioning profile regenerated after enabling capability
+- [ ] Physical device used (simulator doesn't receive push)
+
+### App Group Data Not Shared
+
+**Symptom:** MMKV data not accessible from extension.
+
+**Checklist:**
+- [ ] App Groups capability added to BOTH main app AND extension
+- [ ] Same App Group ID in both targets' entitlements
+- [ ] App Group ID registered in Developer Portal
+- [ ] App Group associated with App ID in Developer Portal
+
+## Automation Rules
+
+**CAN automate (use Write/Edit tools):**
+- Creating entitlements files
+- Modifying existing entitlements files
+- Reading project configuration files
+- Detecting current capabilities status
+
+**CANNOT automate (provide instructions only):**
+- Adding capabilities in Xcode UI (Signing & Capabilities tab)
+- Enabling capabilities in Apple Developer Portal
+- Registering App Group IDs in Developer Portal
+- Generating/downloading provisioning profiles
+- Associating App Groups with App IDs
+
+For manual steps, provide clear instructions and proceed without waiting for confirmation.
+
+## Output Format
+
+After completing the workflow, summarize:
+
+1. **Files Created/Modified**
+   - List all entitlements files with full paths
+   - Show what was added or changed
+
+2. **Manual Steps Required**
+   - Xcode capability additions
+   - Developer Portal configurations
+
+3. **Verification Checklist**
+   - JSON report with status of each component
+   - Next steps for user to complete
+
+4. **Troubleshooting Tips**
+   - Common issues to watch for based on project state
+`,
 };
 
 /**
@@ -1334,6 +1892,16 @@ export const EMBEDDED_SKILL_METADATA: SkillMetadata[] = [
     shortDescription: 'SDK integration guide',
     description:
       'Integrates Clix Mobile SDK into iOS, Android, Flutter, and React Native projects. Provides step-by-step guidance for installation, initialization, and verification. Use when the user asks to install, setup, integrate Clix or when the user types `clix-integration` / "clix integration".',
+    userInvocable: true,
+  },
+  {
+    folder: 'skill-creator',
+    name: 'clix-skill-creator',
+    commandName: 'skill-creator',
+    displayName: 'Skill Creator',
+    shortDescription: 'Generate new Clix agent skills',
+    description:
+      'Helps authors create new Clix agent skills by first researching the latest Clix SDK + docs via the Clix MCP Server, then generating a complete skill folder (SKILL.md, references, scripts, examples) aligned with the conventions in this repository. Use when the user asks to create/author a new Clix skill, extend the skills library, or when the user types `clix-skill-creator`.',
     userInvocable: true,
   },
   {

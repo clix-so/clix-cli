@@ -31,6 +31,8 @@ export interface SkillInfo {
   description: string;
   /** Whether this is a local skill (not from @clix-so/clix-agent-skills) */
   isLocal?: boolean;
+  /** Whether this skill uses an AI agent (default: true). Set to false for direct implementation. */
+  usesAgent?: boolean;
 }
 
 /**
@@ -55,6 +57,13 @@ const LOCAL_SKILLS: SkillInfo[] = [
     name: 'Debug Assistant',
     description: 'Interactive debugging assistant',
     isLocal: true,
+  },
+  {
+    type: 'ios-setup',
+    name: 'iOS Setup',
+    description: 'Configure iOS capabilities for push notifications and app groups',
+    isLocal: true,
+    usesAgent: false, // Direct implementation without AI agent
   },
 ];
 
@@ -176,6 +185,28 @@ COMPLETION CRITERIA:
 `;
 
 /**
+ * Interactive mode instruction for Guided Interactive Workflow.
+ * Instructs the agent to follow the Confirm → Propose → Validate → Implement → Verify pattern.
+ */
+const INTERACTIVE_MODE_INSTRUCTION = `
+IMPORTANT: This is an interactive conversation session. Follow the Guided Interactive Workflow.
+
+EXECUTION GUIDELINES:
+- ALWAYS follow the workflow steps in order: Confirm → Propose → Validate → Implement → Verify
+- DO NOT skip to implementation without completing earlier steps
+- ASK for required inputs before proceeding (platform, goals, preferences)
+- PROPOSE your plan and wait for user approval before making changes
+- NEVER modify files without explicit user confirmation
+- If information is missing, ASK the user rather than assuming
+
+WORKFLOW ENFORCEMENT:
+- Start by confirming the minimum required inputs from the user
+- Present your proposed plan for review
+- Only proceed to implementation after the user approves the plan
+- Validate before implementing, verify after implementing
+`;
+
+/**
  * Read a local skill prompt from the skills directory.
  * Local skill prompts are stored in src/lib/skills/<skill-name>/SKILL.md
  * For bundled builds, prompts are embedded at build time.
@@ -263,9 +294,11 @@ export async function getSkillPrompt(
 Target platform: ${platform}
 `;
 
-  // Add one-shot instruction for autonomous execution
+  // Add mode-specific instruction
   if (options?.oneShot) {
     prompt += ONE_SHOT_INSTRUCTION;
+  } else {
+    prompt += INTERACTIVE_MODE_INSTRUCTION;
   }
 
   prompt += `\n${skillMarkdown}`;
@@ -289,6 +322,8 @@ async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions)
         projectPath: options?.projectPath ?? process.cwd(),
         oneShot: options?.oneShot,
       });
+    case 'ios-setup':
+      return getIosSetupPrompt(options);
     default:
       throw new Error(`Unknown local skill: ${skillType}`);
   }
@@ -312,6 +347,28 @@ function getDoctorPrompt(options?: SkillOptions): string {
   // Load the doctor prompt from external file
   const doctorPrompt = readLocalSkillPrompt('doctor');
   prompt += doctorPrompt;
+
+  return prompt;
+}
+
+/**
+ * Get prompt for the ios-setup skill.
+ * Configures iOS capabilities for push notifications and app groups.
+ * Prompt is loaded from src/lib/skills/ios-setup/SKILL.md
+ */
+function getIosSetupPrompt(options?: SkillOptions): string {
+  const projectPath = options?.projectPath ?? process.cwd();
+
+  let prompt = `Project path: ${projectPath}\n\n`;
+
+  // Add one-shot instruction for autonomous execution
+  if (options?.oneShot) {
+    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
+  }
+
+  // Load the ios-setup prompt from external file
+  const iosSetupPrompt = readLocalSkillPrompt('ios-setup');
+  prompt += iosSetupPrompt;
 
   return prompt;
 }

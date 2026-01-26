@@ -3,6 +3,7 @@ import { agentCommand } from './commands/agent';
 import { chatCommand } from './commands/chat';
 import { debugCommand } from './commands/debug';
 import { installMCPCommand } from './commands/install-mcp';
+import { iosSetupCommand } from './commands/ios-setup/index';
 import { resumeCommand } from './commands/resume';
 import { skillCommand } from './commands/skill/index';
 import { uninstallCommand } from './commands/uninstall';
@@ -89,6 +90,26 @@ const cli = meow(generateHelpText(), {
       shortFlag: 'f',
       default: false,
     },
+    // iOS setup flags
+    apiKey: {
+      type: 'string',
+    },
+    keyId: {
+      type: 'string',
+    },
+    issuerId: {
+      type: 'string',
+    },
+    bundleId: {
+      type: 'string',
+    },
+    skipPortal: {
+      type: 'boolean',
+      default: false,
+    },
+    pushEnv: {
+      type: 'string',
+    },
   },
 });
 
@@ -147,6 +168,27 @@ async function main() {
           force: cli.flags.force,
         });
         break;
+
+      case 'ios-setup':
+      case 'capabilities':
+      case 'ios-capabilities': {
+        const pushEnvRaw = cli.flags.pushEnv;
+        if (pushEnvRaw && !['development', 'production'].includes(pushEnvRaw)) {
+          console.error(`Invalid --push-env value: ${pushEnvRaw}`);
+          console.error('Expected: development | production');
+          process.exit(1);
+        }
+        const pushEnv = pushEnvRaw as 'development' | 'production' | undefined;
+        await iosSetupCommand({
+          apiKeyPath: cli.flags.apiKey,
+          keyId: cli.flags.keyId,
+          issuerId: cli.flags.issuerId,
+          bundleId: cli.flags.bundleId,
+          skipPortal: cli.flags.skipPortal,
+          pushEnvironment: pushEnv,
+        });
+        break;
+      }
 
       default:
         // Check if command is a skill type (dynamically)
