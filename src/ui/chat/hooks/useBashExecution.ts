@@ -50,9 +50,10 @@ export function useBashExecution(refs: ChatRefs, session: SessionPersistenceAPI)
 
   const executeBashCommand = useCallback(
     async (command: string) => {
-      // Create abort controller for this execution
-      abortControllerRef.current = new AbortController();
-      const { signal } = abortControllerRef.current;
+      // Create local abort controller to avoid race conditions
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const { signal } = controller;
 
       // Add pending bash message
       const messageId = generateMessageId();
@@ -114,7 +115,10 @@ export function useBashExecution(refs: ChatRefs, session: SessionPersistenceAPI)
           },
         });
       } finally {
-        abortControllerRef.current = null;
+        // Only clear if still our controller (avoid race condition)
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
         await persistSession();
       }
     },

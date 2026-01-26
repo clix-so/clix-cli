@@ -97,34 +97,35 @@ export async function executeBash(
       });
     };
 
-    // Handle stdout
+    // Handle stdout (use Buffer.length for byte-accurate counting)
     child.stdout?.on('data', (data: Buffer) => {
-      const chunk = data.toString();
-      totalOutputSize += chunk.length;
+      const chunkSize = data.length;
+      totalOutputSize += chunkSize;
 
       if (totalOutputSize <= maxOutput) {
-        stdout += chunk;
+        stdout += data.toString();
       } else if (!truncated) {
-        // Truncate and mark
-        const remaining = maxOutput - (totalOutputSize - chunk.length);
+        // Truncate at byte boundary
+        const remaining = maxOutput - (totalOutputSize - chunkSize);
         if (remaining > 0) {
-          stdout += chunk.slice(0, remaining);
+          stdout += data.subarray(0, remaining).toString();
         }
         truncated = true;
       }
     });
 
-    // Handle stderr
+    // Handle stderr (use Buffer.length for byte-accurate counting)
     child.stderr?.on('data', (data: Buffer) => {
-      const chunk = data.toString();
-      totalOutputSize += chunk.length;
+      const chunkSize = data.length;
+      totalOutputSize += chunkSize;
 
       if (totalOutputSize <= maxOutput) {
-        stderr += chunk;
+        stderr += data.toString();
       } else if (!truncated) {
-        const remaining = maxOutput - (totalOutputSize - chunk.length);
+        // Truncate at byte boundary
+        const remaining = maxOutput - (totalOutputSize - chunkSize);
         if (remaining > 0) {
-          stderr += chunk.slice(0, remaining);
+          stderr += data.subarray(0, remaining).toString();
         }
         truncated = true;
       }
