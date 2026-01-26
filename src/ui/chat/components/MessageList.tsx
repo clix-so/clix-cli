@@ -1,5 +1,6 @@
 import { Box, Text } from 'ink';
 import type React from 'react';
+import { BashOutputDisplay } from '@/ui/components/BashOutputDisplay';
 import { ToolCallDisplay } from '@/ui/components/ToolCallDisplay';
 import type { ChatMessage } from '../context/ChatContext';
 import { AgentMessage } from './AgentMessage';
@@ -84,6 +85,18 @@ function renderMessage(message: ChatMessage, agentName?: string) {
           toolName={message.toolName ?? 'Unknown'}
           content={message.content}
           status={message.status}
+        />
+      );
+
+    case 'bash':
+      return (
+        <BashOutputDisplay
+          key={message.id}
+          command={message.bashCommand ?? ''}
+          output={message.content}
+          exitCode={message.bashExitCode}
+          status={message.status}
+          truncated={message.bashTruncated}
         />
       );
 

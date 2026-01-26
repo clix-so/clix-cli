@@ -3,11 +3,17 @@ import type { AgentInfo } from '../../../lib/agents';
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'agent' | 'tool' | 'system';
+  role: 'user' | 'agent' | 'tool' | 'system' | 'bash';
   content: string;
   timestamp: Date;
   status?: 'pending' | 'streaming' | 'complete' | 'error';
   toolName?: string;
+  /** Bash command that was executed (for role='bash') */
+  bashCommand?: string;
+  /** Exit code from bash command (for role='bash') */
+  bashExitCode?: number | null;
+  /** Whether bash output was truncated (for role='bash') */
+  bashTruncated?: boolean;
 }
 
 interface ChatState {
