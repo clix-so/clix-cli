@@ -639,13 +639,20 @@ export async function detectFirebaseConfig(projectPath: string): Promise<Firebas
   const issues = generateIssues(android, ios, platform, expectedPaths);
 
   // Determine if Firebase is configured
+  // For unknown platform, check if at least one valid config file exists
   const needsAndroid =
     platform === 'android' || platform === 'react-native' || platform === 'flutter';
   const needsIos = platform === 'ios' || platform === 'react-native' || platform === 'flutter';
 
-  const androidConfigured = !needsAndroid || (android?.valid ?? false);
-  const iosConfigured = !needsIos || (ios?.valid ?? false);
-  const configured = androidConfigured && iosConfigured;
+  let configured: boolean;
+  if (platform === 'unknown') {
+    // For unknown platform, configured is true only if at least one valid config exists
+    configured = (android?.valid ?? false) || (ios?.valid ?? false);
+  } else {
+    const androidConfigured = !needsAndroid || (android?.valid ?? false);
+    const iosConfigured = !needsIos || (ios?.valid ?? false);
+    configured = androidConfigured && iosConfigured;
+  }
 
   return {
     platform,
