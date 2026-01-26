@@ -75,6 +75,13 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     process.exit(1);
   }
 
+  // Check if skill uses direct implementation (not agent-based)
+  if (skillInfo.usesAgent === false) {
+    console.error(`Skill '${action}' uses direct implementation.`);
+    console.error(`Please run 'clix ${action}' directly instead.`);
+    process.exit(1);
+  }
+
   const skillType = action as SkillType;
 
   // Create execute function that wraps executeSkill
