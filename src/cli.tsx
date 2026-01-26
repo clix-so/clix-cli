@@ -157,7 +157,10 @@ async function main() {
 
       case 'update':
       case 'upgrade':
-        await updateCommand();
+        await updateCommand({
+          dryRun: cli.flags.dryRun,
+          force: cli.flags.force,
+        });
         break;
 
       case 'uninstall':

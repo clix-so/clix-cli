@@ -1,45 +1,141 @@
 /**
- * CLI update command - checks for and displays update information.
+ * CLI update command - checks for and executes updates.
  *
  * @module commands/update
  */
 
+import readline from 'node:readline/promises';
 import {
-  checkForUpdate,
-  detectInstallationMethod,
-  getUpdateCommand,
+  executeUpdate,
+  planUpdate,
+  type UpdateOptions,
+  type UpdatePlan,
 } from '../lib/services/update-service';
 
 /**
- * Check for updates and display information.
+ * Display the update plan to the user.
  */
-export async function updateCommand(): Promise<void> {
+function displayUpdatePlan(plan: UpdatePlan): void {
+  console.log('\n=== Update Plan ===\n');
+
+  console.log(`Installation method: ${plan.installMethod}`);
+  console.log(`Current version: ${plan.currentVersion}`);
+  console.log(`Latest version: ${plan.latestVersion}`);
+
+  if (!plan.hasUpdate) {
+    console.log('\nYou are already on the latest version.');
+    return;
+  }
+
+  console.log(`\nUpdate command: ${plan.updateCommand}`);
+
+  if (!plan.canAutoUpdate) {
+    console.log('\nNote: Auto-update is not supported for this installation method.');
+    console.log(`Please run manually:\n  ${plan.updateCommand}`);
+  }
+
+  console.log('');
+}
+
+/**
+ * Display the update result.
+ */
+function displayUpdateResult(
+  result: Awaited<ReturnType<typeof executeUpdate>>,
+  plan: UpdatePlan,
+): void {
+  console.log('\n=== Update Result ===\n');
+
+  if (result.success) {
+    console.log(`✓ ${result.message}`);
+  } else {
+    console.log(`✗ ${result.message}`);
+    if (!plan.canAutoUpdate) {
+      console.log(`\nTo update manually, run:\n  ${plan.updateCommand}`);
+    }
+  }
+  console.log('');
+}
+
+/**
+ * Prompt user for confirmation.
+ */
+async function promptConfirmation(message: string): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const answer = await rl.question(`${message} [y/N] `);
+    return answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Execute the update command.
+ */
+export async function updateCommand(
+  options: UpdateOptions = { dryRun: false, force: false },
+): Promise<void> {
   console.log('Checking for updates...\n');
 
   try {
-    const [updateResult, installInfo] = await Promise.all([
-      checkForUpdate(5000), // Use a longer timeout for CLI
-      detectInstallationMethod(),
-    ]);
+    // Plan the update (checks for updates and detects installation method)
+    const plan = await planUpdate();
 
-    if (updateResult.error) {
-      console.error(`Failed to check for updates: ${updateResult.error}`);
+    // Check for update-check errors (network/registry failures)
+    if (plan.error) {
+      console.error(`Failed to check for updates: ${plan.error}`);
       process.exit(1);
     }
 
-    if (!updateResult.hasUpdate) {
-      console.log(`You're on the latest version (${updateResult.currentVersion})`);
+    // No update available
+    if (!plan.hasUpdate) {
+      console.log(`You're on the latest version (${plan.currentVersion})`);
       return;
     }
 
-    const updateCmd = getUpdateCommand(installInfo);
-    console.log(
-      `Update available: ${updateResult.currentVersion} -> ${updateResult.latestVersion}`,
-    );
-    console.log(`\nTo update, run:\n  ${updateCmd}\n`);
+    // Display the plan
+    displayUpdatePlan(plan);
+
+    // Can't auto-update - stop here
+    if (!plan.canAutoUpdate) {
+      return;
+    }
+
+    // Dry run - stop here
+    if (options.dryRun) {
+      console.log('[DRY RUN] No changes were made.\n');
+      return;
+    }
+
+    // Confirm with user
+    if (!options.force) {
+      const confirmed = await promptConfirmation(
+        `Update from ${plan.currentVersion} to ${plan.latestVersion}?`,
+      );
+      if (!confirmed) {
+        console.log('\nUpdate cancelled.\n');
+        return;
+      }
+    }
+
+    // Execute the update
+    console.log('\nUpdating...\n');
+    const result = await executeUpdate(plan, options);
+
+    // Display the result
+    displayUpdateResult(result, plan);
+
+    if (!result.success) {
+      process.exit(1);
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`Failed to check for updates: ${errorMessage}`);
+    console.error(`\nFailed to update: ${errorMessage}\n`);
     process.exit(1);
   }
 }
