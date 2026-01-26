@@ -161,6 +161,32 @@ clix debug "Push notifications not working on iOS"
 3. Provides root cause analysis
 4. Gives recommended fixes with file paths
 
+### `clix update`
+
+Check for and install CLI updates.
+
+```bash
+# Check for updates and install with confirmation
+clix update
+
+# Preview update without executing
+clix update --dry-run
+
+# Skip confirmation prompt
+clix update --force
+```
+
+**Options:**
+- `--dry-run` - Preview update without executing
+- `--force` - Skip confirmation prompt
+
+**What it does:**
+1. Checks npm registry for latest version
+2. Detects installation method (npm, yarn, pnpm, bun, homebrew, binary)
+3. Shows update plan with current and latest version
+4. Prompts for confirmation (unless --force)
+5. Executes appropriate update command
+
 ### `clix install-mcp [agent]`
 
 Install Clix MCP Server for enhanced AI assistance.
@@ -694,16 +720,16 @@ Restart Claude to activate.
 
 **Aliases:** `/upgrade`
 
-**What it does:** Checks for available updates to Clix CLI and provides update instructions.
+**What it does:** In interactive mode, displays CLI update instructions. For actual updates, use `clix update` from the terminal with options like `--dry-run` and `--force`.
 
 **Example:**
 ```
 > /update
-Checking for updates...
-✓ New version available: 1.2.0 (current: 1.1.0)
+To update Clix CLI, run `clix update` from the terminal.
 
-To update:
-  npm update -g @clix-so/clix-cli
+Available options:
+  --dry-run  Preview update without executing
+  --force    Skip confirmation prompt
 ```
 
 #### `/exit` - Exit Chat

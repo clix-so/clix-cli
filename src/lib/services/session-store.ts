@@ -14,6 +14,10 @@ export interface PersistedChatMessage {
   timestamp: number;
   status?: ChatMessage['status'];
   toolName?: string;
+  // bash-specific fields
+  bashCommand?: string;
+  bashExitCode?: number | null;
+  bashTruncated?: boolean;
 }
 
 export interface PersistedChatSessionV1 {
@@ -67,6 +71,9 @@ export function serializeChatMessages(messages: ChatMessage[]): PersistedChatMes
     timestamp: m.timestamp.getTime(),
     status: m.status,
     toolName: m.toolName,
+    bashCommand: m.bashCommand,
+    bashExitCode: m.bashExitCode,
+    bashTruncated: m.bashTruncated,
   }));
 }
 
@@ -78,6 +85,9 @@ export function deserializeChatMessages(messages: PersistedChatMessage[]): ChatM
     timestamp: new Date(m.timestamp),
     status: m.status,
     toolName: m.toolName,
+    bashCommand: m.bashCommand,
+    bashExitCode: m.bashExitCode,
+    bashTruncated: m.bashTruncated,
   }));
 }
 

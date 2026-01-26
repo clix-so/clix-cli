@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { getUpdateCommand, shouldCheckForUpdate } from '../update-service';
+import {
+  executeUpdate,
+  getUpdateCommand,
+  shouldCheckForUpdate,
+  type UpdatePlan,
+} from '../update-service';
 
 describe('shouldCheckForUpdate', () => {
   test('should return true if lastCheckTime is undefined', () => {
@@ -67,5 +72,62 @@ describe('getUpdateCommand', () => {
   test('should return npm command as fallback for unknown installation', () => {
     const cmd = getUpdateCommand({ method: 'unknown', isGlobal: true });
     expect(cmd).toBe('npm install -g @clix-so/clix-cli@latest');
+  });
+});
+
+describe('executeUpdate', () => {
+  const basePlan: UpdatePlan = {
+    installMethod: 'npm',
+    currentVersion: '0.1.0',
+    latestVersion: '0.2.0',
+    updateCommand: 'npm install -g @clix-so/clix-cli@latest',
+    canAutoUpdate: true,
+    hasUpdate: true,
+    error: undefined,
+  };
+
+  test('should return dry run message when dryRun is true', async () => {
+    const result = await executeUpdate(basePlan, { dryRun: true, force: false });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('DRY RUN');
+    expect(result.message).toContain(basePlan.updateCommand);
+  });
+
+  test('should return dry run message for binary installation', async () => {
+    const binaryPlan: UpdatePlan = {
+      ...basePlan,
+      installMethod: 'binary',
+      canAutoUpdate: true,
+      updateCommand: 'curl -fsSL https://cli.clix.so/install.sh | bash',
+    };
+    // Binary installations now support auto-update via CLIX_VERSION env var
+    const result = await executeUpdate(binaryPlan, { dryRun: true, force: false });
+    expect(result.success).toBe(true);
+    expect(result.message).toContain('DRY RUN');
+    expect(result.message).toContain(binaryPlan.updateCommand);
+  });
+
+  test('should return failure for unknown installation', async () => {
+    const unknownPlan: UpdatePlan = {
+      ...basePlan,
+      installMethod: 'unknown',
+      canAutoUpdate: false,
+    };
+    const result = await executeUpdate(unknownPlan, { dryRun: false, force: false });
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('Auto-update not supported');
+  });
+
+  test('should return failure with dry-run prefix for unknown installation when dryRun is true', async () => {
+    const unknownPlan: UpdatePlan = {
+      ...basePlan,
+      installMethod: 'unknown',
+      canAutoUpdate: false,
+    };
+    // Dry-run should also fail for unsupported installations (reflects real execution behavior)
+    const result = await executeUpdate(unknownPlan, { dryRun: true, force: false });
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('DRY RUN');
+    expect(result.message).toContain('Auto-update not supported');
   });
 });

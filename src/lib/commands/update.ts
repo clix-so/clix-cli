@@ -1,5 +1,5 @@
 /**
- * Update command - checks for and displays update information.
+ * Update command - checks for and executes updates.
  *
  * @module commands/update
  */
@@ -8,12 +8,12 @@ import type { Command } from './types';
 
 /**
  * Update command implementation.
- * Checks for available updates and displays update instructions.
+ * Directs user to CLI for actual update execution.
  */
 export const updateCommand: Command = {
   type: 'local',
   name: 'update',
-  description: 'Check for available updates',
+  description: 'Check for and apply available updates',
   isEnabled: true,
   isHidden: false,
   aliases: ['upgrade'],
@@ -23,8 +23,13 @@ export const updateCommand: Command = {
   },
 
   async call() {
-    // The actual update check is handled by the command handler in useCommandHandler
-    // This command signals the intent to check for updates
-    return { success: true, message: 'Checking for updates...' };
+    return {
+      success: true,
+      message:
+        'To update Clix CLI, run `clix update` from the terminal.\n\n' +
+        'Available options:\n' +
+        '  --dry-run  Preview update without executing\n' +
+        '  --force    Skip confirmation prompt',
+    };
   },
 };
