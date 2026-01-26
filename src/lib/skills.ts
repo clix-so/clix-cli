@@ -176,6 +176,28 @@ COMPLETION CRITERIA:
 `;
 
 /**
+ * Interactive mode instruction for Guided Interactive Workflow.
+ * Instructs the agent to follow the Confirm → Propose → Validate → Implement → Verify pattern.
+ */
+const INTERACTIVE_MODE_INSTRUCTION = `
+IMPORTANT: This is an interactive conversation session. Follow the Guided Interactive Workflow.
+
+EXECUTION GUIDELINES:
+- ALWAYS follow the workflow steps in order: Confirm → Propose → Validate → Implement → Verify
+- DO NOT skip to implementation without completing earlier steps
+- ASK for required inputs before proceeding (platform, goals, preferences)
+- PROPOSE your plan and wait for user approval before making changes
+- NEVER modify files without explicit user confirmation
+- If information is missing, ASK the user rather than assuming
+
+WORKFLOW ENFORCEMENT:
+- Start by confirming the minimum required inputs from the user
+- Present your proposed plan for review
+- Only proceed to implementation after the user approves the plan
+- Validate before implementing, verify after implementing
+`;
+
+/**
  * Read a local skill prompt from the skills directory.
  * Local skill prompts are stored in src/lib/skills/<skill-name>/SKILL.md
  * For bundled builds, prompts are embedded at build time.
@@ -263,9 +285,11 @@ export async function getSkillPrompt(
 Target platform: ${platform}
 `;
 
-  // Add one-shot instruction for autonomous execution
+  // Add mode-specific instruction
   if (options?.oneShot) {
     prompt += ONE_SHOT_INSTRUCTION;
+  } else {
+    prompt += INTERACTIVE_MODE_INSTRUCTION;
   }
 
   prompt += `\n${skillMarkdown}`;
