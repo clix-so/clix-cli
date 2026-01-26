@@ -14,6 +14,12 @@ import { dirname, join } from 'node:path';
 const OUTPUT_FILE = './src/lib/embedded-skills.ts';
 
 /**
+ * Skills to exclude from embedding.
+ * These are internal/developer tools not meant for end users.
+ */
+const EXCLUDED_SKILLS = new Set(['skill-creator']);
+
+/**
  * Skill metadata parsed from SKILL.md frontmatter.
  */
 interface SkillMetadata {
@@ -60,6 +66,10 @@ function discoverSkillFolders(packagePath: string): string[] {
   }
 
   return readdirSync(skillsDir).filter((entry) => {
+    // Skip excluded skills
+    if (EXCLUDED_SKILLS.has(entry)) {
+      return false;
+    }
     const entryPath = join(skillsDir, entry);
     const skillMdPath = join(entryPath, 'SKILL.md');
     return statSync(entryPath).isDirectory() && existsSync(skillMdPath);
