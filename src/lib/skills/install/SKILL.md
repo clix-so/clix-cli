@@ -95,11 +95,12 @@ First, detect the dependency manager being used:
 **Android:**
 - Modify MainActivity or Application class
 - Update AndroidManifest.xml with permissions
-- Note: Firebase setup may require manual steps
+- Verify Firebase configuration (see step 6)
 
 **Flutter:**
 - Modify main.dart to initialize SDK
 - Update platform-specific files as needed
+- Verify Firebase configuration (see step 6)
 
 ### 4. Use Placeholders for Secrets
 
@@ -111,6 +112,32 @@ Execute necessary commands:
 - `npm install` or `yarn install` after package.json changes
 - `cd ios && pod install` for iOS dependencies
 - `flutter pub get` for Flutter
+
+### 6. Verify Firebase Configuration
+
+For push notifications to work, Firebase must be properly configured:
+
+**Android (google-services.json):**
+- Expected locations:
+  - Standard Android: `app/google-services.json`
+  - React Native/Flutter: `android/app/google-services.json`
+- Download from Firebase Console > Project Settings > Your apps > Android app
+- Verify package name matches your AndroidManifest.xml
+
+**iOS (GoogleService-Info.plist):**
+- Expected locations:
+  - React Native: `ios/GoogleService-Info.plist`
+  - Flutter: `ios/Runner/GoogleService-Info.plist`
+  - Native iOS: `<AppName>/GoogleService-Info.plist`
+- Download from Firebase Console > Project Settings > Your apps > iOS app
+- Verify bundle ID matches your Xcode project
+
+**Validation:**
+- Check if files exist in correct locations
+- Verify JSON/plist structure is valid
+- Confirm project IDs match between platforms (for cross-platform apps)
+
+Use `/firebase` command in interactive mode to check and configure Firebase credentials.
 
 ## Automation Rules
 

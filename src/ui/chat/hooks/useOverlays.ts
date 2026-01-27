@@ -17,7 +17,7 @@ import {
 } from '../../../lib/services/mcp-install-service';
 import type { useChatActions } from './useChatActions';
 
-export type OverlayType = 'agent' | 'transfer' | 'resume' | 'mcp' | 'debug' | null;
+export type OverlayType = 'agent' | 'transfer' | 'resume' | 'mcp' | 'debug' | 'firebase' | null;
 
 interface UseOverlaysOptions {
   currentAgent: AgentInfo | null;
@@ -104,6 +104,7 @@ export function useOverlays(options: UseOverlaysOptions) {
   }, []);
 
   const showDebugPrompt = useCallback(() => setActiveOverlay('debug'), []);
+  const showFirebaseWizard = useCallback(() => setActiveOverlay('firebase'), []);
   const hideOverlay = useCallback(() => setActiveOverlay(null), []);
 
   // Agent selector handlers
@@ -221,6 +222,24 @@ export function useOverlays(options: UseOverlaysOptions) {
     [executeDebugSession],
   );
 
+  // Firebase wizard handlers
+  const handleFirebaseComplete = useCallback(
+    (result: { completed?: boolean; skipped?: boolean }) => {
+      setActiveOverlay(null);
+      if (result.skipped) {
+        addSystemMessage('Firebase setup skipped');
+      } else if (result.completed) {
+        addSystemMessage('Firebase configuration complete');
+      }
+    },
+    [addSystemMessage],
+  );
+
+  const handleFirebaseCancel = useCallback(() => {
+    setActiveOverlay(null);
+    addSystemMessage('Firebase setup cancelled');
+  }, [addSystemMessage]);
+
   return {
     activeOverlay,
     hideOverlay,
@@ -255,5 +274,10 @@ export function useOverlays(options: UseOverlaysOptions) {
     // Debug prompt
     showDebugPrompt,
     handleDebugPromptSubmit,
+
+    // Firebase wizard
+    showFirebaseWizard,
+    handleFirebaseComplete,
+    handleFirebaseCancel,
   };
 }

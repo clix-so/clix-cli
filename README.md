@@ -297,6 +297,7 @@ Use these commands within the interactive chat (`clix`):
 | `/new` | /clear | Start a new session |
 | `/compact` | /c | Compress conversation history |
 | `/agent` | /a | List or switch agents |
+| `/firebase` | | Check and configure Firebase credentials |
 | `/transfer` | /t | Transfer to agent CLI |
 | `/resume` | | Resume a previous session |
 | `/install-mcp` | /mcp | Install Clix MCP Server |
