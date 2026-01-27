@@ -110,6 +110,9 @@ export class FirebaseDownloader {
    * List Firebase projects.
    */
   async listProjects(): Promise<FirebaseProject[]> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
     const api = this.ensureApiClient();
     return api.listProjects();
   }
@@ -118,6 +121,9 @@ export class FirebaseDownloader {
    * List Android apps in a project.
    */
   async listAndroidApps(projectId: string): Promise<AndroidApp[]> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
     const api = this.ensureApiClient();
     return api.listAndroidApps(projectId);
   }
@@ -126,6 +132,9 @@ export class FirebaseDownloader {
    * List iOS apps in a project.
    */
   async listIosApps(projectId: string): Promise<IosApp[]> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
     const api = this.ensureApiClient();
     return api.listIosApps(projectId);
   }
@@ -152,6 +161,9 @@ export class FirebaseDownloader {
    * @returns Created Android app
    */
   async createAndroidApp(projectId: string, request: CreateAndroidAppRequest): Promise<AndroidApp> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
     const api = this.ensureApiClient();
     return api.createAndroidApp(projectId, request);
   }
@@ -164,6 +176,9 @@ export class FirebaseDownloader {
    * @returns Created iOS app
    */
   async createIosApp(projectId: string, request: CreateIosAppRequest): Promise<IosApp> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
     const api = this.ensureApiClient();
     return api.createIosApp(projectId, request);
   }
@@ -176,6 +191,9 @@ export class FirebaseDownloader {
    * @param savePath - Path to save the config file
    */
   async downloadAndroidConfig(projectId: string, appId: string, savePath: string): Promise<void> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
     const api = this.ensureApiClient();
     const config = await api.getAndroidConfig(projectId, appId);
 
@@ -192,6 +210,9 @@ export class FirebaseDownloader {
    * @param savePath - Path to save the config file
    */
   async downloadIosConfig(projectId: string, appId: string, savePath: string): Promise<void> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
     const api = this.ensureApiClient();
     const config = await api.getIosConfig(projectId, appId);
 

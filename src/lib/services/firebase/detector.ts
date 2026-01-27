@@ -68,7 +68,7 @@ async function isReactNativeProject(projectPath: string): Promise<boolean> {
   try {
     const packageJson = await fs.readFile(path.join(projectPath, 'package.json'), 'utf-8');
     const pkg = JSON.parse(packageJson);
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
     return Boolean(deps['react-native'] || deps.expo);
   } catch {
     return false;

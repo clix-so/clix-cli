@@ -471,12 +471,18 @@ function CreateAppInputPhase({
   useInput((_input, key) => {
     if (key.escape) {
       onCancel();
-    } else if (key.return && stage === 'identifier' && identifier.trim()) {
-      setStage('displayName');
-    } else if (key.return && stage === 'displayName') {
-      onSubmit(identifier.trim(), displayName.trim() || undefined);
     }
   });
+
+  const handleIdentifierSubmit = useCallback(() => {
+    if (identifier.trim()) {
+      setStage('displayName');
+    }
+  }, [identifier]);
+
+  const handleDisplayNameSubmit = useCallback(() => {
+    onSubmit(identifier.trim(), displayName.trim() || undefined);
+  }, [identifier, displayName, onSubmit]);
 
   return (
     <Box
@@ -504,6 +510,7 @@ function CreateAppInputPhase({
               value={identifier}
               onChange={setIdentifier}
               placeholder={identifierPlaceholder}
+              onSubmit={handleIdentifierSubmit}
             />
           </Box>
           <Box marginTop={1}>
@@ -524,7 +531,12 @@ function CreateAppInputPhase({
           </Box>
           <Box>
             <Text color="blue">{'> '}</Text>
-            <TextInput value={displayName} onChange={setDisplayName} placeholder="My App" />
+            <TextInput
+              value={displayName}
+              onChange={setDisplayName}
+              placeholder="My App"
+              onSubmit={handleDisplayNameSubmit}
+            />
           </Box>
           <Box marginTop={1}>
             <Text dimColor>Enter to create · Esc cancel</Text>
