@@ -7,7 +7,12 @@ import type {
   GoogleServiceInfoPlist,
   GoogleServicesJson,
 } from '@/lib/services/firebase';
-import { extractProjectId, extractProjectIdFromPlist } from '@/lib/services/firebase';
+import {
+  extractProjectId,
+  extractProjectIdFromPlist,
+  platformNeedsAndroid,
+  platformNeedsIos,
+} from '@/lib/services/firebase';
 
 interface FirebaseStatusDisplayProps {
   result: FirebaseDetectionResult;
@@ -149,20 +154,6 @@ function IssueList({ issues }: { issues: FirebaseIssue[] }): React.ReactElement 
       ))}
     </Box>
   );
-}
-
-/**
- * Check if platform needs Android config.
- */
-function platformNeedsAndroid(platform: string): boolean {
-  return platform === 'android' || platform === 'react-native' || platform === 'flutter';
-}
-
-/**
- * Check if platform needs iOS config.
- */
-function platformNeedsIos(platform: string): boolean {
-  return platform === 'ios' || platform === 'react-native' || platform === 'flutter';
 }
 
 /**

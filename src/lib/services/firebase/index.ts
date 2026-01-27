@@ -6,33 +6,27 @@
  * @module services/firebase
  */
 
+// API types (public)
 export type { AndroidApp, FirebaseProject, IosApp } from './api';
-// API module
-export { FirebaseApiClient } from './api';
 
 // Detection and validation
 export { detectFirebaseConfig, detectPlatform, getExpectedPaths } from './detector';
-export type { DownloadOptions, DownloadResult } from './downloader';
-// Downloader
-export { FirebaseDownloader } from './downloader';
-export { FirebaseService } from './firebase-service';
-export type { AuthResult, OAuthFlowState, OAuthFlowStatus, OAuthTokens } from './oauth';
 
-// OAuth module
-export {
-  GOOGLE_OAUTH_CONFIG,
-  GoogleAuthClient,
-  getOAuthConfigurationError,
-  isOAuthConfigured,
-  TokenStore,
-} from './oauth';
-export {
-  GoogleServiceInfoPlistSchema,
-  GoogleServicesJsonSchema,
-  MinimalGoogleServiceInfoPlistSchema,
-  MinimalGoogleServicesJsonSchema,
-} from './schemas';
+// Downloader
+export type { DownloadOptions, DownloadResult } from './downloader';
+export { FirebaseDownloader } from './downloader';
+
+// Service
+export { FirebaseService } from './firebase-service';
+
+// OAuth types and utilities (public)
+export type { AuthResult, OAuthFlowState, OAuthFlowStatus, OAuthTokens } from './oauth';
+export { getOAuthConfigurationError, isOAuthConfigured } from './oauth';
+
+// Types
 export * from './types';
+
+// Validators (public API)
 export {
   extractProjectId,
   extractProjectIdFromPlist,

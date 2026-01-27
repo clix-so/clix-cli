@@ -16,7 +16,7 @@ import type {
   FirebaseIssue,
   Platform,
 } from './types';
-import { FIREBASE_HELP_URLS } from './types';
+import { FIREBASE_HELP_URLS, platformNeedsAndroid, platformNeedsIos } from './types';
 import { validateGoogleServiceInfoPlist, validateGoogleServicesJson } from './validator';
 
 /**
@@ -258,7 +258,7 @@ async function readPlistFile(filePath: string): Promise<unknown> {
 /**
  * Find google-services.json files in the project.
  */
-export async function findGoogleServicesJson(
+async function findGoogleServicesJson(
   projectPath: string,
 ): Promise<{ path: string; inExpectedLocation: boolean }[]> {
   const results: { path: string; inExpectedLocation: boolean }[] = [];
@@ -288,7 +288,7 @@ export async function findGoogleServicesJson(
 /**
  * Find GoogleService-Info.plist files in the project.
  */
-export async function findGoogleServiceInfoPlist(
+async function findGoogleServiceInfoPlist(
   projectPath: string,
 ): Promise<{ path: string; inExpectedLocation: boolean }[]> {
   const results: { path: string; inExpectedLocation: boolean }[] = [];
@@ -466,20 +466,6 @@ async function detectIosCredential(
 }
 
 /**
- * Check if platform needs Android config.
- */
-function needsAndroidConfig(platform: Platform): boolean {
-  return platform === 'android' || platform === 'react-native' || platform === 'flutter';
-}
-
-/**
- * Check if platform needs iOS config.
- */
-function needsIosConfig(platform: Platform): boolean {
-  return platform === 'ios' || platform === 'react-native' || platform === 'flutter';
-}
-
-/**
  * Generate Android-specific issues.
  */
 function generateAndroidIssues(
@@ -614,11 +600,11 @@ function generateIssues(
 ): FirebaseIssue[] {
   const issues: FirebaseIssue[] = [];
 
-  if (needsAndroidConfig(platform)) {
+  if (platformNeedsAndroid(platform)) {
     issues.push(...generateAndroidIssues(android, expectedPaths.android[0]));
   }
 
-  if (needsIosConfig(platform)) {
+  if (platformNeedsIos(platform)) {
     issues.push(...generateIosIssues(ios, expectedPaths.ios[0]));
   }
 
@@ -642,17 +628,13 @@ export async function detectFirebaseConfig(projectPath: string): Promise<Firebas
 
   // Determine if Firebase is configured
   // For unknown platform, check if at least one valid config file exists
-  const needsAndroid =
-    platform === 'android' || platform === 'react-native' || platform === 'flutter';
-  const needsIos = platform === 'ios' || platform === 'react-native' || platform === 'flutter';
-
   let configured: boolean;
   if (platform === 'unknown') {
     // For unknown platform, configured is true only if at least one valid config exists
     configured = (android?.valid ?? false) || (ios?.valid ?? false);
   } else {
-    const androidConfigured = !needsAndroid || (android?.valid ?? false);
-    const iosConfigured = !needsIos || (ios?.valid ?? false);
+    const androidConfigured = !platformNeedsAndroid(platform) || (android?.valid ?? false);
+    const iosConfigured = !platformNeedsIos(platform) || (ios?.valid ?? false);
     configured = androidConfigured && iosConfigured;
   }
 

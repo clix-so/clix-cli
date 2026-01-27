@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
+import TextInput from 'ink-text-input';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -15,6 +16,8 @@ import {
   type FirebaseSetupResult,
   type IosApp,
   isOAuthConfigured,
+  platformNeedsAndroid,
+  platformNeedsIos,
   type WizardPhase,
 } from '@/lib/services/firebase';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
@@ -39,7 +42,35 @@ type ExtendedWizardPhase =
   | 'select_project'
   | 'select_android_app'
   | 'select_ios_app'
-  | 'downloading';
+  | 'downloading'
+  | 'no_apps_found'
+  | 'create_android_app'
+  | 'create_ios_app'
+  | 'creating_app';
+
+/**
+ * No apps found context (which platform apps are missing).
+ */
+interface NoAppsContext {
+  noAndroidApps: boolean;
+  noIosApps: boolean;
+  needsAndroid: boolean;
+  needsIos: boolean;
+}
+
+/**
+ * Check if a platform needs Android config (including unknown platform).
+ */
+function platformNeedsAndroidWithUnknown(platform: FirebaseDetectionResult['platform']): boolean {
+  return platformNeedsAndroid(platform) || platform === 'unknown';
+}
+
+/**
+ * Check if a platform needs iOS config (including unknown platform).
+ */
+function platformNeedsIosWithUnknown(platform: FirebaseDetectionResult['platform']): boolean {
+  return platformNeedsIos(platform) || platform === 'unknown';
+}
 
 /**
  * Build menu items based on detection result.
@@ -47,17 +78,14 @@ type ExtendedWizardPhase =
 function buildMenuItems(result: FirebaseDetectionResult): MenuAction[] {
   const items: MenuAction[] = [];
 
-  const needsAndroid =
-    result.platform === 'android' ||
-    result.platform === 'react-native' ||
-    result.platform === 'flutter';
-  const needsIos =
-    result.platform === 'ios' ||
-    result.platform === 'react-native' ||
-    result.platform === 'flutter';
+  const needsAndroid = platformNeedsAndroidWithUnknown(result.platform);
+  const needsIos = platformNeedsIosWithUnknown(result.platform);
 
+  // For unknown platform, show download option if either config is missing
   const hasMissingConfigs =
-    (needsAndroid && !result.android?.valid) || (needsIos && !result.ios?.valid);
+    result.platform === 'unknown'
+      ? !result.android?.valid || !result.ios?.valid
+      : (needsAndroid && !result.android?.valid) || (needsIos && !result.ios?.valid);
 
   // Download from Firebase option (if OAuth is configured and configs are missing)
   if (hasMissingConfigs && isOAuthConfigured()) {
@@ -171,7 +199,14 @@ function openBrowser(url: string): void {
 /**
  * Authenticating phase component.
  */
-function AuthenticatingPhase(): React.ReactElement {
+function AuthenticatingPhase({ onCancel }: { onCancel: () => void }): React.ReactElement {
+  useInput((input, key) => {
+    const isCtrlC = (input === 'c' && key.ctrl) || input === '\x03';
+    if (key.escape || isCtrlC) {
+      onCancel();
+    }
+  });
+
   return (
     <Box
       flexDirection="column"
@@ -192,6 +227,9 @@ function AuthenticatingPhase(): React.ReactElement {
       </Box>
       <Box marginTop={1}>
         <Text dimColor>Complete the authentication in your browser.</Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>Press Esc to cancel</Text>
       </Box>
     </Box>
   );
@@ -327,6 +365,208 @@ function DownloadingPhase({
 }
 
 /**
+ * No apps found phase component - offers to create apps.
+ */
+function NoAppsFoundPhase({
+  context,
+  onCreateAndroid,
+  onCreateIos,
+  onCancel,
+}: {
+  context: NoAppsContext;
+  onCreateAndroid: () => void;
+  onCreateIos: () => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const items: Array<{ label: string; value: string }> = [];
+
+  if (context.noAndroidApps && context.needsAndroid) {
+    items.push({
+      label: '➕ Create Android app',
+      value: 'create_android',
+    });
+  }
+
+  if (context.noIosApps && context.needsIos) {
+    items.push({
+      label: '➕ Create iOS app',
+      value: 'create_ios',
+    });
+  }
+
+  items.push({
+    label: '← Back',
+    value: 'cancel',
+  });
+
+  useInput((_input, key) => {
+    if (key.escape) {
+      onCancel();
+    }
+  });
+
+  const handleSelect = (item: { value: string }) => {
+    switch (item.value) {
+      case 'create_android':
+        onCreateAndroid();
+        break;
+      case 'create_ios':
+        onCreateIos();
+        break;
+      case 'cancel':
+        onCancel();
+        break;
+    }
+  };
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="yellow"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold color="yellow">
+          No Apps Found
+        </Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text>No apps are registered in this Firebase project.</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>Would you like to create a new app?</Text>
+      </Box>
+      <SelectInput items={items} onSelect={handleSelect} />
+      <Box marginTop={1}>
+        <Text dimColor>↑↓ navigate · Enter select · Esc cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Create app input phase component.
+ */
+function CreateAppInputPhase({
+  platform,
+  onSubmit,
+  onCancel,
+}: {
+  platform: 'android' | 'ios';
+  onSubmit: (identifier: string, displayName?: string) => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const [identifier, setIdentifier] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [stage, setStage] = useState<'identifier' | 'displayName'>('identifier');
+
+  const isAndroid = platform === 'android';
+  const identifierLabel = isAndroid ? 'Package Name' : 'Bundle ID';
+  const identifierPlaceholder = isAndroid ? 'com.example.app' : 'com.example.app';
+  const title = isAndroid ? 'Create Android App' : 'Create iOS App';
+
+  useInput((_input, key) => {
+    if (key.escape) {
+      onCancel();
+    } else if (key.return && stage === 'identifier' && identifier.trim()) {
+      setStage('displayName');
+    } else if (key.return && stage === 'displayName') {
+      onSubmit(identifier.trim(), displayName.trim() || undefined);
+    }
+  });
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>{title}</Text>
+      </Box>
+
+      {stage === 'identifier' ? (
+        <>
+          <Box marginBottom={1}>
+            <Text>
+              {identifierLabel}: <Text dimColor>(e.g., {identifierPlaceholder})</Text>
+            </Text>
+          </Box>
+          <Box>
+            <Text color="blue">{'> '}</Text>
+            <TextInput
+              value={identifier}
+              onChange={setIdentifier}
+              placeholder={identifierPlaceholder}
+            />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Enter to continue · Esc cancel</Text>
+          </Box>
+        </>
+      ) : (
+        <>
+          <Box marginBottom={1}>
+            <Text dimColor>
+              {identifierLabel}: {identifier}
+            </Text>
+          </Box>
+          <Box marginBottom={1}>
+            <Text>
+              Display Name: <Text dimColor>(optional)</Text>
+            </Text>
+          </Box>
+          <Box>
+            <Text color="blue">{'> '}</Text>
+            <TextInput value={displayName} onChange={setDisplayName} placeholder="My App" />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Enter to create · Esc cancel</Text>
+          </Box>
+        </>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * Creating app phase component.
+ */
+function CreatingAppPhase({ platform }: { platform: 'android' | 'ios' }): React.ReactElement {
+  const message = platform === 'android' ? 'Creating Android app...' : 'Creating iOS app...';
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Firebase App Creation</Text>
+      </Box>
+      <Box>
+        <Text dimColor>
+          <Spinner type="dots" />
+        </Text>
+        <Text> {message}</Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>This may take a few seconds...</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * Detecting phase component.
  */
 function DetectingPhase(): React.ReactElement {
@@ -450,6 +690,41 @@ function ValidatingPhase({ platform }: { platform: 'android' | 'ios' }): React.R
 }
 
 /**
+ * Check if an error is a scope insufficient error.
+ */
+function isScopeInsufficientError(error: string): boolean {
+  return (
+    error.includes('ACCESS_TOKEN_SCOPE_INSUFFICIENT') ||
+    error.includes('insufficient authentication scopes') ||
+    (error.includes('403') && error.includes('PERMISSION_DENIED'))
+  );
+}
+
+/**
+ * Get helpful hint message based on error type.
+ */
+function getErrorHint(error: string): string | null {
+  if (isScopeInsufficientError(error)) {
+    return `Your OAuth token has insufficient permissions.
+This usually happens when the required permissions have changed.
+Press Enter to re-authenticate with updated permissions.`;
+  }
+  if (error.includes('invalid_client')) {
+    return `The OAuth client ID is invalid or not configured correctly.
+Check your CLIX_GOOGLE_CLIENT_ID environment variable.`;
+  }
+  if (error.includes('redirect_uri_mismatch')) {
+    return `The redirect URI doesn't match your OAuth client configuration.
+Add this to your OAuth client: http://127.0.0.1:9005/oauth/callback`;
+  }
+  if (error.includes('invalid_grant')) {
+    return `The authorization code has expired or already been used.
+Please try again.`;
+  }
+  return null;
+}
+
+/**
  * Error phase component.
  */
 function ErrorPhase({
@@ -469,6 +744,8 @@ function ErrorPhase({
     }
   });
 
+  const hint = getErrorHint(error);
+
   return (
     <Box
       flexDirection="column"
@@ -486,6 +763,11 @@ function ErrorPhase({
       <Box marginBottom={1}>
         <Text color="red">✗ {error}</Text>
       </Box>
+      {hint && (
+        <Box flexDirection="column" marginBottom={1}>
+          <Text color="yellow">{hint}</Text>
+        </Box>
+      )}
       <Box>
         <Text dimColor>Press Enter to retry, Esc to skip</Text>
       </Box>
@@ -571,6 +853,10 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     'both',
   );
 
+  // App creation flow state
+  const [noAppsContext, setNoAppsContext] = useState<NoAppsContext | null>(null);
+  const [creatingAppPlatform, setCreatingAppPlatform] = useState<'android' | 'ios'>('android');
+
   const [service] = useState(() => new FirebaseService(projectPath));
 
   // Initial detection
@@ -607,14 +893,9 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
   // Helper to determine which platforms need config files
   const getPlatformNeeds = useCallback(() => {
-    const needsAndroid =
-      result?.platform === 'android' ||
-      result?.platform === 'react-native' ||
-      result?.platform === 'flutter';
-    const needsIos =
-      result?.platform === 'ios' ||
-      result?.platform === 'react-native' ||
-      result?.platform === 'flutter';
+    const platform = result?.platform ?? 'unknown';
+    const needsAndroid = platformNeedsAndroidWithUnknown(platform);
+    const needsIos = platformNeedsIosWithUnknown(platform);
     const needsAndroidConfig = needsAndroid && !result?.android?.valid;
     const needsIosConfig = needsIos && !result?.ios?.valid;
     return { needsAndroid, needsIos, needsAndroidConfig, needsIosConfig };
@@ -755,37 +1036,60 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   const handleProjectSelect = useCallback(
     async (project: FirebaseProject) => {
       setSelectedProject(project);
-      const { needsAndroidConfig, needsIosConfig } = getPlatformNeeds();
+      const { needsAndroid, needsIos, needsAndroidConfig, needsIosConfig } = getPlatformNeeds();
+
+      // For unknown platform or when user explicitly wants to download,
+      // we should fetch apps even if configs are already valid
+      const platform = result?.platform ?? 'unknown';
+      const forceDownload = platform === 'unknown';
+      const shouldFetchAndroid = needsAndroidConfig || (forceDownload && needsAndroid);
+      const shouldFetchIos = needsIosConfig || (forceDownload && needsIos);
 
       try {
-        if (needsAndroidConfig) {
-          const hasAndroidApps = await fetchAndHandleAndroidApps(project, needsIosConfig);
+        // Track which platforms have no apps
+        let noAndroidApps = false;
+        let noIosApps = false;
+
+        if (shouldFetchAndroid) {
+          const hasAndroidApps = await fetchAndHandleAndroidApps(project, shouldFetchIos);
           if (!hasAndroidApps) {
+            noAndroidApps = true;
             // No Android apps, try iOS if needed
-            if (needsIosConfig) {
+            if (shouldFetchIos) {
               const hasIosApps = await fetchAndHandleIosApps(project);
               if (!hasIosApps) {
-                setError('No apps found in this Firebase project.');
-                setPhase('error');
+                noIosApps = true;
               }
-            } else {
-              setError('No Android apps found in this Firebase project.');
-              setPhase('error');
             }
           }
-        } else if (needsIosConfig) {
+        } else if (shouldFetchIos) {
           const hasIosApps = await fetchAndHandleIosApps(project);
           if (!hasIosApps) {
-            setError('No iOS apps found in this Firebase project.');
-            setPhase('error');
+            noIosApps = true;
           }
+        } else {
+          // No configs needed - shouldn't happen but handle gracefully
+          setError('No configuration files needed for this platform.');
+          setPhase('error');
+          return;
+        }
+
+        // If any required platform has no apps, show the no apps found phase
+        if ((shouldFetchAndroid && noAndroidApps) || (shouldFetchIos && noIosApps)) {
+          setNoAppsContext({
+            noAndroidApps,
+            noIosApps,
+            needsAndroid: shouldFetchAndroid,
+            needsIos: shouldFetchIos,
+          });
+          setPhase('no_apps_found');
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch apps');
         setPhase('error');
       }
     },
-    [getPlatformNeeds, fetchAndHandleAndroidApps, fetchAndHandleIosApps],
+    [getPlatformNeeds, fetchAndHandleAndroidApps, fetchAndHandleIosApps, result],
   );
 
   // Use ref for project select handler
@@ -802,9 +1106,9 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
       if (!isAuth) {
         // Start OAuth flow
-        const success = await downloader.authenticate(openBrowser);
-        if (!success) {
-          setError('Authentication failed. Please try again.');
+        const authResult = await downloader.authenticate(openBrowser);
+        if (!authResult.success) {
+          setError(authResult.error || 'Authentication failed. Please try again.');
           setPhase('error');
           return;
         }
@@ -887,10 +1191,20 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     [service, handleSkip, handleDownload, onComplete, result],
   );
 
-  const handleRetry = useCallback(() => {
+  const handleRetry = useCallback(async () => {
+    // Check if this was a scope error - if so, logout and re-authenticate
+    if (error && isScopeInsufficientError(error)) {
+      // Clear tokens and trigger re-authentication
+      await downloader.logout();
+      setError(null);
+      // Go back to download flow which will re-authenticate
+      await handleDownload();
+      return;
+    }
+
     setError(null);
     setPhase('detecting');
-  }, []);
+  }, [error, downloader, handleDownload]);
 
   const handleCancel = useCallback(() => {
     if (onCancel) {
@@ -899,6 +1213,100 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       handleSkip();
     }
   }, [onCancel, handleSkip]);
+
+  // Handle creating an app
+  const handleCreateApp = useCallback(
+    async (platform: 'android' | 'ios', identifier: string, displayName?: string) => {
+      if (!selectedProject) {
+        setError('No project selected.');
+        setPhase('error');
+        return;
+      }
+
+      setCreatingAppPlatform(platform);
+      setPhase('creating_app');
+
+      try {
+        if (platform === 'android') {
+          const app = await downloader.createAndroidApp(selectedProject.projectId, {
+            packageName: identifier,
+            displayName,
+          });
+          setAndroidApps([app]);
+          setSelectedAndroidApp(app);
+
+          // Check if we also need iOS
+          const { needsIos } = getPlatformNeeds();
+          if (needsIos && noAppsContext?.noIosApps) {
+            // We need iOS too, go back to no apps found to create iOS
+            setNoAppsContext({
+              ...noAppsContext,
+              noAndroidApps: false,
+            });
+            setPhase('no_apps_found');
+          } else if (needsIos) {
+            // Fetch iOS apps
+            const iosAppsList = await downloader.listIosApps(selectedProject.projectId);
+            if (iosAppsList.length === 0) {
+              // Download Android config only, then show no apps for iOS
+              downloadConfigsRef.current(selectedProject, app, null);
+            } else if (iosAppsList.length === 1) {
+              downloadConfigsRef.current(selectedProject, app, iosAppsList[0]);
+            } else {
+              setIosApps(iosAppsList);
+              setPhase('select_ios_app');
+            }
+          } else {
+            // Only needed Android, download config
+            downloadConfigsRef.current(selectedProject, app, null);
+          }
+        } else {
+          const app = await downloader.createIosApp(selectedProject.projectId, {
+            bundleId: identifier,
+            displayName,
+          });
+          setIosApps([app]);
+
+          // Download config with existing Android app if any
+          downloadConfigsRef.current(selectedProject, selectedAndroidApp, app);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to create app');
+        setPhase('error');
+      }
+    },
+    [selectedProject, downloader, getPlatformNeeds, noAppsContext, selectedAndroidApp],
+  );
+
+  // Handlers for no apps found phase
+  const handleStartCreateAndroid = useCallback(() => {
+    setCreatingAppPlatform('android');
+    setPhase('create_android_app');
+  }, []);
+
+  const handleStartCreateIos = useCallback(() => {
+    setCreatingAppPlatform('ios');
+    setPhase('create_ios_app');
+  }, []);
+
+  const handleCreateAndroidSubmit = useCallback(
+    (identifier: string, displayName?: string) => {
+      handleCreateApp('android', identifier, displayName);
+    },
+    [handleCreateApp],
+  );
+
+  const handleCreateIosSubmit = useCallback(
+    (identifier: string, displayName?: string) => {
+      handleCreateApp('ios', identifier, displayName);
+    },
+    [handleCreateApp],
+  );
+
+  const handleNoAppsCancel = useCallback(() => {
+    // Go back to project selection
+    setPhase('select_project');
+  }, []);
 
   switch (phase) {
     case 'detecting':
@@ -920,7 +1328,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       return <ValidatingPhase platform={validatingPlatform || 'android'} />;
 
     case 'authenticating':
-      return <AuthenticatingPhase />;
+      return <AuthenticatingPhase onCancel={handleCancel} />;
 
     case 'select_project':
       return (
@@ -963,6 +1371,44 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
     case 'downloading':
       return <DownloadingPhase platform={downloadingPlatform} />;
+
+    case 'no_apps_found':
+      return (
+        <NoAppsFoundPhase
+          context={
+            noAppsContext || {
+              noAndroidApps: true,
+              noIosApps: true,
+              needsAndroid: true,
+              needsIos: true,
+            }
+          }
+          onCreateAndroid={handleStartCreateAndroid}
+          onCreateIos={handleStartCreateIos}
+          onCancel={handleNoAppsCancel}
+        />
+      );
+
+    case 'create_android_app':
+      return (
+        <CreateAppInputPhase
+          platform="android"
+          onSubmit={handleCreateAndroidSubmit}
+          onCancel={handleNoAppsCancel}
+        />
+      );
+
+    case 'create_ios_app':
+      return (
+        <CreateAppInputPhase
+          platform="ios"
+          onSubmit={handleCreateIosSubmit}
+          onCancel={handleNoAppsCancel}
+        />
+      );
+
+    case 'creating_app':
+      return <CreatingAppPhase platform={creatingAppPlatform} />;
 
     case 'error':
       return (

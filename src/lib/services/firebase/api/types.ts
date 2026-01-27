@@ -141,3 +141,63 @@ export interface FirebaseApiError {
   message: string;
   status: string;
 }
+
+/**
+ * Request body for creating an Android app.
+ */
+export interface CreateAndroidAppRequest {
+  /**
+   * Android package name (e.g., "com.example.app")
+   */
+  packageName: string;
+
+  /**
+   * Display name for the app.
+   */
+  displayName?: string;
+}
+
+/**
+ * Request body for creating an iOS app.
+ */
+export interface CreateIosAppRequest {
+  /**
+   * iOS bundle ID (e.g., "com.example.app")
+   */
+  bundleId: string;
+
+  /**
+   * Display name for the app.
+   */
+  displayName?: string;
+}
+
+/**
+ * Long-running operation response.
+ * Firebase app creation returns an operation that completes asynchronously.
+ */
+export interface Operation<T> {
+  /**
+   * Operation name (e.g., "operations/abc123")
+   */
+  name: string;
+
+  /**
+   * Whether the operation is done.
+   */
+  done: boolean;
+
+  /**
+   * Operation result when done is true.
+   */
+  response?: T;
+
+  /**
+   * Error details if operation failed.
+   */
+  error?: {
+    code: number;
+    message: string;
+    details?: unknown[];
+  };
+}

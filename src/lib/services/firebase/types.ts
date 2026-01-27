@@ -246,3 +246,25 @@ export interface FirebaseSetupResult {
   /** Final detection result */
   detection: FirebaseDetectionResult | null;
 }
+
+/**
+ * Check if platform needs Android configuration.
+ * Cross-platform frameworks (React Native, Flutter) need both platforms.
+ *
+ * @param platform - The detected platform
+ * @returns True if Android configuration is needed
+ */
+export function platformNeedsAndroid(platform: Platform | string): boolean {
+  return platform === 'android' || platform === 'react-native' || platform === 'flutter';
+}
+
+/**
+ * Check if platform needs iOS configuration.
+ * Cross-platform frameworks (React Native, Flutter) need both platforms.
+ *
+ * @param platform - The detected platform
+ * @returns True if iOS configuration is needed
+ */
+export function platformNeedsIos(platform: Platform | string): boolean {
+  return platform === 'ios' || platform === 'react-native' || platform === 'flutter';
+}

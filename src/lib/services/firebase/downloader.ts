@@ -8,11 +8,17 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { AndroidApp, FirebaseProject, IosApp } from './api';
+import type {
+  AndroidApp,
+  CreateAndroidAppRequest,
+  CreateIosAppRequest,
+  FirebaseProject,
+  IosApp,
+} from './api';
 import { FirebaseApiClient } from './api';
 import { detectPlatform, getExpectedPaths } from './detector';
 import { GoogleAuthClient } from './oauth';
-import type { Platform } from './types';
+import { type Platform, platformNeedsAndroid, platformNeedsIos } from './types';
 
 /**
  * Download options.
@@ -78,13 +84,16 @@ export class FirebaseDownloader {
    * Authenticate with Google OAuth.
    *
    * @param openBrowser - Callback to open URL in browser
+   * @returns Object with success status and optional error message
    */
-  async authenticate(openBrowser: (url: string) => void): Promise<boolean> {
+  async authenticate(
+    openBrowser: (url: string) => void,
+  ): Promise<{ success: boolean; error?: string }> {
     const result = await this.authClient.authenticate(openBrowser);
     if (result.success) {
       this.apiClient = new FirebaseApiClient(() => this.authClient.getAccessToken());
     }
-    return result.success;
+    return result;
   }
 
   /**
@@ -136,6 +145,30 @@ export class FirebaseDownloader {
   }
 
   /**
+   * Create a new Android app in a Firebase project.
+   *
+   * @param projectId - Firebase project ID
+   * @param request - App creation request with packageName and optional displayName
+   * @returns Created Android app
+   */
+  async createAndroidApp(projectId: string, request: CreateAndroidAppRequest): Promise<AndroidApp> {
+    const api = this.ensureApiClient();
+    return api.createAndroidApp(projectId, request);
+  }
+
+  /**
+   * Create a new iOS app in a Firebase project.
+   *
+   * @param projectId - Firebase project ID
+   * @param request - App creation request with bundleId and optional displayName
+   * @returns Created iOS app
+   */
+  async createIosApp(projectId: string, request: CreateIosAppRequest): Promise<IosApp> {
+    const api = this.ensureApiClient();
+    return api.createIosApp(projectId, request);
+  }
+
+  /**
    * Download and save Android config.
    *
    * @param projectId - Firebase project ID
@@ -176,9 +209,9 @@ export class FirebaseDownloader {
     const platform = await detectPlatform(projectPath);
     const paths = getExpectedPaths(platform, projectPath);
 
-    const needsAndroid =
-      platform === 'android' || platform === 'react-native' || platform === 'flutter';
-    const needsIos = platform === 'ios' || platform === 'react-native' || platform === 'flutter';
+    // For unknown platform, assume both platforms are needed
+    const needsAndroid = platformNeedsAndroid(platform) || platform === 'unknown';
+    const needsIos = platformNeedsIos(platform) || platform === 'unknown';
 
     return {
       android: needsAndroid ? path.join(projectPath, paths.android[0]) : null,

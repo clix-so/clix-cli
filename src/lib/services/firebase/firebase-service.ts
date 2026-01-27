@@ -14,7 +14,7 @@ import type {
   GoogleServiceInfoPlist,
   GoogleServicesJson,
 } from './types';
-import { FIREBASE_HELP_URLS } from './types';
+import { FIREBASE_HELP_URLS, platformNeedsAndroid, platformNeedsIos } from './types';
 import { extractProjectId, extractProjectIdFromPlist, validateProjectIdMatch } from './validator';
 
 /**
@@ -61,17 +61,9 @@ export class FirebaseService {
     const errorCount = result.issues.filter((i) => i.severity === 'error').length;
     const warningCount = result.issues.filter((i) => i.severity === 'warning').length;
 
-    const needsAndroid =
-      result.platform === 'android' ||
-      result.platform === 'react-native' ||
-      result.platform === 'flutter';
-    const needsIos =
-      result.platform === 'ios' ||
-      result.platform === 'react-native' ||
-      result.platform === 'flutter';
-
-    const androidConfigured = !needsAndroid || (result.android?.valid ?? false);
-    const iosConfigured = !needsIos || (result.ios?.valid ?? false);
+    const androidConfigured =
+      !platformNeedsAndroid(result.platform) || (result.android?.valid ?? false);
+    const iosConfigured = !platformNeedsIos(result.platform) || (result.ios?.valid ?? false);
 
     let status: 'configured' | 'partial' | 'missing';
     if (androidConfigured && iosConfigured) {
