@@ -46,6 +46,9 @@ interface UseCommandHandlerOptions {
     | 'showMCPInstallSelector'
     | 'showDebugPrompt'
     | 'showFirebaseWizard'
+    | 'showLoginOverlay'
+    | 'showLogoutOverlay'
+    | 'showWhoamiOverlay'
   >;
 }
 
@@ -86,6 +89,9 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
     showMCPInstallSelector,
     showDebugPrompt,
     showFirebaseWizard,
+    showLoginOverlay,
+    showLogoutOverlay,
+    showWhoamiOverlay,
   } = overlays;
 
   const handleSlashCommand = useCallback(
@@ -159,6 +165,18 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
           showFirebaseWizard();
           return;
 
+        case 'login':
+          showLoginOverlay();
+          return;
+
+        case 'logout':
+          showLogoutOverlay();
+          return;
+
+        case 'whoami':
+          showWhoamiOverlay();
+          return;
+
         case 'update':
           handleUpdateCommand(addSystemMessage);
           return;
@@ -193,6 +211,9 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
       showMCPInstallSelector,
       showDebugPrompt,
       showFirebaseWizard,
+      showLoginOverlay,
+      showLogoutOverlay,
+      showWhoamiOverlay,
       onTransferWithAgent,
       onExit,
       exit,

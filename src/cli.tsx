@@ -2,6 +2,7 @@ import meow from 'meow';
 import { agentCommand } from './commands/agent';
 import { chatCommand } from './commands/chat';
 import { debugCommand } from './commands/debug';
+import { firebaseCommand } from './commands/firebase';
 import { installMCPCommand } from './commands/install-mcp';
 import { iosSetupCommand } from './commands/ios-setup/index';
 import { loginCommand } from './commands/login';
@@ -42,6 +43,7 @@ function generateHelpText(): string {
     whoami            Show current logged-in user
     agent [name]      List or switch AI agents
 ${localSkillCommands}
+    firebase          Check and configure Firebase credentials
     debug <problem>   Interactive debugging assistant
     install-mcp [agent]  Install Clix MCP Server
     resume            Resume a previous session
@@ -64,6 +66,7 @@ ${localSkillCommands}
     $ clix resume
     $ clix install
     $ clix doctor
+    $ clix firebase
     $ clix debug "Push notifications not working on iOS"
     $ clix install-mcp
     $ clix install-mcp claude
@@ -191,6 +194,10 @@ async function main() {
           dryRun: cli.flags.dryRun,
           force: cli.flags.force,
         });
+        break;
+
+      case 'firebase':
+        await firebaseCommand();
         break;
 
       case 'ios-setup':

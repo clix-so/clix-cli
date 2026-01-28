@@ -17,7 +17,17 @@ import {
 } from '../../../lib/services/mcp-install-service';
 import type { useChatActions } from './useChatActions';
 
-export type OverlayType = 'agent' | 'transfer' | 'resume' | 'mcp' | 'debug' | 'firebase' | null;
+export type OverlayType =
+  | 'agent'
+  | 'transfer'
+  | 'resume'
+  | 'mcp'
+  | 'debug'
+  | 'firebase'
+  | 'login'
+  | 'logout'
+  | 'whoami'
+  | null;
 
 interface UseOverlaysOptions {
   currentAgent: AgentInfo | null;
@@ -105,6 +115,9 @@ export function useOverlays(options: UseOverlaysOptions) {
 
   const showDebugPrompt = useCallback(() => setActiveOverlay('debug'), []);
   const showFirebaseWizard = useCallback(() => setActiveOverlay('firebase'), []);
+  const showLoginOverlay = useCallback(() => setActiveOverlay('login'), []);
+  const showLogoutOverlay = useCallback(() => setActiveOverlay('logout'), []);
+  const showWhoamiOverlay = useCallback(() => setActiveOverlay('whoami'), []);
   const hideOverlay = useCallback(() => setActiveOverlay(null), []);
 
   // Agent selector handlers
@@ -240,6 +253,33 @@ export function useOverlays(options: UseOverlaysOptions) {
     addSystemMessage('Firebase setup cancelled');
   }, [addSystemMessage]);
 
+  // Login handlers
+  const handleLoginComplete = useCallback(
+    (message: string) => {
+      setActiveOverlay(null);
+      addSystemMessage(message);
+    },
+    [addSystemMessage],
+  );
+
+  // Logout handlers
+  const handleLogoutComplete = useCallback(
+    (message: string) => {
+      setActiveOverlay(null);
+      addSystemMessage(message);
+    },
+    [addSystemMessage],
+  );
+
+  // Whoami handlers
+  const handleWhoamiComplete = useCallback(
+    (message: string) => {
+      setActiveOverlay(null);
+      addSystemMessage(message);
+    },
+    [addSystemMessage],
+  );
+
   return {
     activeOverlay,
     hideOverlay,
@@ -279,5 +319,13 @@ export function useOverlays(options: UseOverlaysOptions) {
     showFirebaseWizard,
     handleFirebaseComplete,
     handleFirebaseCancel,
+
+    // Auth overlays
+    showLoginOverlay,
+    handleLoginComplete,
+    showLogoutOverlay,
+    handleLogoutComplete,
+    showWhoamiOverlay,
+    handleWhoamiComplete,
   };
 }
