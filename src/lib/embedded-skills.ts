@@ -161,6 +161,206 @@ variables exist — you still need a payload + console verification.
   guards
 - \`references/debugging.md\` - Troubleshooting missing variables and Message Logs
 `,
+  'auditing-deep-link-contracts': `---
+name: auditing-deep-link-contracts
+display-name: Auditing Deep Link Contracts
+short-description: Deep link contract audit
+description: Audits deep link contracts and routing behavior. Use when validating
+  supported routes, required parameters, and cold or warm start handling.
+user-invocable: true
+---
+
+# Auditing Deep Link Contracts
+
+Use this skill to define and audit deep link behavior so links open the correct
+screen with correct parameters across cold and warm starts.
+
+## What this skill does
+
+- Defines a deep link contract for supported routes
+- Checks required and optional parameters
+- Generates cold and warm start test vectors
+- Produces a concise audit report with fixes
+
+## Workflow
+
+\`\`\`
+Deep link contract audit progress:
+
+- [ ] 1) Confirm minimum inputs (platforms, routes, entry points)
+- [ ] 2) Draft a deep-link contract (JSON)
+- [ ] 3) Validate the contract (script)
+- [ ] 4) Generate test vectors (script)
+- [ ] 5) Audit routing behavior (findings + fixes)
+- [ ] 6) Verify fixes (cold and warm start)
+\`\`\`
+
+## 1) Confirm the minimum inputs
+
+Ask only what is needed:
+
+- **Platforms**: iOS, Android, or both
+- **Entry points**: push, email, web, in-app, marketing campaigns
+- **Routes**: list of deep link routes that must be supported
+- **Auth rules**: which routes require login
+- **Fallbacks**: where to send users if data is missing
+
+## 2) Draft a deep-link contract
+
+Create \`deep-link-contract.json\` in \`.mobile/\` (recommended) or project root.
+
+Recommended location: \`.mobile/deep-link-contract.json\`
+
+Example:
+
+\`\`\`json
+{
+  "base": "myapp://",
+  "routes": [
+    {
+      "name": "order_detail",
+      "path": "/orders/{order_id}",
+      "required_params": ["order_id"],
+      "optional_params": ["ref"],
+      "auth_required": true,
+      "supported_states": ["cold", "warm"]
+    }
+  ]
+}
+\`\`\`
+
+## 3) Validate the contract
+
+Run:
+
+\`\`\`bash
+bash skills/auditing-deep-link-contracts/scripts/validate-deep-link-contract.sh \\
+  .mobile/deep-link-contract.json
+\`\`\`
+
+## 4) Generate test vectors
+
+Run:
+
+\`\`\`bash
+bash skills/auditing-deep-link-contracts/scripts/generate-deep-link-test-vectors.sh \\
+  .mobile/deep-link-contract.json \\
+  .mobile/deep-link-test-vectors.json
+\`\`\`
+
+## 5) Audit routing behavior
+
+For each test vector, confirm:
+
+- The app opens the expected screen
+- Required parameters are present and parsed
+- Missing parameters trigger the expected fallback
+- Auth-required routes handle logged-out users
+- Cold start and warm start behave consistently
+
+## 6) Verify fixes
+
+Re-run the test vectors after changes and confirm all expected behaviors.
+
+## Progressive Disclosure
+
+- **Level 1**: This \`SKILL.md\`
+- **Level 2**: \`references/\`
+- **Level 3**: \`examples/\` (optional)
+- **Level 4**: \`scripts/\` (execute; do not load)
+
+## References
+
+- \`references/deep-link-contract.md\`
+`,
+  'auditing-permission-ux': `---
+name: auditing-permission-ux
+display-name: Auditing Permission UX
+short-description: Permission UX audit
+description: Audits notification permission request flows. Use when reviewing or improving permission prompts, settings paths, or denial handling.
+user-invocable: true
+---
+
+# Auditing Permission UX
+
+Use this skill to audit how a mobile app requests notification permission and guides
+users to settings, then produce actionable improvements based on Apple and Android
+best practices.
+
+## What this skill does
+
+- Reviews permission timing, context, and explanation quality
+- Checks denial handling and settings recovery paths
+- Flags platform-specific risks (iOS vs Android)
+- Produces a structured audit report with fixes
+
+## Workflow
+
+\`\`\`
+Permission UX audit progress:
+
+- [ ] 1) Confirm minimum inputs (platforms, flow, current UX)
+- [ ] 2) Audit current flow (map prompts, copy, and settings paths)
+- [ ] 3) Produce audit report (findings + fixes)
+- [ ] 4) Verify improvements (ensure UX changes align with platform rules)
+\`\`\`
+
+## 1) Confirm the minimum inputs
+
+Ask only what is needed:
+
+- **Platforms**: iOS, Android, or both
+- **Entry points**: where the app asks for permission
+- **Prompt timing**: first launch, after action, onboarding step, etc.
+- **Primer**: is there an in-app explanation before the system prompt
+- **Settings path**: how users enable later after denial
+- **Denial handling**: how the app behaves if permission is denied
+
+## 2) Audit the current flow
+
+Document the current permission flow directly from the app:
+
+- Where the permission prompt appears and what precedes it
+- What copy is shown to explain value
+- How the app behaves after deny or dismiss
+- How users can enable notifications later
+
+## 3) Produce the audit report
+
+Output a concise report in markdown with:
+
+- **Findings**: each gap mapped to best practice
+- **Risk**: what the user impact is
+- **Fix**: concrete UX change
+- **Platform notes**: iOS-only or Android-only specifics
+
+Optional: generate a report template:
+
+\`\`\`bash
+bash skills/auditing-permission-ux/scripts/generate-permission-ux-audit-report.sh .mobile/permission-ux-audit.md
+\`\`\`
+
+## 4) Verify improvements
+
+Confirm:
+
+- Prompt timing is contextual (not forced on first launch)
+- Primer explains value clearly and is dismissible
+- Denied users can still use the app
+- Settings path is discoverable and clear
+- Android importance/channel strategy is not misleading
+
+## Progressive Disclosure
+
+- **Level 1**: This \`SKILL.md\`
+- **Level 2**: \`references/\`
+- **Level 3**: \`examples/\` (optional)
+- **Level 4**: \`scripts/\` (execute; do not load)
+
+## References
+
+- \`references/permission-ux-best-practices.md\`
+`,
   integration: `---
 name: clix-integration
 display-name: SDK Integration
@@ -1246,6 +1446,32 @@ Only these require user action:
 
 For these, provide brief instructions but don't wait for confirmation.
 
+### iOS Notification Service Extension (Recommended)
+
+For rich push notifications (images, buttons), create a Notification Service Extension:
+
+1. In Xcode: File > New > Target > Notification Service Extension
+2. Add Clix SDK to the extension target:
+   - **CocoaPods**: Add \`target 'YourExtension' do pod 'Clix' end\` to Podfile, then \`pod install\`
+   - **SPM**: Add Clix package to extension target in Xcode (General > Frameworks)
+3. Implement NotificationService.swift:
+   \`\`\`swift
+   import UserNotifications
+   import Clix
+
+   class NotificationService: ClixNotificationServiceExtension {
+       override func didReceive(_ request: UNNotificationRequest,
+                               withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+           register(projectId: "YOUR_PROJECT_ID")
+           super.didReceive(request, withContentHandler: contentHandler)
+       }
+   }
+   \`\`\`
+4. Add App Groups capability to both main app and extension (same group ID: \`group.clix.{BUNDLE_ID}\`)
+5. For Xcode 15+: Set \`ENABLE_USER_SCRIPT_SANDBOXING\` to "No" in extension's Build Settings
+
+For detailed setup, run \`clix ios-setup\` or \`/ios-setup\` in interactive mode.
+
 ## Output Format
 
 After completion, report:
@@ -1486,6 +1712,60 @@ Create or modify entitlements files. Use Write/Edit tools for these operations.
 
 **Note:** Replace \`{BUNDLE_ID}\` with the actual bundle identifier (e.g., \`com.example.myapp\`).
 
+### Phase 3.5: Notification Service Extension Setup
+
+Create a Notification Service Extension for rich push notifications (images, buttons, etc.).
+
+**Create Extension Target in Xcode:**
+\`\`\`text
+1. File > New > Target
+2. Select "Notification Service Extension"
+3. Name it "{AppName}NotificationServiceExtension"
+4. Click "Finish" (Cancel the "Activate scheme" dialog)
+\`\`\`
+
+**Implement NotificationService.swift:**
+
+\`\`\`swift
+import UserNotifications
+import Clix
+
+class NotificationService: ClixNotificationServiceExtension {
+    override func didReceive(
+        _ request: UNNotificationRequest,
+        withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
+    ) {
+        register(projectId: "YOUR_PROJECT_ID")
+        super.didReceive(request, withContentHandler: contentHandler)
+    }
+}
+\`\`\`
+
+**Note:** Replace \`YOUR_PROJECT_ID\` with your actual Clix project ID from https://console.clix.so/
+
+**Add Clix SDK to Extension Target:**
+
+For CocoaPods projects, add to Podfile:
+\`\`\`ruby
+target '{AppName}NotificationServiceExtension' do
+  pod 'Clix'
+end
+\`\`\`
+Then run: \`cd ios && pod install\`
+
+For SPM projects in Xcode:
+1. Select the extension target
+2. Go to General > Frameworks, Libraries, and Embedded Content
+3. Click + and add the Clix package
+
+**Configure Build Settings (Xcode 15+):**
+
+For the extension target:
+- Set \`ENABLE_USER_SCRIPT_SANDBOXING\` to "No" in Build Settings
+
+For React Native projects with Firebase:
+- In Build Phases, move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
+
 ### Phase 4: Apple Developer Portal Configuration
 
 Guide user through manual portal configuration. These steps CANNOT be automated.
@@ -1686,6 +1966,26 @@ export const EMBEDDED_SKILL_METADATA: SkillMetadata[] = [
     shortDescription: 'Personalization templates',
     description:
       'Helps developers author and debug Clix personalization templates (Liquid-style) for message content, deep links/URLs, and audience targeting. Use when the user mentions personalization variables, Liquid, templates, conditional logic, loops, filters, deep links, message logs, or when the user types `clix-personalization`.',
+    userInvocable: true,
+  },
+  {
+    folder: 'auditing-deep-link-contracts',
+    name: 'auditing-deep-link-contracts',
+    commandName: 'auditing-deep-link-contracts',
+    displayName: 'Auditing Deep Link Contracts',
+    shortDescription: 'Deep link contract audit',
+    description:
+      'Audits deep link contracts and routing behavior. Use when validating supported routes, required parameters, and cold or warm start handling.',
+    userInvocable: true,
+  },
+  {
+    folder: 'auditing-permission-ux',
+    name: 'auditing-permission-ux',
+    commandName: 'auditing-permission-ux',
+    displayName: 'Auditing Permission UX',
+    shortDescription: 'Permission UX audit',
+    description:
+      'Audits notification permission request flows. Use when reviewing or improving permission prompts, settings paths, or denial handling.',
     userInvocable: true,
   },
   {
