@@ -162,7 +162,7 @@ clix doctor
 
 ### `clix ios-setup`
 
-Configure iOS capabilities required for the Clix SDK (Push Notifications and App Groups).
+Configure iOS capabilities and Notification Service Extension (NSE) for the Clix SDK.
 
 ```bash
 clix ios-setup
@@ -170,9 +170,14 @@ clix ios-setup
 
 **What it does:**
 1. Analyzes your iOS project structure
-2. Checks current capabilities status
+2. Checks current capabilities status (Push Notifications, App Groups)
 3. Creates/modifies entitlements files
-4. Guides you through Xcode and Apple Developer Portal configuration
+4. Guides NSE setup for rich push notifications:
+   - Creates `{AppName}NotificationServiceExtension` target
+   - Implements `NotificationService.swift` with `ClixNotificationServiceExtension`
+   - Configures CocoaPods/SPM dependencies for extension target
+   - Sets build settings (`ENABLE_USER_SCRIPT_SANDBOXING` for Xcode 15+)
+5. Guides you through Xcode and Apple Developer Portal configuration
 
 **Note:** Some steps require manual action in Xcode and Apple Developer Portal.
 
@@ -277,7 +282,7 @@ Use these commands within the interactive chat (`clix`):
 | `/install` | | Autonomous SDK installation |
 | `/doctor` | | Check SDK integration status |
 | `/debug` | | Interactive debugging assistant |
-| `/ios-setup` | `/capabilities`, `/ios-capabilities` | Configure iOS capabilities |
+| `/ios-setup` | `/capabilities`, `/ios-capabilities` | Configure iOS capabilities and NSE |
 
 ### Interactive Skills
 

@@ -43,8 +43,8 @@ Modify the Xcode project file (.pbxproj) to link the entitlements file:
 
 #### 2. Create Notification Service Extension [Required]
 Create a new Notification Service Extension target for rich push notifications:
-- Target name: \`${context.appName}NotificationServiceExtension\` or \`NotificationServiceExtension\`
-- Bundle ID: \`${context.bundleId}.NotificationServiceExtension\`
+- Target name: \`${context.appName}NotificationServiceExtension\`
+- Bundle ID: \`${context.bundleId}.${context.appName}NotificationServiceExtension\`
 - Deployment target: Same as main app or iOS 14.0+
 - Create necessary files in the extension directory
 
@@ -53,41 +53,40 @@ Create the NotificationService.swift file with Clix SDK integration:
 
 \`\`\`swift
 import UserNotifications
-import ClixSDK
+import Clix
 
-class NotificationService: UNNotificationServiceExtension {
-    var contentHandler: ((UNNotificationContent) -> Void)?
-    var bestAttemptContent: UNMutableNotificationContent?
-
+class NotificationService: ClixNotificationServiceExtension {
     override func didReceive(
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
-        self.contentHandler = contentHandler
-        bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
-
-        if let bestAttemptContent = bestAttemptContent {
-            // Let Clix SDK handle the notification
-            Clix.shared.handleNotificationServiceExtension(
-                request: request,
-                content: bestAttemptContent
-            ) { processedContent in
-                contentHandler(processedContent)
-            }
-        }
-    }
-
-    override func serviceExtensionTimeWillExpire() {
-        if let contentHandler = contentHandler,
-           let bestAttemptContent = bestAttemptContent {
-            contentHandler(bestAttemptContent)
-        }
+        register(projectId: "YOUR_PROJECT_ID")
+        super.didReceive(request, withContentHandler: contentHandler)
     }
 }
 \`\`\`
 
-#### 4. Create Extension Entitlements [Required]
-Create entitlements file for the extension at \`${context.iosDir}/NotificationServiceExtension/NotificationServiceExtension.entitlements\`:
+**Note:** Replace \`YOUR_PROJECT_ID\` with your actual Clix project ID from https://console.clix.so/
+
+#### 4. Add Clix SDK to Extension Target [Required]
+
+**For CocoaPods projects:**
+Add to your Podfile:
+\`\`\`ruby
+target '${context.appName}NotificationServiceExtension' do
+  pod 'Clix'
+end
+\`\`\`
+Then run: \`cd ios && pod install\`
+
+**For SPM projects:**
+In Xcode:
+1. Select the extension target
+2. Go to General > Frameworks, Libraries, and Embedded Content
+3. Click + and add the Clix package
+
+#### 5. Create Extension Entitlements [Required]
+Create entitlements file for the extension at \`${context.iosDir}/${context.appName}NotificationServiceExtension/${context.appName}NotificationServiceExtension.entitlements\`:
 
 \`\`\`xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -102,7 +101,7 @@ Create entitlements file for the extension at \`${context.iosDir}/NotificationSe
 </plist>
 \`\`\`
 
-#### 5. Update Extension Info.plist [Required]
+#### 6. Update Extension Info.plist [Required]
 Ensure the extension's Info.plist has the correct NSExtension configuration:
 
 \`\`\`xml
@@ -115,11 +114,19 @@ Ensure the extension's Info.plist has the correct NSExtension configuration:
 </dict>
 \`\`\`
 
+#### 7. Configure Build Settings [Required - Xcode 15+]
+
+For the extension target in Xcode:
+- Set \`ENABLE_USER_SCRIPT_SANDBOXING\` to "No" in Build Settings
+
+For React Native projects with Firebase:
+- In Build Phases, move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
+
 ### Important Notes
 - The extension must share the same App Group as the main app
 - The extension's bundle ID must be a child of the main app's bundle ID
-- Add the ClixSDK to the extension target's frameworks
 - Ensure the extension is added to the app's "Embed App Extensions" build phase
+- Replace \`YOUR_PROJECT_ID\` with your actual Clix project ID
 
 Please complete these tasks by modifying the Xcode project files directly.`;
 }

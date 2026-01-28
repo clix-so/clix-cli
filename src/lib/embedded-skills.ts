@@ -1246,6 +1246,32 @@ Only these require user action:
 
 For these, provide brief instructions but don't wait for confirmation.
 
+### iOS Notification Service Extension (Recommended)
+
+For rich push notifications (images, buttons), create a Notification Service Extension:
+
+1. In Xcode: File > New > Target > Notification Service Extension
+2. Add Clix SDK to the extension target:
+   - **CocoaPods**: Add \`target 'YourExtension' do pod 'Clix' end\` to Podfile, then \`pod install\`
+   - **SPM**: Add Clix package to extension target in Xcode (General > Frameworks)
+3. Implement NotificationService.swift:
+   \`\`\`swift
+   import UserNotifications
+   import Clix
+
+   class NotificationService: ClixNotificationServiceExtension {
+       override func didReceive(_ request: UNNotificationRequest,
+                               withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+           register(projectId: "YOUR_PROJECT_ID")
+           super.didReceive(request, withContentHandler: contentHandler)
+       }
+   }
+   \`\`\`
+4. Add App Groups capability to both main app and extension (same group ID: \`group.clix.{BUNDLE_ID}\`)
+5. For Xcode 15+: Set \`ENABLE_USER_SCRIPT_SANDBOXING\` to "No" in extension's Build Settings
+
+For detailed setup, run \`clix ios-setup\` or \`/ios-setup\` in interactive mode.
+
 ## Output Format
 
 After completion, report:
@@ -1485,6 +1511,61 @@ Create or modify entitlements files. Use Write/Edit tools for these operations.
 \`\`\`
 
 **Note:** Replace \`{BUNDLE_ID}\` with the actual bundle identifier (e.g., \`com.example.myapp\`).
+
+### Phase 3.5: Notification Service Extension Setup
+
+Create a Notification Service Extension for rich push notifications (images, buttons, etc.).
+
+**Create Extension Target in Xcode:**
+\`\`\`text
+1. File > New > Target
+2. Select "Notification Service Extension"
+3. Name it "{AppName}NotificationServiceExtension" (e.g., "MyAppNotificationServiceExtension")
+4. Click "Finish" (Cancel the "Activate scheme" dialog)
+5. Note: Use this exact name consistently in Podfile, entitlements path, and SPM setup
+\`\`\`
+
+**Implement NotificationService.swift:**
+
+\`\`\`swift
+import UserNotifications
+import Clix
+
+class NotificationService: ClixNotificationServiceExtension {
+    override func didReceive(
+        _ request: UNNotificationRequest,
+        withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
+    ) {
+        register(projectId: "YOUR_PROJECT_ID")
+        super.didReceive(request, withContentHandler: contentHandler)
+    }
+}
+\`\`\`
+
+**Note:** Replace \`YOUR_PROJECT_ID\` with your actual Clix project ID from <https://console.clix.so/>
+
+**Add Clix SDK to Extension Target:**
+
+For CocoaPods projects, add to Podfile:
+\`\`\`ruby
+target '{AppName}NotificationServiceExtension' do
+  pod 'Clix'
+end
+\`\`\`
+Then run: \`cd ios && pod install\`
+
+For SPM projects in Xcode:
+1. Select the extension target
+2. Go to General > Frameworks, Libraries, and Embedded Content
+3. Click + and add the Clix package
+
+**Configure Build Settings (Xcode 15+):**
+
+For the extension target:
+- Set \`ENABLE_USER_SCRIPT_SANDBOXING\` to "No" in Build Settings
+
+For React Native projects with Firebase:
+- In Build Phases, move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
 
 ### Phase 4: Apple Developer Portal Configuration
 
