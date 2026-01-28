@@ -1,5 +1,4 @@
 import { render } from 'ink';
-import { printFinalOutput } from '../ui/utils/finalOutput';
 import { WhoamiUI } from '../ui/WhoamiUI';
 
 /**
@@ -13,25 +12,8 @@ export async function whoamiCommand(): Promise<void> {
       <WhoamiUI
         onComplete={(result) => {
           unmount();
-          if (result.status === 'ok') {
-            printFinalOutput({
-              type: 'success',
-              title: result.member.name,
-              message: result.member.email,
-            });
-          } else if (result.status === 'error') {
-            printFinalOutput({
-              type: 'error',
-              title: 'Authentication failed',
-              message: result.message,
-            });
+          if (result.status === 'error') {
             process.exitCode = 1;
-          } else {
-            printFinalOutput({
-              type: 'info',
-              title: 'Not authenticated',
-              message: 'Run clix login to authenticate',
-            });
           }
           resolve();
         }}

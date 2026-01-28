@@ -1,8 +1,8 @@
 import { Box, Text, useApp } from 'ink';
 import Spinner from 'ink-spinner';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { getInternalApiClient } from '@/lib/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getInternalApiClient, type Organization, type Project } from '@/lib/api';
 import {
   type Credentials,
   createCredentials,
@@ -13,7 +13,9 @@ import {
   PKCEFlowService,
   type TokenResponse,
 } from '@/lib/auth';
+import { getConfigManager, type LinkedProject } from '@/lib/config';
 import { Header } from '@/ui/components/Header';
+import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
 
 type LoginPhase =
@@ -22,8 +24,14 @@ type LoginPhase =
   | 'waiting_for_auth'
   | 'exchanging_code'
   | 'verifying'
+  | 'selecting_project'
   | 'complete'
   | 'error';
+
+interface OrgWithProjects {
+  org: Organization;
+  projects: Project[];
+}
 
 interface LoginUIProps {
   /** Called when login completes successfully */
@@ -53,6 +61,22 @@ async function fetchUserName(
   }
 }
 
+/** Fetch organizations and their projects */
+async function fetchOrganizationsWithProjects(): Promise<OrgWithProjects[]> {
+  const orgsWithProjects: OrgWithProjects[] = [];
+  try {
+    const apiClient = getInternalApiClient();
+    const orgs = await apiClient.listOrganizations();
+    for (const org of orgs) {
+      const projects = await apiClient.listProjects(org.id);
+      orgsWithProjects.push({ org, projects });
+    }
+  } catch {
+    // Silently ignore org/project fetch errors
+  }
+  return orgsWithProjects;
+}
+
 /** Check if user is already logged in with valid credentials */
 async function checkExistingLogin(): Promise<{ isLoggedIn: boolean; userName: string }> {
   const credentialsManager = getCredentialsManager();
@@ -75,7 +99,50 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
   const [authUrl, setAuthUrl] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
+  const [organizations, setOrganizations] = useState<OrgWithProjects[]>([]);
+  const [linkedProject, setLinkedProject] = useState<LinkedProject | null>(null);
+  const [workspacePath] = useState(() => process.cwd());
   const pkceServiceRef = useRef<PKCEFlowService | null>(null);
+  const credentialsRef = useRef<Credentials | null>(null);
+
+  const handleProjectSelect = useCallback(
+    async (project: Project, org: Organization) => {
+      const linked: LinkedProject = {
+        projectId: project.id,
+        projectName: project.name,
+        organizationId: org.id,
+        organizationName: org.name,
+      };
+      setLinkedProject(linked);
+
+      // Save to config
+      const configManager = getConfigManager();
+      const config = await configManager.load();
+      const workspaces = { ...config.workspaces, [workspacePath]: linked };
+      await configManager.save({ workspaces });
+
+      setPhase('complete');
+      setTimeout(() => {
+        if (onComplete && credentialsRef.current) {
+          onComplete(credentialsRef.current);
+        } else {
+          exit();
+        }
+      }, 1500);
+    },
+    [workspacePath, onComplete, exit],
+  );
+
+  const handleProjectSkip = useCallback(() => {
+    setPhase('complete');
+    setTimeout(() => {
+      if (onComplete && credentialsRef.current) {
+        onComplete(credentialsRef.current);
+      } else {
+        exit();
+      }
+    }, 1500);
+  }, [onComplete, exit]);
 
   useEffect(() => {
     const config = getAuth0Config();
@@ -90,6 +157,11 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         const existing = await checkExistingLogin();
         if (existing.isLoggedIn) {
           setUserName(existing.userName);
+
+          // Fetch organizations and projects for existing login
+          const orgsData = await fetchOrganizationsWithProjects();
+          setOrganizations(orgsData);
+
           setPhase('complete');
           setTimeout(() => {
             const creds = credentialsManager.credentials;
@@ -128,15 +200,28 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         setPhase('verifying');
         const name = await fetchUserName(pkceService, tokenResponse);
         setUserName(name);
+        credentialsRef.current = credentials;
 
-        setPhase('complete');
-        setTimeout(() => {
-          if (onComplete) {
-            onComplete(credentials);
-          } else {
-            exit();
-          }
-        }, 1500);
+        // Fetch organizations and projects
+        const orgsData = await fetchOrganizationsWithProjects();
+        setOrganizations(orgsData);
+
+        // Check if there are projects to select from
+        const hasProjects = orgsData.some((o) => o.projects.length > 0);
+        if (hasProjects) {
+          // Go to project selection phase
+          setPhase('selecting_project');
+        } else {
+          // No projects available, complete login
+          setPhase('complete');
+          setTimeout(() => {
+            if (onComplete) {
+              onComplete(credentials);
+            } else {
+              exit();
+            }
+          }, 1500);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Login failed';
         setErrorMessage(message);
@@ -208,6 +293,29 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
 
       {phase === 'verifying' && <StatusMessage type="loading" message="Verifying login..." />}
 
+      {phase === 'selecting_project' && (
+        <Box flexDirection="column">
+          <Box>
+            <Text color="green" bold>
+              ✓
+            </Text>
+            <Text> Successfully logged in!</Text>
+          </Box>
+          {userName && (
+            <Box marginTop={1} marginLeft={2}>
+              <Text dimColor>Welcome, </Text>
+              <Text bold>{userName}</Text>
+            </Box>
+          )}
+          <ProjectSelector
+            organizations={organizations}
+            onSelect={handleProjectSelect}
+            onSkip={handleProjectSkip}
+            workspacePath={workspacePath}
+          />
+        </Box>
+      )}
+
       {phase === 'complete' && (
         <Box flexDirection="column">
           <Box>
@@ -216,6 +324,18 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
             </Text>
             <Text> Successfully logged in!</Text>
           </Box>
+          {linkedProject && (
+            <Box flexDirection="column" marginTop={1} marginLeft={2}>
+              <Box>
+                <Text dimColor>Organization: </Text>
+                <Text>{linkedProject.organizationName}</Text>
+              </Box>
+              <Box>
+                <Text dimColor>Project: </Text>
+                <Text color="cyan">{linkedProject.projectName}</Text>
+              </Box>
+            </Box>
+          )}
           {userName && (
             <Box marginTop={1} marginLeft={2}>
               <Text dimColor>Welcome, </Text>

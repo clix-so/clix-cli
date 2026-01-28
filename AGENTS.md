@@ -147,6 +147,20 @@ Tests use `bun:test` (`describe`, `test`, `expect`, `mock`).
 
 **Mocking**: Use `mock.module()` for module mocks. See existing patterns in test files. Keep tests deterministic—avoid network calls.
 
+## Code Quality Requirements
+
+**After every code change**, run `bun run check && bun test` and fix ALL issues:
+
+1. **Errors**: Must be fixed immediately - code cannot be committed with errors
+2. **Warnings**: Must also be fixed - treat warnings as errors
+3. **Unrelated issues**: If you encounter warnings/errors in files unrelated to your current change, fix them too
+
+**Complexity warnings** (`noExcessiveCognitiveComplexity`):
+- When a function exceeds complexity threshold (25), refactor it by extracting helper functions
+- Common patterns: extract validation logic, split async operations, create focused sub-functions
+
+**Zero tolerance policy**: The codebase must have zero warnings AND zero errors after any change.
+
 ## Commits
 
 Follow Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`

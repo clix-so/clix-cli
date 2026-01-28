@@ -34,7 +34,8 @@ export const EMBEDDED_SKILLS: Record<string, string> = {
 name: clix-personalization
 display-name: Personalization
 short-description: Personalization templates
-description: Helps developers author and debug Clix personalization templates
+description:
+  Helps developers author and debug Clix personalization templates
   (Liquid-style) for message content, deep links/URLs, and audience targeting.
   Use when the user mentions personalization variables, Liquid, templates,
   conditional logic, loops, filters, deep links, message logs, or when the user
@@ -165,7 +166,8 @@ variables exist — you still need a payload + console verification.
 name: clix-integration
 display-name: SDK Integration
 short-description: SDK integration guide
-description: Integrates Clix Mobile SDK into iOS, Android, Flutter, and React Native
+description:
+  Integrates Clix Mobile SDK into iOS, Android, Flutter, and React Native
   projects. Provides step-by-step guidance for installation, initialization, and
   verification. Use when the user asks to install, setup, integrate Clix or when
   the user types \`clix-integration\` / "clix integration".
@@ -648,7 +650,8 @@ customization is absolutely necessary.
 name: clix-api-triggered-campaigns
 display-name: API-Triggered Campaigns
 short-description: API-triggered campaign setup
-description: Helps developers configure API-triggered campaigns in the Clix console and
+description:
+  Helps developers configure API-triggered campaigns in the Clix console and
   trigger them from backend services with safe auth, payload schemas, dynamic
   audience filters (trigger.*), and personalization best practices. Use when the
   user mentions transactional notifications, backend-triggered sends,
@@ -837,7 +840,8 @@ See \`references/debugging.md\`.
 name: clix-event-tracking
 display-name: Event Tracking
 short-description: Event tracking setup
-description: Implements Clix event tracking (Clix.trackEvent) with consistent naming, safe
+description:
+  Implements Clix event tracking (Clix.trackEvent) with consistent naming, safe
   property schemas, and campaign-ready validation. Use when adding, reviewing,
   or debugging event tracking; when configuring event-triggered campaigns; or
   when the user mentions events, tracking, funnels, or properties — or when the
@@ -935,8 +939,7 @@ The skill directory is typically:
 
 - \`.cursor/skills/event-tracking/\` (Cursor)
 - \`.claude/skills/event-tracking/\` (Claude Code)
-- \`.vscode/skills/event-tracking/\` (VS Code)
-- \`.agents/skills/event-tracking/\` (Amp)
+- \`.vscode/skills/event-tracking/\` (VS Code/Amp)
 - Or check where this skill was installed
 
 If validation fails: fix the plan first, then implement.
@@ -968,7 +971,8 @@ For troubleshooting steps, see \`references/debugging.md\`.
 name: clix-user-management
 display-name: User Management
 short-description: User management setup
-description: Implements Clix user identification and user properties (setUserId,
+description:
+  Implements Clix user identification and user properties (setUserId,
   removeUserId, setUserProperty/setUserProperties,
   removeUserProperty/removeUserProperties) with safe schemas, logout best
   practices, and campaign-ready personalization/audience usage. Use when the
