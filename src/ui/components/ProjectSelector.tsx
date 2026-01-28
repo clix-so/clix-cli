@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Organization, Project } from '@/lib/api';
 
 interface OrgWithProjects {
@@ -47,6 +47,15 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const totalItems = flattenedProjects.length;
   const halfWindow = Math.floor(maxVisible / 2);
 
+  // Clamp selectedIndex when list changes
+  useEffect(() => {
+    setSelectedIndex((prev) => {
+      if (totalItems <= 0) return 0;
+      if (prev >= totalItems) return totalItems - 1;
+      return prev;
+    });
+  }, [totalItems]);
+
   let startIndex = 0;
   let endIndex = maxVisible;
 
@@ -68,6 +77,14 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const visibleProjects = flattenedProjects.slice(startIndex, endIndex);
 
   useInput((_input, key) => {
+    // Handle empty list - only Enter/Esc work
+    if (totalItems === 0) {
+      if (key.return || key.escape) {
+        onSkip();
+      }
+      return;
+    }
+
     if (key.upArrow) {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
     } else if (key.downArrow) {
@@ -76,9 +93,6 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       const selected = flattenedProjects[selectedIndex];
       if (selected) {
         onSelect(selected.project, selected.org);
-      } else {
-        // Empty list - treat Enter as skip
-        onSkip();
       }
     } else if (key.escape) {
       onSkip();

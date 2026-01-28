@@ -206,6 +206,10 @@ export class CredentialsManager {
       if (error instanceof AuthError) {
         throw error;
       }
+      // Handle timeout errors from AbortSignal.timeout()
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        throw AuthError.timeout('Token refresh timed out. Please try again.');
+      }
       throw AuthError.refreshFailed(
         'Failed to refresh access token',
         error instanceof Error ? error : undefined,
