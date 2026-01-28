@@ -441,9 +441,12 @@ async function detectIosCredential(
   const expectedFile = found.find((f) => expectedPaths.includes(f.path));
   const file = expectedFile || found[0];
   const absolutePath = path.join(projectPath, file.path);
-  // Determine if file is in expected location based on expectedPaths parameter
+  // Determine if file is in expected location
+  // Honor both expectedPaths parameter and the inExpectedLocation flag from search results
   const inExpectedLocation =
-    expectedPaths.length === 0 ? file.inExpectedLocation : expectedPaths.includes(file.path);
+    expectedPaths.length === 0
+      ? file.inExpectedLocation
+      : expectedPaths.includes(file.path) || file.inExpectedLocation;
 
   try {
     const content = await readPlistFile(absolutePath);

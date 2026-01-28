@@ -172,6 +172,7 @@ export class CredentialsManager {
           client_id: config.clientId,
           refresh_token: credentials.refreshToken,
         }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!response.ok) {

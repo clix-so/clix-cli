@@ -76,6 +76,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       const selected = flattenedProjects[selectedIndex];
       if (selected) {
         onSelect(selected.project, selected.org);
+      } else {
+        // Empty list - treat Enter as skip
+        onSkip();
       }
     } else if (key.escape) {
       onSkip();
