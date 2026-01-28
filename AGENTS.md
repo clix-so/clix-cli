@@ -49,15 +49,16 @@ Slash command suggestions: `src/ui/chat/components/SlashCommandMenu.tsx` derives
 
 **Documentation Sync**: When making changes to the following, update both `README.md` and `llms.txt`:
 
-| Change Type | README.md Section | llms.txt Section |
-|-------------|-------------------|------------------|
-| Slash commands | "Slash Commands" table | "Slash Commands" + "Slash Commands Reference" |
-| AI agents | "Prerequisites" table, "clix agent" | "Prerequisites", "Agent System", "For AI Assistants" |
-| Skills (interactive/autonomous) | "Interactive Skills", "Slash Commands" | "Interactive Skills", "Autonomous Commands" |
-| CLI commands | "Commands" section | "Commands" section |
-| Config paths | N/A | "Configuration" section |
+| Change Type                     | README.md Section                      | llms.txt Section                                     |
+| ------------------------------- | -------------------------------------- | ---------------------------------------------------- |
+| Slash commands                  | "Slash Commands" table                 | "Slash Commands" + "Slash Commands Reference"        |
+| AI agents                       | "Prerequisites" table, "clix agent"    | "Prerequisites", "Agent System", "For AI Assistants" |
+| Skills (interactive/autonomous) | "Interactive Skills", "Slash Commands" | "Interactive Skills", "Autonomous Commands"          |
+| CLI commands                    | "Commands" section                     | "Commands" section                                   |
+| Config paths                    | N/A                                    | "Configuration" section                              |
 
 Key files:
+
 - `README.md` - User-facing documentation (concise)
 - `llms.txt` - AI assistant reference (comprehensive)
 
@@ -70,11 +71,13 @@ Key files:
 `src/lib/skills.ts` - Manages skill workflows.
 
 **Interactive Skills** (from `@clix-so/clix-agent-skills` package):
+
 - `integration`, `event-tracking`, `user-management`, `personalization`, `api-triggered-campaigns`
 - All use "Guided Interactive Workflow" pattern (Confirm → Propose → Validate → Implement → Verify)
 - Only available in Interactive mode (require conversation context)
 
 **Autonomous Commands** (local skills in `src/lib/skills.ts`):
+
 - `install`, `doctor`, `debug` - defined as `LOCAL_SKILLS` with `isLocal: true`
 - Can be executed in both Command mode (`clix install`) and Interactive mode (`/install`)
 
@@ -101,29 +104,35 @@ Key files:
 Rules for separating Command mode and Interactive mode:
 
 **Execution Modes**:
+
 - **Command mode**: `clix <command>` - Single execution, auto-exits (`oneShot: true`)
 - **Interactive mode**: `clix` - Persistent conversation session (`oneShot: false`)
 
 **Path Alias**:
+
 - `@/` = `src/` directory
 - Example: `import { Header } from '@/ui/components/Header'`
 
 **Shared Components (`@/ui/components/`)**:
+
 - `ToolCallDisplay` - Tool execution status (used by both modes)
 - `StatusMessage` - Status messages (loading/success/error)
 - `Header` - Simple title header
 - `AgentSelector`, `NoAgentGuide`, etc.
 
 **Interactive Mode Only (`@/ui/chat/components/`)**:
+
 - `ChatHeader`, `ChatFooter`, `ChatInput`
 - `MessageList`, `UserMessage`, `AgentMessage`
 - `SlashCommandMenu`
 
 **Command Mode Only (`@/ui/`)**:
+
 - `AgentExecutionUI.tsx` - AI agent-based command execution UI (install, doctor, etc.)
 - `ConfigUI.tsx` - Configuration UI
 
 **Rules**:
+
 1. Do not import from `@/ui/chat/components/` in Command mode
 2. If Interactive mode component is needed in Command mode, promote it to `@/ui/components/`
 3. When modifying one mode, test both modes (`bun run dev` + `bun run dev install`)
@@ -138,6 +147,20 @@ Tests use `bun:test` (`describe`, `test`, `expect`, `mock`).
 
 **Mocking**: Use `mock.module()` for module mocks. See existing patterns in test files. Keep tests deterministic—avoid network calls.
 
+## Code Quality Requirements
+
+**After every code change**, run `bun run check && bun test` and fix ALL issues:
+
+1. **Errors**: Must be fixed immediately - code cannot be committed with errors
+2. **Warnings**: Must also be fixed - treat warnings as errors
+3. **Unrelated issues**: If you encounter warnings/errors in files unrelated to your current change, fix them too
+
+**Complexity warnings** (`noExcessiveCognitiveComplexity`):
+- When a function exceeds complexity threshold (25), refactor it by extracting helper functions
+- Common patterns: extract validation logic, split async operations, create focused sub-functions
+
+**Zero tolerance policy**: The codebase must have zero warnings AND zero errors after any change.
+
 ## Commits
 
 Follow Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
@@ -145,6 +168,29 @@ Follow Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `ch
 Before committing: `bun run check && bun test`
 
 **Important**: All lint and typecheck warnings must be resolved before committing. The codebase should have zero warnings, not just zero errors.
+
+## OAuth Callback URL Convention
+
+All browser-based OAuth flows use port **9005** and path **`/auth/callback`**, but the hostname varies by provider due to technical requirements.
+
+**Rationale**: Using a fixed port and path simplifies OAuth provider configuration (Allowed Callback URLs).
+
+**Implementation**:
+
+- Auth0 (Clix login): `http://localhost:9005/auth/callback` via `getCallbackUrl()` - see `src/lib/auth/pkce-flow.ts`
+- Firebase/Google: `http://127.0.0.1:9005/auth/callback` via `getCallbackUrlIp()` - see `src/lib/services/firebase/oauth/config.ts`
+
+**Why different hostnames?** Desktop app OAuth (like Google OAuth for installed applications) requires the loopback IP address (`127.0.0.1`) rather than `localhost` per OAuth 2.0 for Native Apps (RFC 8252). Auth0 works with either, so it uses `localhost` for consistency.
+
+**Shared utilities**: `src/lib/utils/oauth.ts` provides:
+
+- `OAuthCallbackServer` - Local HTTP server for OAuth callbacks
+- `OAUTH_CALLBACK_CONFIG.getCallbackUrl()` - Returns `localhost` variant
+- `OAUTH_CALLBACK_CONFIG.getCallbackUrlIp()` - Returns `127.0.0.1` variant for desktop OAuth
+- `generateCodeVerifier()`, `generateCodeChallenge()` - PKCE utilities
+- `generateState()` - CSRF protection
+
+When adding new OAuth flows, use port 9005, path `/auth/callback`, the shared `OAuthCallbackServer` class, and pick the appropriate hostname method based on OAuth provider requirements.
 
 ## Security
 

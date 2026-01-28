@@ -18,7 +18,7 @@ import {
  * Current configuration schema version.
  * Increment when making breaking changes to config structure.
  */
-const CURRENT_VERSION = 3;
+const CURRENT_VERSION = 4;
 
 /**
  * Migration function type.
@@ -70,6 +70,18 @@ const MIGRATIONS: Record<number, MigrationFn> = {
     // Ensure update config exists with defaults
     if (!migrated.update || typeof migrated.update !== 'object') {
       migrated.update = { ...DEFAULT_UPDATE_CONFIG };
+    }
+
+    return migrated;
+  },
+
+  // Migration from v3 to v4: Add workspace mappings
+  4: (config: RawConfig): RawConfig => {
+    const migrated: RawConfig = { ...config, version: 4 };
+
+    // Initialize empty workspaces if not present
+    if (!migrated.workspaces) {
+      migrated.workspaces = {};
     }
 
     return migrated;
@@ -211,6 +223,7 @@ export class ConfigManager {
         ...config.update,
       },
       agents: config.agents ?? {},
+      workspaces: config.workspaces ?? {},
     };
   }
 

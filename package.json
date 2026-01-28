@@ -1,6 +1,6 @@
 {
   "name": "@clix-so/clix-cli",
-  "version": "1.1.1",
+  "version": "1.1.2-beta.1",
   "description": "A CLI tool for integrating and managing the Clix SDK in your mobile projects",
   "type": "module",
   "bin": {
@@ -49,12 +49,14 @@
     "@clix-so/clix-agent-skills": "^0.2.3",
     "@expo/apple-utils": "^2.1.14",
     "@expo/plist": "^0.4.8",
+    "asciify-image": "^0.1.10",
     "google-auth-library": "^10.5.0",
     "ink": "^6.6.0",
     "ink-select-input": "^6.2.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
     "meow": "^14.0.0",
+    "open": "^11.0.0",
     "picocolors": "^1.1.1",
     "plist": "^3.1.0",
     "react": "^19.2.3",

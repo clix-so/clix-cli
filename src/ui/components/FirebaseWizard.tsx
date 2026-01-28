@@ -20,6 +20,7 @@ import {
   platformNeedsIos,
   type WizardPhase,
 } from '@/lib/services/firebase';
+import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
 import { GenericSelector, type SelectorItem } from './GenericSelector';
 
@@ -727,7 +728,7 @@ Check your CLIX_GOOGLE_CLIENT_ID environment variable.`;
   }
   if (error.includes('redirect_uri_mismatch')) {
     return `The redirect URI doesn't match your OAuth client configuration.
-Add this to your OAuth client: http://127.0.0.1:9005/oauth/callback`;
+Add this to your OAuth client: ${OAUTH_CALLBACK_CONFIG.getCallbackUrlIp()}`;
   }
   if (error.includes('invalid_grant')) {
     return `The authorization code has expired or already been used.
@@ -1044,49 +1045,59 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     [downloader],
   );
 
+  // Handle project selection - fetch apps for required platforms
+  const fetchAppsForPlatforms = useCallback(
+    async (
+      project: FirebaseProject,
+      shouldFetchAndroid: boolean,
+      shouldFetchIos: boolean,
+    ): Promise<{ noAndroidApps: boolean; noIosApps: boolean }> => {
+      let noAndroidApps = false;
+      let noIosApps = false;
+
+      if (shouldFetchAndroid) {
+        const hasAndroidApps = await fetchAndHandleAndroidApps(project, shouldFetchIos);
+        if (!hasAndroidApps) {
+          noAndroidApps = true;
+          if (shouldFetchIos) {
+            const hasIosApps = await fetchAndHandleIosApps(project);
+            noIosApps = !hasIosApps;
+          }
+        }
+      } else if (shouldFetchIos) {
+        const hasIosApps = await fetchAndHandleIosApps(project);
+        noIosApps = !hasIosApps;
+      }
+
+      return { noAndroidApps, noIosApps };
+    },
+    [fetchAndHandleAndroidApps, fetchAndHandleIosApps],
+  );
+
   // Handle project selection
   const handleProjectSelect = useCallback(
     async (project: FirebaseProject) => {
       setSelectedProject(project);
       const { needsAndroid, needsIos, needsAndroidConfig, needsIosConfig } = getPlatformNeeds();
 
-      // For unknown platform or when user explicitly wants to download,
-      // we should fetch apps even if configs are already valid
       const platform = result?.platform ?? 'unknown';
       const forceDownload = platform === 'unknown';
       const shouldFetchAndroid = needsAndroidConfig || (forceDownload && needsAndroid);
       const shouldFetchIos = needsIosConfig || (forceDownload && needsIos);
 
+      if (!shouldFetchAndroid && !shouldFetchIos) {
+        setError('No configuration files needed for this platform.');
+        setPhase('error');
+        return;
+      }
+
       try {
-        // Track which platforms have no apps
-        let noAndroidApps = false;
-        let noIosApps = false;
+        const { noAndroidApps, noIosApps } = await fetchAppsForPlatforms(
+          project,
+          shouldFetchAndroid,
+          shouldFetchIos,
+        );
 
-        if (shouldFetchAndroid) {
-          const hasAndroidApps = await fetchAndHandleAndroidApps(project, shouldFetchIos);
-          if (!hasAndroidApps) {
-            noAndroidApps = true;
-            // No Android apps, try iOS if needed
-            if (shouldFetchIos) {
-              const hasIosApps = await fetchAndHandleIosApps(project);
-              if (!hasIosApps) {
-                noIosApps = true;
-              }
-            }
-          }
-        } else if (shouldFetchIos) {
-          const hasIosApps = await fetchAndHandleIosApps(project);
-          if (!hasIosApps) {
-            noIosApps = true;
-          }
-        } else {
-          // No configs needed - shouldn't happen but handle gracefully
-          setError('No configuration files needed for this platform.');
-          setPhase('error');
-          return;
-        }
-
-        // If any required platform has no apps, show the no apps found phase
         if ((shouldFetchAndroid && noAndroidApps) || (shouldFetchIos && noIosApps)) {
           setNoAppsContext({
             noAndroidApps,
@@ -1101,7 +1112,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         setPhase('error');
       }
     },
-    [getPlatformNeeds, fetchAndHandleAndroidApps, fetchAndHandleIosApps, result],
+    [getPlatformNeeds, fetchAppsForPlatforms, result],
   );
 
   // Use ref for project select handler

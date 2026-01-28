@@ -12,6 +12,8 @@ import { exitCommand } from './exit';
 import { firebaseCommand } from './firebase';
 import { helpCommand } from './help';
 import { installMcpCommand } from './install-mcp';
+import { loginCommand } from './login';
+import { logoutCommand } from './logout';
 import { newCommand } from './new';
 import { resumeCommand } from './resume';
 import { skillCommands } from './skills';
@@ -19,6 +21,7 @@ import { transferCommand } from './transfer';
 import type { Command } from './types';
 import { uninstallCommand } from './uninstall';
 import { updateCommand } from './update';
+import { whoamiCommand } from './whoami';
 
 /**
  * Built-in commands.
@@ -37,6 +40,10 @@ const BUILT_IN_COMMANDS: Command[] = [
   uninstallCommand,
   updateCommand,
   exitCommand,
+  // Auth commands
+  loginCommand,
+  logoutCommand,
+  whoamiCommand,
   // Skill commands
   ...skillCommands,
 ];

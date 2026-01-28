@@ -7,26 +7,16 @@
  * @module services/firebase/oauth/auth-client
  */
 
-import crypto from 'node:crypto';
-import http from 'node:http';
-import { URL, URLSearchParams } from 'node:url';
+import {
+  generateCodeChallenge,
+  generateCodeVerifier,
+  generateState,
+  OAUTH_CALLBACK_CONFIG,
+  OAuthCallbackServer,
+} from '@/lib/utils/oauth';
 import { GOOGLE_OAUTH_CONFIG, isOAuthConfigured } from './config';
 import { TokenStore } from './token-store';
 import type { AuthResult, OAuthCallbackResult, OAuthTokens } from './types';
-
-/**
- * Generate a cryptographically random code verifier for PKCE.
- */
-function generateCodeVerifier(): string {
-  return crypto.randomBytes(32).toString('base64url');
-}
-
-/**
- * Generate a code challenge from the verifier for PKCE.
- */
-function generateCodeChallenge(verifier: string): string {
-  return crypto.createHash('sha256').update(verifier).digest('base64url');
-}
 
 /**
  * Google OAuth client for CLI authentication.
@@ -36,6 +26,7 @@ export class GoogleAuthClient {
   private tokenStore: TokenStore;
   private codeVerifier: string | null = null;
   private oauthState: string | null = null;
+  private callbackServer: OAuthCallbackServer | null = null;
 
   constructor() {
     this.tokenStore = new TokenStore();
@@ -72,7 +63,7 @@ export class GoogleAuthClient {
   generateAuthUrl(): string {
     // Generate PKCE code verifier and challenge
     this.codeVerifier = generateCodeVerifier();
-    this.oauthState = crypto.randomBytes(16).toString('hex');
+    this.oauthState = generateState();
     const codeChallenge = generateCodeChallenge(this.codeVerifier);
 
     const params = new URLSearchParams({
@@ -105,101 +96,24 @@ export class GoogleAuthClient {
    *
    * @returns Promise resolving to callback result with authorization code
    */
-  waitForCallback(): Promise<OAuthCallbackResult> {
-    return new Promise((resolve, reject) => {
-      const server = http.createServer((req, res) => {
-        const url = new URL(req.url || '/', `http://127.0.0.1:${GOOGLE_OAUTH_CONFIG.callbackPort}`);
-
-        if (url.pathname === '/oauth/callback') {
-          const code = url.searchParams.get('code');
-          const state = url.searchParams.get('state') || '';
-          const error = url.searchParams.get('error');
-
-          if (error) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body style="font-family: system-ui; text-align: center; padding: 50px;">
-                  <h1>❌ Authentication Failed</h1>
-                  <p>Error: ${error}</p>
-                  <p>You can close this window.</p>
-                </body>
-              </html>
-            `);
-            cleanup();
-            reject(new Error(`OAuth error: ${error}`));
-            return;
-          }
-
-          // Validate OAuth state to prevent CSRF attacks
-          if (!this.oauthState || state !== this.oauthState) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body style="font-family: system-ui; text-align: center; padding: 50px;">
-                  <h1>❌ Authentication Failed</h1>
-                  <p>Invalid OAuth state.</p>
-                  <p>You can close this window.</p>
-                </body>
-              </html>
-            `);
-            cleanup();
-            reject(new Error('OAuth state mismatch'));
-            return;
-          }
-
-          if (!code) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body style="font-family: system-ui; text-align: center; padding: 50px;">
-                  <h1>❌ Authentication Failed</h1>
-                  <p>No authorization code received.</p>
-                  <p>You can close this window.</p>
-                </body>
-              </html>
-            `);
-            cleanup();
-            reject(new Error('No authorization code received'));
-            return;
-          }
-
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(`
-            <html>
-              <body style="font-family: system-ui; text-align: center; padding: 50px;">
-                <h1>Authentication Successful</h1>
-                <p>You can close this window and return to the CLI.</p>
-              </body>
-            </html>
-          `);
-          cleanup();
-          this.oauthState = null;
-          resolve({ code, state });
-        } else {
-          res.writeHead(404, { 'Content-Type': 'text/plain' });
-          res.end('Not Found');
-        }
-      });
-
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error('OAuth callback timeout'));
-      }, GOOGLE_OAUTH_CONFIG.timeoutMs);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        server.close();
-      };
-
-      // Bind to loopback IP only for security
-      server.listen(GOOGLE_OAUTH_CONFIG.callbackPort, '127.0.0.1');
-
-      server.on('error', (err) => {
-        cleanup();
-        reject(new Error(`Failed to start OAuth callback server: ${err.message}`));
-      });
+  async waitForCallback(): Promise<OAuthCallbackResult> {
+    this.callbackServer = new OAuthCallbackServer({
+      port: GOOGLE_OAUTH_CONFIG.callbackPort,
+      callbackPath: OAUTH_CALLBACK_CONFIG.path,
+      timeoutMs: GOOGLE_OAUTH_CONFIG.timeoutMs,
+      expectedState: this.oauthState ?? undefined,
     });
+
+    await this.callbackServer.start();
+
+    try {
+      const result = await this.callbackServer.waitForCallback();
+      this.oauthState = null;
+      return result;
+    } catch (error) {
+      this.oauthState = null;
+      throw error;
+    }
   }
 
   /**

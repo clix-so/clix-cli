@@ -285,59 +285,78 @@ async function findGoogleServicesJson(
   return results;
 }
 
-/**
- * Find GoogleService-Info.plist files in the project.
- */
-async function findGoogleServiceInfoPlist(
-  projectPath: string,
-): Promise<{ path: string; inExpectedLocation: boolean }[]> {
-  const results: { path: string; inExpectedLocation: boolean }[] = [];
+type PlistSearchResult = { path: string; inExpectedLocation: boolean };
 
-  // Check expected locations
+/** Search for plist in expected locations */
+async function searchExpectedPlistLocations(projectPath: string): Promise<PlistSearchResult[]> {
+  const results: PlistSearchResult[] = [];
   for (const searchPath of IOS_SEARCH_PATHS) {
     const fullPath = path.join(projectPath, searchPath);
     if (await fileExists(fullPath)) {
       results.push({ path: searchPath, inExpectedLocation: true });
     }
   }
+  return results;
+}
 
-  // Also search for app-specific plist locations in iOS directory
+/** Search for plist in iOS subdirectories */
+async function searchIosSubdirectories(projectPath: string): Promise<PlistSearchResult[]> {
+  const results: PlistSearchResult[] = [];
   const iosDir = path.join(projectPath, 'ios');
   try {
     const entries = await fs.readdir(iosDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory() && !IGNORE_DIRS.has(entry.name)) {
-        // Use POSIX join for relative path to ensure consistent forward slashes across platforms
         const plistPath = path.posix.join('ios', entry.name, 'GoogleService-Info.plist');
         const fullPath = path.join(projectPath, 'ios', entry.name, 'GoogleService-Info.plist');
         if (await fileExists(fullPath)) {
-          if (!results.some((r) => r.path === plistPath)) {
-            results.push({ path: plistPath, inExpectedLocation: true });
-          }
+          results.push({ path: plistPath, inExpectedLocation: true });
         }
       }
     }
   } catch {
     // iOS directory doesn't exist or can't be read
   }
+  return results;
+}
 
-  // Search for native iOS projects at root level (sibling directories to .xcodeproj)
+/** Search for plist in root level directories */
+async function searchRootLevelDirectories(projectPath: string): Promise<PlistSearchResult[]> {
+  const results: PlistSearchResult[] = [];
   try {
     const rootEntries = await fs.readdir(projectPath, { withFileTypes: true });
     for (const entry of rootEntries) {
       if (entry.isDirectory() && !IGNORE_DIRS.has(entry.name) && entry.name !== 'ios') {
-        // Use POSIX join for relative path to ensure consistent forward slashes across platforms
         const plistPath = path.posix.join(entry.name, 'GoogleService-Info.plist');
         const fullPath = path.join(projectPath, entry.name, 'GoogleService-Info.plist');
         if (await fileExists(fullPath)) {
-          if (!results.some((r) => r.path === plistPath)) {
-            results.push({ path: plistPath, inExpectedLocation: true });
-          }
+          results.push({ path: plistPath, inExpectedLocation: true });
         }
       }
     }
   } catch {
     // Root directory can't be read
+  }
+  return results;
+}
+
+/**
+ * Find GoogleService-Info.plist files in the project.
+ */
+async function findGoogleServiceInfoPlist(projectPath: string): Promise<PlistSearchResult[]> {
+  const expectedResults = await searchExpectedPlistLocations(projectPath);
+  const iosResults = await searchIosSubdirectories(projectPath);
+  const rootResults = await searchRootLevelDirectories(projectPath);
+
+  // Merge results, avoiding duplicates
+  const allPaths = new Set(expectedResults.map((r) => r.path));
+  const results = [...expectedResults];
+
+  for (const result of [...iosResults, ...rootResults]) {
+    if (!allPaths.has(result.path)) {
+      allPaths.add(result.path);
+      results.push(result);
+    }
   }
 
   return results;
@@ -422,9 +441,12 @@ async function detectIosCredential(
   const expectedFile = found.find((f) => expectedPaths.includes(f.path));
   const file = expectedFile || found[0];
   const absolutePath = path.join(projectPath, file.path);
-  // Determine if file is in expected location based on expectedPaths parameter
+  // Determine if file is in expected location
+  // Honor both expectedPaths parameter and the inExpectedLocation flag from search results
   const inExpectedLocation =
-    expectedPaths.length === 0 ? file.inExpectedLocation : expectedPaths.includes(file.path);
+    expectedPaths.length === 0
+      ? file.inExpectedLocation
+      : expectedPaths.includes(file.path) || file.inExpectedLocation;
 
   try {
     const content = await readPlistFile(absolutePath);

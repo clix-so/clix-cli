@@ -10,6 +10,9 @@ import { MCPInstallSelector } from '../components/MCPInstallSelector';
 import { SessionSelector } from '../components/SessionSelector';
 import { TransferSelector } from '../components/TransferSelector';
 import { UpdateNotification } from '../components/UpdateNotification';
+import { LoginUI } from '../LoginUI';
+import { LogoutUI } from '../LogoutUI';
+import { WhoamiUI } from '../WhoamiUI';
 import { ChatFooter } from './components/ChatFooter';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatInput } from './components/ChatInput';
@@ -223,6 +226,39 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
           projectPath={process.cwd()}
           onComplete={overlays.handleFirebaseComplete}
           onCancel={overlays.handleFirebaseCancel}
+        />
+      )}
+      {overlays.activeOverlay === 'login' && (
+        <LoginUI
+          onComplete={(credentials) => {
+            const expiresAt = new Date(credentials.expiresAt).toLocaleString();
+            overlays.handleLoginComplete(`Login successful. Token expires at ${expiresAt}`);
+          }}
+          onError={(error) => {
+            overlays.handleLoginComplete(`Login failed: ${error.message}`);
+          }}
+        />
+      )}
+      {overlays.activeOverlay === 'logout' && (
+        <LogoutUI
+          onComplete={(success) => {
+            overlays.handleLogoutComplete(success ? 'Successfully logged out' : 'Logout failed');
+          }}
+        />
+      )}
+      {overlays.activeOverlay === 'whoami' && (
+        <WhoamiUI
+          onComplete={(result) => {
+            if (result.status === 'ok') {
+              overlays.handleWhoamiComplete(
+                `Logged in as ${result.member.name} (${result.member.email})`,
+              );
+            } else if (result.status === 'not_logged_in') {
+              overlays.handleWhoamiComplete('Not logged in. Run /login to authenticate.');
+            } else {
+              overlays.handleWhoamiComplete(`Error: ${result.message}`);
+            }
+          }}
         />
       )}
 
