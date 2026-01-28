@@ -2,7 +2,7 @@
 set -e
 
 # Clix CLI Installer
-# Usage: curl -fsSL https://clix.sh/install.sh | bash
+# Usage: curl -fsSL https://clix.sh/install | bash
 #   or:  CLIX_VERSION=v1.0.0 curl -fsSL ... | bash
 #
 # Environment Variables:

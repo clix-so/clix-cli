@@ -35,19 +35,19 @@ bun remove -g @clix-so/clix-cli
 
 ## Script installation
 
-If you installed using the bash script (`curl -fsSL https://clix.sh/install.sh | bash`):
+If you installed using the bash script (`curl -fsSL https://clix.sh/install | bash`):
 
 ### One-line Uninstall (Recommended)
 
 ```bash
 # Basic uninstall (removes binary only)
-curl -fsSL https://clix.sh/uninstall.sh | bash
+curl -fsSL https://clix.sh/uninstall | bash
 
 # Complete uninstall (removes binary, config, and state files)
-curl -fsSL https://clix.sh/uninstall.sh | CLIX_REMOVE_CONFIG=true bash
+curl -fsSL https://clix.sh/uninstall | CLIX_REMOVE_CONFIG=true bash
 
 # Full cleanup (removes everything including PATH configuration)
-curl -fsSL https://clix.sh/uninstall.sh | CLIX_REMOVE_CONFIG=true CLIX_REMOVE_PATH=true bash
+curl -fsSL https://clix.sh/uninstall | CLIX_REMOVE_CONFIG=true CLIX_REMOVE_PATH=true bash
 ```
 
 ### Manual Uninstall

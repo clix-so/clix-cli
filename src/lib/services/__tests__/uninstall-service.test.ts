@@ -57,7 +57,7 @@ describe('getUninstallCommand', () => {
   test('should return uninstall script for binary installation', () => {
     const cmd = getUninstallCommand('binary');
     expect(cmd).toContain('curl -fsSL');
-    expect(cmd).toContain('uninstall.sh');
+    expect(cmd).toContain('uninstall');
   });
 
   test('should return null for unknown installation', () => {

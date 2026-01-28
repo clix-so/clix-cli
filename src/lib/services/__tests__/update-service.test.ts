@@ -66,7 +66,7 @@ describe('getUpdateCommand', () => {
   test('should return install script for binary installation', () => {
     const cmd = getUpdateCommand({ method: 'binary', isGlobal: true });
     expect(cmd).toContain('curl -fsSL');
-    expect(cmd).toContain('install.sh');
+    expect(cmd).toContain('install');
   });
 
   test('should return npm command as fallback for unknown installation', () => {
@@ -98,7 +98,7 @@ describe('executeUpdate', () => {
       ...basePlan,
       installMethod: 'binary',
       canAutoUpdate: true,
-      updateCommand: 'curl -fsSL https://clix.sh/install.sh | bash',
+      updateCommand: 'curl -fsSL https://clix.sh/install | bash',
     };
     // Binary installations now support auto-update via CLIX_VERSION env var
     const result = await executeUpdate(binaryPlan, { dryRun: true, force: false });

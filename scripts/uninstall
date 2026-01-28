@@ -1,12 +1,9 @@
 #!/bin/bash
-# Wrapper script - downloads and executes uninstall.sh
+# Wrapper script - downloads and executes uninstall
 # Supports multiple URL patterns:
 #   curl -fsSL https://clix.sh/uninstall | bash
-#   curl -fsSL https://clix.sh/uninstall.sh | bash
-#   curl -fsSL https://clix.sh/uninstall | bash
-#   curl -fsSL https://clix.sh/uninstall.sh | bash
 #
-# Environment variables are passed through to uninstall.sh:
+# Environment variables are passed through to uninstall:
 #   CLIX_INSTALL_DIR
 
 CLIX_INSTALL_DIR="${CLIX_INSTALL_DIR:-}" \

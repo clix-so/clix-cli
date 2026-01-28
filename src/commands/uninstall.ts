@@ -122,7 +122,7 @@ function displayUninstallResult(
     console.log(`  rm ${plan.binary.path}`);
     console.log('');
     console.log('Or use the uninstall script:');
-    console.log('  curl -fsSL https://clix.sh/uninstall.sh | bash');
+    console.log('  curl -fsSL https://clix.sh/uninstall | bash');
     console.log('');
   }
 
