@@ -3,15 +3,23 @@ set -e
 
 # Clix CLI Installer
 # Usage: curl -fsSL https://clix.sh/install | bash
-#   or:  CLIX_VERSION=v1.0.0 curl -fsSL ... | bash
+#   or:  curl -fsSL https://clix.sh/install | bash -s v1.0.0
+#
+# Arguments:
+#   VERSION              - Version to install (e.g., v1.0.0, v1.1.2-beta.1)
 #
 # Environment Variables:
-#   CLIX_VERSION         - Version to install (default: latest)
+#   CLIX_VERSION         - Version to install (default: latest, overridden by argument)
 #   CLIX_INSTALL_DIR     - Installation directory (default: ~/.local/bin)
 #   CLIX_NO_MODIFY_PATH  - Skip automatic PATH modification (default: false)
 #   CLIX_SKIP_CHECKSUM   - Skip SHA256 verification (default: false)
 
-CLIX_VERSION="${CLIX_VERSION:-latest}"
+# Accept version as first argument, fallback to env var, then default to "latest"
+if [ -n "$1" ]; then
+  CLIX_VERSION="$1"
+else
+  CLIX_VERSION="${CLIX_VERSION:-latest}"
+fi
 CLIX_INSTALL_DIR="${CLIX_INSTALL_DIR:-$HOME/.local/bin}"
 CLIX_NO_MODIFY_PATH="${CLIX_NO_MODIFY_PATH:-false}"
 CLIX_SKIP_CHECKSUM="${CLIX_SKIP_CHECKSUM:-false}"
