@@ -43,8 +43,8 @@ Modify the Xcode project file (.pbxproj) to link the entitlements file:
 
 #### 2. Create Notification Service Extension [Required]
 Create a new Notification Service Extension target for rich push notifications:
-- Target name: \`${context.appName}NotificationServiceExtension\` or \`NotificationServiceExtension\`
-- Bundle ID: \`${context.bundleId}.NotificationServiceExtension\`
+- Target name: \`${context.appName}NotificationServiceExtension\`
+- Bundle ID: \`${context.bundleId}.${context.appName}NotificationServiceExtension\`
 - Deployment target: Same as main app or iOS 14.0+
 - Create necessary files in the extension directory
 
@@ -86,7 +86,7 @@ In Xcode:
 3. Click + and add the Clix package
 
 #### 5. Create Extension Entitlements [Required]
-Create entitlements file for the extension at \`${context.iosDir}/NotificationServiceExtension/NotificationServiceExtension.entitlements\`:
+Create entitlements file for the extension at \`${context.iosDir}/${context.appName}NotificationServiceExtension/${context.appName}NotificationServiceExtension.entitlements\`:
 
 \`\`\`xml
 <?xml version="1.0" encoding="UTF-8"?>

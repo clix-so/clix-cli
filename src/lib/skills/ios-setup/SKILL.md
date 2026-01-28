@@ -136,8 +136,9 @@ Create a Notification Service Extension for rich push notifications (images, but
 ```text
 1. File > New > Target
 2. Select "Notification Service Extension"
-3. Name it "{AppName}NotificationServiceExtension"
+3. Name it "{AppName}NotificationServiceExtension" (e.g., "MyAppNotificationServiceExtension")
 4. Click "Finish" (Cancel the "Activate scheme" dialog)
+5. Note: Use this exact name consistently in Podfile, entitlements path, and SPM setup
 ```
 
 **Implement NotificationService.swift:**
