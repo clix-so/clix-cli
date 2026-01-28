@@ -21,7 +21,7 @@ export const OAUTH_CALLBACK_CONFIG = {
   /** Fixed port for OAuth callback server */
   port: 9005,
   /** Callback path */
-  path: '/oauth/callback',
+  path: '/auth/callback',
   /** Timeout in milliseconds (5 minutes) */
   timeoutMs: 5 * 60 * 1000,
   /** Get full callback URL with localhost */

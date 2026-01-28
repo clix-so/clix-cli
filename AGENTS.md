@@ -49,15 +49,16 @@ Slash command suggestions: `src/ui/chat/components/SlashCommandMenu.tsx` derives
 
 **Documentation Sync**: When making changes to the following, update both `README.md` and `llms.txt`:
 
-| Change Type | README.md Section | llms.txt Section |
-|-------------|-------------------|------------------|
-| Slash commands | "Slash Commands" table | "Slash Commands" + "Slash Commands Reference" |
-| AI agents | "Prerequisites" table, "clix agent" | "Prerequisites", "Agent System", "For AI Assistants" |
-| Skills (interactive/autonomous) | "Interactive Skills", "Slash Commands" | "Interactive Skills", "Autonomous Commands" |
-| CLI commands | "Commands" section | "Commands" section |
-| Config paths | N/A | "Configuration" section |
+| Change Type                     | README.md Section                      | llms.txt Section                                     |
+| ------------------------------- | -------------------------------------- | ---------------------------------------------------- |
+| Slash commands                  | "Slash Commands" table                 | "Slash Commands" + "Slash Commands Reference"        |
+| AI agents                       | "Prerequisites" table, "clix agent"    | "Prerequisites", "Agent System", "For AI Assistants" |
+| Skills (interactive/autonomous) | "Interactive Skills", "Slash Commands" | "Interactive Skills", "Autonomous Commands"          |
+| CLI commands                    | "Commands" section                     | "Commands" section                                   |
+| Config paths                    | N/A                                    | "Configuration" section                              |
 
 Key files:
+
 - `README.md` - User-facing documentation (concise)
 - `llms.txt` - AI assistant reference (comprehensive)
 
@@ -70,11 +71,13 @@ Key files:
 `src/lib/skills.ts` - Manages skill workflows.
 
 **Interactive Skills** (from `@clix-so/clix-agent-skills` package):
+
 - `integration`, `event-tracking`, `user-management`, `personalization`, `api-triggered-campaigns`
 - All use "Guided Interactive Workflow" pattern (Confirm → Propose → Validate → Implement → Verify)
 - Only available in Interactive mode (require conversation context)
 
 **Autonomous Commands** (local skills in `src/lib/skills.ts`):
+
 - `install`, `doctor`, `debug` - defined as `LOCAL_SKILLS` with `isLocal: true`
 - Can be executed in both Command mode (`clix install`) and Interactive mode (`/install`)
 
@@ -101,29 +104,35 @@ Key files:
 Rules for separating Command mode and Interactive mode:
 
 **Execution Modes**:
+
 - **Command mode**: `clix <command>` - Single execution, auto-exits (`oneShot: true`)
 - **Interactive mode**: `clix` - Persistent conversation session (`oneShot: false`)
 
 **Path Alias**:
+
 - `@/` = `src/` directory
 - Example: `import { Header } from '@/ui/components/Header'`
 
 **Shared Components (`@/ui/components/`)**:
+
 - `ToolCallDisplay` - Tool execution status (used by both modes)
 - `StatusMessage` - Status messages (loading/success/error)
 - `Header` - Simple title header
 - `AgentSelector`, `NoAgentGuide`, etc.
 
 **Interactive Mode Only (`@/ui/chat/components/`)**:
+
 - `ChatHeader`, `ChatFooter`, `ChatInput`
 - `MessageList`, `UserMessage`, `AgentMessage`
 - `SlashCommandMenu`
 
 **Command Mode Only (`@/ui/`)**:
+
 - `AgentExecutionUI.tsx` - AI agent-based command execution UI (install, doctor, etc.)
 - `ConfigUI.tsx` - Configuration UI
 
 **Rules**:
+
 1. Do not import from `@/ui/chat/components/` in Command mode
 2. If Interactive mode component is needed in Command mode, promote it to `@/ui/components/`
 3. When modifying one mode, test both modes (`bun run dev` + `bun run dev install`)
@@ -148,20 +157,22 @@ Before committing: `bun run check && bun test`
 
 ## OAuth Callback URL Convention
 
-All browser-based OAuth flows use a unified callback URL: **`http://localhost:9005/oauth/callback`**
+All browser-based OAuth flows use a unified callback URL: **`http://localhost:9005/auth/callback`**
 
 **Rationale**: Using a fixed port and path simplifies OAuth provider configuration (Allowed Callback URLs).
 
 **Implementation**:
-- Auth0 (Clix login): `http://localhost:9005/oauth/callback` - see `src/lib/auth/pkce-flow.ts`
-- Firebase/Google: `http://127.0.0.1:9005/oauth/callback` - see `src/lib/services/firebase/oauth/config.ts`
+
+- Auth0 (Clix login): `http://localhost:9005/auth/callback` - see `src/lib/auth/pkce-flow.ts`
+- Firebase/Google: `http://127.0.0.1:9005/auth/callback` - see `src/lib/services/firebase/oauth/config.ts`
 
 **Shared utilities**: `src/lib/utils/oauth.ts` provides:
+
 - `OAuthCallbackServer` - Local HTTP server for OAuth callbacks
 - `generateCodeVerifier()`, `generateCodeChallenge()` - PKCE utilities
 - `generateState()` - CSRF protection
 
-When adding new OAuth flows, use port 9005, path `/oauth/callback`, and the shared `OAuthCallbackServer` class.
+When adding new OAuth flows, use port 9005, path `/auth/callback`, and the shared `OAuthCallbackServer` class.
 
 ## Security
 
