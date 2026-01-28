@@ -132,16 +132,13 @@ Create or modify entitlements files. Use Write/Edit tools for these operations.
 
 Create a Notification Service Extension for rich push notifications (images, buttons, etc.).
 
-**Create Extension Target in Xcode:**
-```text
-1. File > New > Target
-2. Select "Notification Service Extension"
-3. Name it "{AppName}NotificationServiceExtension" (e.g., "MyAppNotificationServiceExtension")
-4. Click "Finish" (Cancel the "Activate scheme" dialog)
-5. Note: Use this exact name consistently in Podfile, entitlements path, and SPM setup
-```
+#### What CAN Be Automated (use Write/Edit tools immediately)
 
-**Implement NotificationService.swift:**
+**IMPORTANT:** Create these files AUTOMATICALLY without asking for permission.
+
+**1. Create NotificationService.swift**
+
+Use Write tool to create `ios/{AppName}NotificationServiceExtension/NotificationService.swift`:
 
 ```swift
 import UserNotifications
@@ -152,28 +149,106 @@ class NotificationService: ClixNotificationServiceExtension {
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
-        register(projectId: "YOUR_PROJECT_ID")
+        register(projectId: "YOUR_CLIX_PROJECT_ID")
         super.didReceive(request, withContentHandler: contentHandler)
     }
 }
 ```
 
-**Note:** Replace `YOUR_PROJECT_ID` with your actual Clix project ID from <https://console.clix.so/>
+**2. Create Extension Info.plist**
 
-**Add Clix SDK to Extension Target:**
+Use Write tool to create `ios/{AppName}NotificationServiceExtension/Info.plist`:
 
-For CocoaPods projects, add to Podfile:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>{AppName}NotificationServiceExtension</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.usernotifications.service</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>$(PRODUCT_MODULE_NAME).NotificationService</string>
+    </dict>
+</dict>
+</plist>
+```
+
+**3. Create Extension Entitlements**
+
+Use Write tool to create `ios/{AppName}NotificationServiceExtension/{AppName}NotificationServiceExtension.entitlements`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.clix.{BUNDLE_ID}</string>
+    </array>
+</dict>
+</plist>
+```
+
+**4. Update Podfile (CocoaPods projects)**
+
+Use Edit tool to add extension target to Podfile:
+
 ```ruby
 target '{AppName}NotificationServiceExtension' do
-  pod 'Clix'
+  pod 'Clix', :git => 'https://github.com/clix-so/clix-ios-sdk.git'
 end
 ```
+
 Then run: `cd ios && pod install`
 
-For SPM projects in Xcode:
+**Note:** Replace `{AppName}` with the actual app name and `{BUNDLE_ID}` with the actual bundle identifier (e.g., `com.example.myapp`).
+
+#### What CANNOT Be Automated (provide instructions only)
+
+These steps require manual Xcode UI interaction:
+
+**Create Extension Target in Xcode:**
+```text
+1. File > New > Target
+2. Select "Notification Service Extension"
+3. Name it "{AppName}NotificationServiceExtension" (e.g., "MyAppNotificationServiceExtension")
+4. Click "Finish" (Cancel the "Activate scheme" dialog)
+5. Xcode will create a default NotificationService.swift - the automated version above will replace it
+```
+
+**Link Entitlements in Build Settings:**
+```text
 1. Select the extension target
-2. Go to General > Frameworks, Libraries, and Embedded Content
-3. Click + and add the Clix package
+2. Go to Build Settings
+3. Search for "Code Signing Entitlements"
+4. Set the path to: {AppName}NotificationServiceExtension/{AppName}NotificationServiceExtension.entitlements
+```
+
+**Add App Groups Capability:**
+```text
+1. Select extension target > Signing & Capabilities
+2. Click "+ Capability" > "App Groups"
+3. Select the same group ID used in main app: group.clix.{BUNDLE_ID}
+```
 
 **Configure Build Settings (Xcode 15+):**
 
@@ -182,6 +257,13 @@ For the extension target:
 
 For React Native projects with Firebase:
 - In Build Phases, move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
+
+**For SPM projects in Xcode:**
+```text
+1. Select the extension target
+2. Go to General > Frameworks, Libraries, and Embedded Content
+3. Click + and add the Clix package
+```
 
 ### Phase 4: Apple Developer Portal Configuration
 

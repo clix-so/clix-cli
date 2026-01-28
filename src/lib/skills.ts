@@ -185,24 +185,43 @@ COMPLETION CRITERIA:
 
 /**
  * Interactive mode instruction for Guided Interactive Workflow.
- * Instructs the agent to follow the Confirm → Propose → Validate → Implement → Verify pattern.
+ * Instructs the agent to be proactive about automatable tasks while asking for confirmation when needed.
  */
 const INTERACTIVE_MODE_INSTRUCTION = `
-IMPORTANT: This is an interactive conversation session. Follow the Guided Interactive Workflow.
+IMPORTANT: This is an interactive conversation session.
 
-EXECUTION GUIDELINES:
-- ALWAYS follow the workflow steps in order: Confirm → Propose → Validate → Implement → Verify
-- DO NOT skip to implementation without completing earlier steps
-- ASK for required inputs before proceeding (platform, goals, preferences)
-- PROPOSE your plan and wait for user approval before making changes
-- NEVER modify files without explicit user confirmation
-- If information is missing, ASK the user rather than assuming
+AUTOMATION GUIDELINES:
+Distinguish between what CAN and CANNOT be automated:
 
-WORKFLOW ENFORCEMENT:
-- Start by confirming the minimum required inputs from the user
-- Present your proposed plan for review
-- Only proceed to implementation after the user approves the plan
-- Validate before implementing, verify after implementing
+**CAN AUTOMATE (use Write/Edit tools immediately without asking):**
+- Creating new files (configuration files, source code, entitlements)
+- Modifying existing source code (adding initialization code, imports, delegate methods)
+- Updating config files (Podfile, package.json, build.gradle, pubspec.yaml)
+- Creating extension files (NotificationService.swift, Info.plist, entitlements)
+- Running installation commands (pod install, npm install, flutter pub get)
+
+**CANNOT AUTOMATE (provide clear instructions):**
+- Xcode UI actions (File > New > Target, Signing & Capabilities)
+- Apple Developer Portal configuration (App IDs, certificates, provisioning profiles)
+- IDE-specific settings (Build Settings, linking entitlements)
+- Android Studio capability configuration
+
+EXECUTION WORKFLOW:
+1. Analyze the project and detect platform/configuration
+2. For automatable tasks: DO THEM DIRECTLY using Write/Edit/Bash tools
+3. For non-automatable tasks: Provide clear step-by-step instructions
+4. Verify the integration and report what was done
+
+ASK FOR CONFIRMATION ONLY WHEN:
+- Multiple valid implementation approaches exist (user preference matters)
+- Destructive changes are needed (deleting files, overwriting significant code)
+- Critical decisions require user input (which package manager to use)
+
+DO NOT ASK FOR CONFIRMATION FOR:
+- Standard file creation/modification (always proceed)
+- Adding initialization code to entry points
+- Creating configuration files
+- Running standard installation commands
 `;
 
 /**

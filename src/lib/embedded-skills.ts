@@ -458,30 +458,175 @@ Create or update documentation:
 
 ### iOS (Swift)
 
-**Initialization Pattern:**
+**SwiftUI App Pattern (simple initialization):**
 
 \`\`\`swift
+import SwiftUI
 import Clix
 
 @main
 struct MyApp: App {
     init() {
         // Load credentials from your app configuration (do NOT hardcode).
-        // Example: store values in Info.plist keys.
         let projectId = Bundle.main.object(forInfoDictionaryKey: "CLIX_PROJECT_ID") as? String ?? ""
         let apiKey = Bundle.main.object(forInfoDictionaryKey: "CLIX_PUBLIC_API_KEY") as? String
 
         let config = ClixConfig(projectId: projectId, apiKey: apiKey)
         Clix.initialize(config: config)
     }
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
+}
+\`\`\`
+
+**AppDelegate Pattern (RECOMMENDED for push notifications):**
+
+For apps that need push notifications, use the AppDelegate pattern with full delegate methods:
+
+\`\`\`swift
+import UIKit
+import UserNotifications
+import Clix
+
+@main
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Initialize Clix SDK
+        let projectId = Bundle.main.object(forInfoDictionaryKey: "CLIX_PROJECT_ID") as? String ?? ""
+        let apiKey = Bundle.main.object(forInfoDictionaryKey: "CLIX_PUBLIC_API_KEY") as? String
+        let config = ClixConfig(projectId: projectId, apiKey: apiKey)
+        Clix.initialize(config: config)
+
+        // Set notification delegate
+        UNUserNotificationCenter.current().delegate = self
+
+        // Request push notification permission
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if granted {
+                DispatchQueue.main.async {
+                    application.registerForRemoteNotifications()
+                }
+            }
+        }
+
+        return true
+    }
+
+    // MARK: - Push Token Registration
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        // Pass the device token to Clix for push notification delivery
+        Clix.setPushToken(deviceToken)
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("Failed to register for push notifications: \\(error)")
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    // Handle foreground notifications - show banner even when app is active
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    // Handle notification tap - track engagement and process deep links
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        Clix.handleNotificationResponse(response)
+        completionHandler()
+    }
+}
+\`\`\`
+
+**SwiftUI App with AppDelegate (hybrid pattern):**
+
+For SwiftUI apps that need push notification handling:
+
+\`\`\`swift
+import SwiftUI
+import UserNotifications
+import Clix
+
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Initialize Clix SDK
+        let projectId = Bundle.main.object(forInfoDictionaryKey: "CLIX_PROJECT_ID") as? String ?? ""
+        let apiKey = Bundle.main.object(forInfoDictionaryKey: "CLIX_PUBLIC_API_KEY") as? String
+        let config = ClixConfig(projectId: projectId, apiKey: apiKey)
+        Clix.initialize(config: config)
+
+        // Set notification delegate
+        UNUserNotificationCenter.current().delegate = self
+
+        // Request push notification permission
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if granted {
+                DispatchQueue.main.async {
+                    application.registerForRemoteNotifications()
+                }
+            }
+        }
+
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Clix.setPushToken(deviceToken)
+    }
+
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("Failed to register for push notifications: \\(error)")
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        Clix.handleNotificationResponse(response)
+        completionHandler()
+    }
+}
+
+@main
+struct MyApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+        }
+    }
 }
 \`\`\`
 
 **Key Points:**
 
-- Initialize in \`@main\` app struct or \`AppDelegate\`
-- Use environment variables, never hardcode
-- Handle optional API key for analytics-only mode
+- For push notifications, use the AppDelegate pattern (not just SwiftUI \`init\`)
+- Set \`UNUserNotificationCenter.current().delegate = self\` before registering
+- Implement all delegate methods: \`didRegisterForRemoteNotificationsWithDeviceToken\`, \`willPresent\`, \`didReceive\`
+- Call \`Clix.setPushToken(deviceToken)\` in the token registration callback
+- Call \`Clix.handleNotificationResponse(response)\` when notification is tapped
+- Use environment variables (Info.plist), never hardcode credentials
 
 ### Android (Kotlin)
 

@@ -154,40 +154,148 @@ Use `/firebase` command in interactive mode to check and configure Firebase cred
 - Provide manual steps for code changes - make the changes
 - Wait for user input (except for IDE-only tasks)
 
+## iOS Notification Service Extension (Recommended)
+
+For rich push notifications (images, buttons), the Notification Service Extension (NSE) is required.
+
+### What CAN Be Automated (use Write/Edit tools immediately)
+
+Create these files AUTOMATICALLY without asking for permission:
+
+**1. Create NotificationService.swift**
+
+Create file at `ios/{AppName}NotificationServiceExtension/NotificationService.swift`:
+
+```swift
+import UserNotifications
+import Clix
+
+class NotificationService: ClixNotificationServiceExtension {
+    override func didReceive(
+        _ request: UNNotificationRequest,
+        withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
+    ) {
+        register(projectId: "YOUR_CLIX_PROJECT_ID")
+        super.didReceive(request, withContentHandler: contentHandler)
+    }
+}
+```
+
+**2. Create Extension Info.plist**
+
+Create file at `ios/{AppName}NotificationServiceExtension/Info.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>{AppName}NotificationServiceExtension</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.usernotifications.service</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>$(PRODUCT_MODULE_NAME).NotificationService</string>
+    </dict>
+</dict>
+</plist>
+```
+
+**3. Create Extension Entitlements**
+
+Create file at `ios/{AppName}NotificationServiceExtension/{AppName}NotificationServiceExtension.entitlements`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.clix.{BUNDLE_ID}</string>
+    </array>
+</dict>
+</plist>
+```
+
+**4. Create/Update Main App Entitlements**
+
+Create or update file at `ios/{AppName}/{AppName}.entitlements`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>aps-environment</key>
+    <string>development</string>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.clix.{BUNDLE_ID}</string>
+    </array>
+</dict>
+</plist>
+```
+
+**5. Update Podfile (CocoaPods projects only)**
+
+Add extension target to Podfile:
+
+```ruby
+target '{AppName}NotificationServiceExtension' do
+  pod 'Clix', :git => 'https://github.com/clix-so/clix-ios-sdk.git'
+end
+```
+
+Then run: `cd ios && pod install`
+
+### What CANNOT Be Automated (provide instructions only)
+
+Only these steps require manual Xcode UI interaction:
+
+1. **Create Xcode target**: File > New > Target > Notification Service Extension
+   - Name it `{AppName}NotificationServiceExtension`
+   - After creating, Xcode will generate a default `NotificationService.swift` - replace it with our version
+
+2. **Link entitlements in Build Settings**:
+   - Select extension target > Build Settings
+   - Search for "Code Signing Entitlements"
+   - Set path to `{AppName}NotificationServiceExtension/{AppName}NotificationServiceExtension.entitlements`
+
+3. **Add App Groups capability in Xcode**:
+   - Main app target > Signing & Capabilities > + Capability > App Groups
+   - Extension target > Signing & Capabilities > + Capability > App Groups
+   - Select the same group ID: `group.clix.{BUNDLE_ID}`
+
+4. **For Xcode 15+**: Set `ENABLE_USER_SCRIPT_SANDBOXING` to "No" in extension's Build Settings
+
+For detailed setup, run `clix ios-setup` or `/ios-setup` in interactive mode.
+
 ## IDE-Only Manual Steps
 
 Only these require user action:
-- Xcode: Adding capabilities, configuring entitlements
-- Android Studio: Firebase setup UI, capability configuration
+- Xcode: Adding capabilities in Signing & Capabilities tab, creating extension target
+- Apple Developer Portal: Registering App Group ID, enabling Push Notifications on App ID
+- Android Studio: Firebase setup UI
 - Building and running the project
 
 For these, provide brief instructions but don't wait for confirmation.
-
-### iOS Notification Service Extension (Recommended)
-
-For rich push notifications (images, buttons), create a Notification Service Extension:
-
-1. In Xcode: File > New > Target > Notification Service Extension
-2. Add Clix SDK to the extension target:
-   - **CocoaPods**: Add `target 'YourExtension' do pod 'Clix' end` to Podfile, then `pod install`
-   - **SPM**: Add Clix package to extension target in Xcode (General > Frameworks)
-3. Implement NotificationService.swift:
-   ```swift
-   import UserNotifications
-   import Clix
-
-   class NotificationService: ClixNotificationServiceExtension {
-       override func didReceive(_ request: UNNotificationRequest,
-                               withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
-           register(projectId: "YOUR_PROJECT_ID")
-           super.didReceive(request, withContentHandler: contentHandler)
-       }
-   }
-   ```
-4. Add App Groups capability to both main app and extension (same group ID: `group.clix.{BUNDLE_ID}`)
-5. For Xcode 15+: Set `ENABLE_USER_SCRIPT_SANDBOXING` to "No" in extension's Build Settings
-
-For detailed setup, run `clix ios-setup` or `/ios-setup` in interactive mode.
 
 ## Output Format
 
