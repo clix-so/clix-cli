@@ -1,6 +1,6 @@
 {
   "name": "@clix-so/clix-cli",
-  "version": "1.1.1",
+  "version": "1.1.2-beta.1",
   "description": "A CLI tool for integrating and managing the Clix SDK in your mobile projects",
   "type": "module",
   "bin": {
