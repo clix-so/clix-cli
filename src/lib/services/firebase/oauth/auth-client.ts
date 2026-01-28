@@ -11,6 +11,7 @@ import {
   generateCodeChallenge,
   generateCodeVerifier,
   generateState,
+  OAUTH_CALLBACK_CONFIG,
   OAuthCallbackServer,
 } from '@/lib/utils/oauth';
 import { GOOGLE_OAUTH_CONFIG, isOAuthConfigured } from './config';
@@ -98,7 +99,7 @@ export class GoogleAuthClient {
   async waitForCallback(): Promise<OAuthCallbackResult> {
     this.callbackServer = new OAuthCallbackServer({
       port: GOOGLE_OAUTH_CONFIG.callbackPort,
-      callbackPath: '/oauth/callback',
+      callbackPath: OAUTH_CALLBACK_CONFIG.path,
       timeoutMs: GOOGLE_OAUTH_CONFIG.timeoutMs,
       expectedState: this.oauthState ?? undefined,
     });

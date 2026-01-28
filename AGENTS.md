@@ -146,6 +146,23 @@ Before committing: `bun run check && bun test`
 
 **Important**: All lint and typecheck warnings must be resolved before committing. The codebase should have zero warnings, not just zero errors.
 
+## OAuth Callback URL Convention
+
+All browser-based OAuth flows use a unified callback URL: **`http://localhost:9005/oauth/callback`**
+
+**Rationale**: Using a fixed port and path simplifies OAuth provider configuration (Allowed Callback URLs).
+
+**Implementation**:
+- Auth0 (Clix login): `http://localhost:9005/oauth/callback` - see `src/lib/auth/pkce-flow.ts`
+- Firebase/Google: `http://127.0.0.1:9005/oauth/callback` - see `src/lib/services/firebase/oauth/config.ts`
+
+**Shared utilities**: `src/lib/utils/oauth.ts` provides:
+- `OAuthCallbackServer` - Local HTTP server for OAuth callbacks
+- `generateCodeVerifier()`, `generateCodeChallenge()` - PKCE utilities
+- `generateState()` - CSRF protection
+
+When adding new OAuth flows, use port 9005, path `/oauth/callback`, and the shared `OAuthCallbackServer` class.
+
 ## Security
 
 Do not commit API keys or user data. Local config lives in `$XDG_CONFIG_HOME/clix/config.json` (default: `~/.config/clix/config.json`).

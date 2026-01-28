@@ -2,6 +2,7 @@ import {
   generateCodeChallenge,
   generateCodeVerifier,
   generateState,
+  OAUTH_CALLBACK_CONFIG,
   OAuthCallbackServer,
 } from '@/lib/utils/oauth';
 import { AuthError } from './errors';
@@ -51,15 +52,14 @@ export class PKCEFlowService {
    * @returns Authorization URL and local server port
    */
   async startAuthFlow(): Promise<{ authUrl: string; port: number }> {
+    // Use shared OAuth callback configuration
+    // See CLAUDE.md for OAuth callback URL convention
     this.callbackServer = new OAuthCallbackServer({
-      port: 0,
-      callbackPath: '/callback',
-      timeoutMs: 300000,
       expectedState: this.state,
     });
 
     const { port } = await this.callbackServer.start();
-    this.redirectUri = `http://localhost:${port}/callback`;
+    this.redirectUri = OAUTH_CALLBACK_CONFIG.getCallbackUrl();
 
     const params = new URLSearchParams({
       client_id: this.config.clientId,

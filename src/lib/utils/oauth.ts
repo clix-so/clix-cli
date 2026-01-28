@@ -7,6 +7,31 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 
+// ============================================================================
+// Shared OAuth Callback Configuration
+// ============================================================================
+
+/**
+ * Unified OAuth callback configuration.
+ * All OAuth flows (Auth0, Firebase/Google) use these settings.
+ *
+ * See CLAUDE.md "OAuth Callback URL Convention" for details.
+ */
+export const OAUTH_CALLBACK_CONFIG = {
+  /** Fixed port for OAuth callback server */
+  port: 9005,
+  /** Callback path */
+  path: '/oauth/callback',
+  /** Timeout in milliseconds (5 minutes) */
+  timeoutMs: 5 * 60 * 1000,
+  /** Get full callback URL with localhost */
+  getCallbackUrl: () =>
+    `http://localhost:${OAUTH_CALLBACK_CONFIG.port}${OAUTH_CALLBACK_CONFIG.path}`,
+  /** Get full callback URL with 127.0.0.1 (required by some OAuth providers like Google) */
+  getCallbackUrlIp: () =>
+    `http://127.0.0.1:${OAUTH_CALLBACK_CONFIG.port}${OAUTH_CALLBACK_CONFIG.path}`,
+} as const;
+
 /**
  * Result from OAuth callback.
  */
@@ -147,13 +172,14 @@ function defaultErrorHtml(message: string): string {
  * @example
  * ```typescript
  * const server = new OAuthCallbackServer({
- *   callbackPath: '/callback',
- *   timeoutMs: 300000,
+ *   port: OAUTH_CALLBACK_CONFIG.port,
+ *   callbackPath: OAUTH_CALLBACK_CONFIG.path,
+ *   timeoutMs: OAUTH_CALLBACK_CONFIG.timeoutMs,
  *   expectedState: state,
  * });
  *
- * const { port } = await server.start();
- * // Open browser to auth URL with redirect_uri = http://localhost:${port}/callback
+ * await server.start();
+ * // Open browser to auth URL with redirect_uri from OAUTH_CALLBACK_CONFIG.getCallbackUrl()
  *
  * const { code } = await server.waitForCallback();
  * ```
@@ -165,9 +191,9 @@ export class OAuthCallbackServer {
 
   constructor(options: CallbackServerOptions = {}) {
     this.options = {
-      port: options.port ?? 0,
-      callbackPath: options.callbackPath ?? '/callback',
-      timeoutMs: options.timeoutMs ?? 300000,
+      port: options.port ?? OAUTH_CALLBACK_CONFIG.port,
+      callbackPath: options.callbackPath ?? OAUTH_CALLBACK_CONFIG.path,
+      timeoutMs: options.timeoutMs ?? OAUTH_CALLBACK_CONFIG.timeoutMs,
       expectedState: options.expectedState ?? '',
       successHtml: options.successHtml ?? DEFAULT_SUCCESS_HTML,
       errorHtml: options.errorHtml ?? defaultErrorHtml,

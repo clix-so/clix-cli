@@ -20,6 +20,7 @@ import {
   platformNeedsIos,
   type WizardPhase,
 } from '@/lib/services/firebase';
+import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
 import { GenericSelector, type SelectorItem } from './GenericSelector';
 
@@ -727,7 +728,7 @@ Check your CLIX_GOOGLE_CLIENT_ID environment variable.`;
   }
   if (error.includes('redirect_uri_mismatch')) {
     return `The redirect URI doesn't match your OAuth client configuration.
-Add this to your OAuth client: http://127.0.0.1:9005/oauth/callback`;
+Add this to your OAuth client: ${OAUTH_CALLBACK_CONFIG.getCallbackUrlIp()}`;
   }
   if (error.includes('invalid_grant')) {
     return `The authorization code has expired or already been used.

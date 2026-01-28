@@ -25,6 +25,8 @@
  * @module services/firebase/oauth/config
  */
 
+import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
+
 /**
  * Google OAuth configuration.
  *
@@ -73,18 +75,19 @@ export const GOOGLE_OAUTH_CONFIG = {
    * Local redirect URI for OAuth callback.
    * The CLI will start a temporary HTTP server on this port to receive the callback.
    * Note: Desktop app OAuth requires loopback IP (127.0.0.1), not localhost.
+   * See CLAUDE.md "OAuth Callback URL Convention" for details.
    */
-  redirectUri: 'http://127.0.0.1:9005/oauth/callback',
+  redirectUri: OAUTH_CALLBACK_CONFIG.getCallbackUrlIp(),
 
   /**
    * Port for the local OAuth callback server.
    */
-  callbackPort: 9005,
+  callbackPort: OAUTH_CALLBACK_CONFIG.port,
 
   /**
    * Timeout for OAuth flow in milliseconds (5 minutes).
    */
-  timeoutMs: 5 * 60 * 1000,
+  timeoutMs: OAUTH_CALLBACK_CONFIG.timeoutMs,
 } as const;
 
 /**
