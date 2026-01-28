@@ -1,16 +1,14 @@
 #!/bin/bash
-# Wrapper script - downloads and executes install.sh
+# Wrapper script - downloads and executes install
 # Supports multiple URL patterns:
 #   curl -fsSL https://clix.sh/install | bash
-#   curl -fsSL https://clix.sh/install.sh | bash
-#   curl -fsSL https://cli.clix.so/install | bash
-#   curl -fsSL https://cli.clix.so/install.sh | bash
 #
-# Environment variables are passed through to install.sh:
+# Environment variables are passed through to install:
 #   CLIX_VERSION, CLIX_INSTALL_DIR, CLIX_NO_MODIFY_PATH, CLIX_SKIP_CHECKSUM
 
-CLIX_VERSION="${CLIX_VERSION:-}" \
-CLIX_INSTALL_DIR="${CLIX_INSTALL_DIR:-}" \
-CLIX_NO_MODIFY_PATH="${CLIX_NO_MODIFY_PATH:-}" \
-CLIX_SKIP_CHECKSUM="${CLIX_SKIP_CHECKSUM:-}" \
-  bash -c "$(curl -fsSL https://clix.sh/install.sh)"
+export CLIX_VERSION="${CLIX_VERSION:-}"
+export CLIX_INSTALL_DIR="${CLIX_INSTALL_DIR:-}"
+export CLIX_NO_MODIFY_PATH="${CLIX_NO_MODIFY_PATH:-}"
+export CLIX_SKIP_CHECKSUM="${CLIX_SKIP_CHECKSUM:-}"
+
+bash -c "$(curl -fsSL https://clix.sh/install.sh)"

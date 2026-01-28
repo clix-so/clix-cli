@@ -123,7 +123,7 @@ bun run typecheck
 ├── scripts/                 # Build scripts
 │   ├── build.ts             # Bun build script
 │   ├── compile.ts           # Binary compilation script
-│   └── install.sh           # Installation script
+│   └── install              # Installation script
 ├── dist/                    # Build output (gitignored)
 ├── package.json
 ├── tsconfig.json
