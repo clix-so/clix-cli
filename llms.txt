@@ -241,7 +241,7 @@ These can be run from command-line (`clix <command>`) or chat mode:
 - `/install` - Autonomous SDK installation with automatic file modifications
 - `/doctor` - Analyze SDK integration status (automatic scan, JSON output)
 - `/debug` - Interactive debugging assistant (asks for problem description)
-- `/ios-setup` (aliases: `/capabilities`, `/ios-capabilities`) - Configure iOS capabilities for push notifications and app groups
+- `/ios-setup` (aliases: `/capabilities`, `/ios-capabilities`) - Configure iOS capabilities and Notification Service Extension (NSE)
 
 #### Interactive Skills (5 commands)
 
@@ -380,32 +380,44 @@ Describe the problem: Events not appearing in Clix dashboard
 [Provides fix with exact file location]
 ```
 
-#### `/ios-setup` - iOS Setup & Capabilities Configuration
+#### `/ios-setup` - iOS Setup, Capabilities & NSE Configuration
 
 **Category:** Autonomous Command
 
 **Aliases:** `/capabilities`, `/ios-capabilities`
 
-**What it does:** Configures iOS capabilities required for the Clix SDK, specifically Push Notifications and App Groups.
+**What it does:** Configures iOS capabilities and Notification Service Extension (NSE) required for the Clix SDK.
 
 **Capabilities configured:**
 - **Push Notifications** - Enables APNs communication (entitlement: `aps-environment`)
-- **App Groups** - Enables data sharing between app and Notification Service Extension (entitlement: `com.apple.security.application-groups`, format: `group.clix.{BUNDLE_ID}`)
+- **App Groups** - Enables data sharing between app and NSE (entitlement: `com.apple.security.application-groups`, format: `group.clix.{BUNDLE_ID}`)
+
+**Notification Service Extension (NSE) setup:**
+- **Target name:** `{AppName}NotificationServiceExtension` (consistent across all steps)
+- **NotificationService.swift:** Uses `ClixNotificationServiceExtension` base class with `register(projectId:)` call
+- **Dependency setup:** CocoaPods (`pod 'Clix'` in extension target) or SPM (add Clix package to extension)
+- **Build settings:** `ENABLE_USER_SCRIPT_SANDBOXING = No` for Xcode 15+
+- **React Native + Firebase:** Move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
 
 **Workflow:**
 1. Analyzes iOS project structure (finds .xcodeproj/.xcworkspace)
 2. Detects Bundle ID and checks current capabilities status
 3. Creates/modifies entitlements files for main app and extension
-4. Provides step-by-step instructions for Xcode configuration
-5. Guides through Apple Developer Portal setup
-6. Outputs verification report
+4. Guides NSE target creation and NotificationService.swift implementation
+5. Provides CocoaPods/SPM setup instructions for extension target
+6. Provides step-by-step instructions for Xcode configuration
+7. Guides through Apple Developer Portal setup
+8. Outputs verification report
 
 **What can be automated:**
 - Creating/modifying entitlements files
 - Reading project configuration
 
 **What requires manual action:**
+- Creating NSE target in Xcode (File > New > Target > Notification Service Extension)
 - Adding capabilities in Xcode UI (Signing & Capabilities)
+- Adding Clix SDK to extension target (Podfile or SPM)
+- Configuring build settings for Xcode 15+
 - Enabling capabilities in Apple Developer Portal
 - Registering App Group IDs
 - Regenerating provisioning profiles
@@ -420,12 +432,14 @@ App Groups: not configured
 
 Creating entitlements files...
 ✓ Created MyApp.entitlements
-✓ Created NotificationServiceExtension.entitlements
+✓ Created MyAppNotificationServiceExtension.entitlements
 
-Manual steps required in Xcode:
-1. Add Push Notifications capability to main target
-2. Add App Groups capability with ID: group.clix.com.example.myapp
-3. Add same App Group to extension target
+Manual steps required:
+1. Create NSE target: MyAppNotificationServiceExtension
+2. Implement NotificationService.swift with ClixNotificationServiceExtension
+3. Add Clix SDK to extension (Podfile or SPM)
+4. Add Push Notifications and App Groups capabilities
+5. Set ENABLE_USER_SCRIPT_SANDBOXING to No (Xcode 15+)
 
 {verification report JSON}
 ```
@@ -1254,7 +1268,7 @@ When helping users with Clix CLI, keep these points in mind:
 - "SDK integration" → Use `/install` for autonomous installation or `/integration` skill for guided steps
 - "iOS installation" → Detect: Package.swift (SPM, preferred), Podfile (CocoaPods), or suggest SPM for bare Xcode projects. SPM is the modern, recommended approach.
 - "SPM/Swift Package Manager" → Guide through Package.swift modification or Xcode UI (File > Add Package Dependencies) for adding packages
-- "iOS capabilities" → Use `/ios-setup` to configure Push Notifications and App Groups
+- "iOS capabilities" → Use `/ios-setup` to configure Push Notifications, App Groups, and Notification Service Extension (NSE)
 - "Event tracking" → Use `/event-tracking` skill (interactive, creates event plans)
 - "User management" → Use `/user-management` skill (setUserId, properties, logout handling)
 - "Personalization" → Use `/personalization` skill (Liquid templates for messages)

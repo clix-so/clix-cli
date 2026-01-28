@@ -158,7 +158,7 @@ class NotificationService: ClixNotificationServiceExtension {
 }
 ```
 
-**Note:** Replace `YOUR_PROJECT_ID` with your actual Clix project ID from https://console.clix.so/
+**Note:** Replace `YOUR_PROJECT_ID` with your actual Clix project ID from <https://console.clix.so/>
 
 **Add Clix SDK to Extension Target:**
 
