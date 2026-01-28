@@ -2,7 +2,7 @@
 set -e
 
 # Clix CLI Uninstaller
-# Usage: curl -fsSL https://cli.clix.so/uninstall.sh | bash
+# Usage: curl -fsSL https://clix.sh/uninstall.sh | bash
 #   or:  CLIX_REMOVE_CONFIG=true curl -fsSL ... | bash
 #
 # Environment Variables:

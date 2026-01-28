@@ -31,7 +31,7 @@ bun add -g @clix-so/clix-cli
 ### Install via Script
 
 ```bash
-curl -fsSL https://cli.clix.so/install.sh | bash
+curl -fsSL https://clix.sh/install.sh | bash
 ```
 
 ### Install via Homebrew (macOS)

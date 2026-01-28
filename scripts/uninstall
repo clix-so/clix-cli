@@ -3,8 +3,8 @@
 # Supports multiple URL patterns:
 #   curl -fsSL https://clix.sh/uninstall | bash
 #   curl -fsSL https://clix.sh/uninstall.sh | bash
-#   curl -fsSL https://cli.clix.so/uninstall | bash
-#   curl -fsSL https://cli.clix.so/uninstall.sh | bash
+#   curl -fsSL https://clix.sh/uninstall | bash
+#   curl -fsSL https://clix.sh/uninstall.sh | bash
 #
 # Environment variables are passed through to uninstall.sh:
 #   CLIX_INSTALL_DIR

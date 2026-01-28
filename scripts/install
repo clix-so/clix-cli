@@ -3,8 +3,8 @@
 # Supports multiple URL patterns:
 #   curl -fsSL https://clix.sh/install | bash
 #   curl -fsSL https://clix.sh/install.sh | bash
-#   curl -fsSL https://cli.clix.so/install | bash
-#   curl -fsSL https://cli.clix.so/install.sh | bash
+#   curl -fsSL https://clix.sh/install | bash
+#   curl -fsSL https://clix.sh/install.sh | bash
 #
 # Environment variables are passed through to install.sh:
 #   CLIX_VERSION, CLIX_INSTALL_DIR, CLIX_NO_MODIFY_PATH, CLIX_SKIP_CHECKSUM

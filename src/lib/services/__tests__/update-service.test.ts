@@ -98,7 +98,7 @@ describe('executeUpdate', () => {
       ...basePlan,
       installMethod: 'binary',
       canAutoUpdate: true,
-      updateCommand: 'curl -fsSL https://cli.clix.so/install.sh | bash',
+      updateCommand: 'curl -fsSL https://clix.sh/install.sh | bash',
     };
     // Binary installations now support auto-update via CLIX_VERSION env var
     const result = await executeUpdate(binaryPlan, { dryRun: true, force: false });

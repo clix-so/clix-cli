@@ -274,7 +274,7 @@ export function getUpdateCommand(info: InstallationInfo): string {
     case 'homebrew':
       return 'brew upgrade clix-so/clix-cli/clix';
     case 'binary':
-      return 'curl -fsSL https://cli.clix.so/install.sh | bash';
+      return 'curl -fsSL https://clix.sh/install.sh | bash';
     default:
       return 'npm install -g @clix-so/clix-cli@latest';
   }

@@ -165,7 +165,7 @@ export function getUninstallCommand(method: InstallationMethod): string | null {
     case 'homebrew':
       return 'brew uninstall clix-so/clix-cli/clix';
     case 'binary':
-      return 'curl -fsSL https://cli.clix.so/uninstall.sh | bash';
+      return 'curl -fsSL https://clix.sh/uninstall.sh | bash';
     default:
       return null;
   }
