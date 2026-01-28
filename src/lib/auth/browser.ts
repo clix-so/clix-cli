@@ -17,9 +17,27 @@ export async function openBrowser(url: string): Promise<boolean> {
 }
 
 /**
+ * Validate URL to prevent command injection.
+ * Only allows http and https protocols.
+ */
+function isValidUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fallback browser opener using platform-specific commands.
  */
 async function openBrowserFallback(url: string): Promise<boolean> {
+  // Validate URL to prevent command injection on Windows
+  if (!isValidUrl(url)) {
+    return false;
+  }
+
   const { spawn } = await import('node:child_process');
 
   const platform = process.platform;

@@ -171,22 +171,26 @@ Before committing: `bun run check && bun test`
 
 ## OAuth Callback URL Convention
 
-All browser-based OAuth flows use a unified callback URL: **`http://localhost:9005/auth/callback`**
+All browser-based OAuth flows use port **9005** and path **`/auth/callback`**, but the hostname varies by provider due to technical requirements.
 
 **Rationale**: Using a fixed port and path simplifies OAuth provider configuration (Allowed Callback URLs).
 
 **Implementation**:
 
-- Auth0 (Clix login): `http://localhost:9005/auth/callback` - see `src/lib/auth/pkce-flow.ts`
-- Firebase/Google: `http://127.0.0.1:9005/auth/callback` - see `src/lib/services/firebase/oauth/config.ts`
+- Auth0 (Clix login): `http://localhost:9005/auth/callback` via `getCallbackUrl()` - see `src/lib/auth/pkce-flow.ts`
+- Firebase/Google: `http://127.0.0.1:9005/auth/callback` via `getCallbackUrlIp()` - see `src/lib/services/firebase/oauth/config.ts`
+
+**Why different hostnames?** Desktop app OAuth (like Google OAuth for installed applications) requires the loopback IP address (`127.0.0.1`) rather than `localhost` per OAuth 2.0 for Native Apps (RFC 8252). Auth0 works with either, so it uses `localhost` for consistency.
 
 **Shared utilities**: `src/lib/utils/oauth.ts` provides:
 
 - `OAuthCallbackServer` - Local HTTP server for OAuth callbacks
+- `OAUTH_CALLBACK_CONFIG.getCallbackUrl()` - Returns `localhost` variant
+- `OAUTH_CALLBACK_CONFIG.getCallbackUrlIp()` - Returns `127.0.0.1` variant for desktop OAuth
 - `generateCodeVerifier()`, `generateCodeChallenge()` - PKCE utilities
 - `generateState()` - CSRF protection
 
-When adding new OAuth flows, use port 9005, path `/auth/callback`, and the shared `OAuthCallbackServer` class.
+When adding new OAuth flows, use port 9005, path `/auth/callback`, the shared `OAuthCallbackServer` class, and pick the appropriate hostname method based on OAuth provider requirements.
 
 ## Security
 

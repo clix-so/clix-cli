@@ -111,15 +111,22 @@ export class CredentialsManager {
    * Delete credentials (logout).
    *
    * @returns true if credentials were deleted, false if they didn't exist
+   * @throws Error if deletion fails due to permission or other IO errors
    */
   async delete(): Promise<boolean> {
     try {
       await rm(this.credentialsFilePath);
       this.cachedCredentials = null;
       return true;
-    } catch {
-      this.cachedCredentials = null;
-      return false;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err?.code === 'ENOENT') {
+        // File didn't exist - treat as successful deletion
+        this.cachedCredentials = null;
+        return false;
+      }
+      // Rethrow other errors (permission failures, etc.)
+      throw error;
     }
   }
 
@@ -130,10 +137,13 @@ export class CredentialsManager {
    * @returns true if expired or about to expire
    */
   isExpired(credentials: Credentials): boolean {
-    const expiresAt = new Date(credentials.expiresAt);
-    const now = new Date();
+    const expiresAtMs = Date.parse(credentials.expiresAt);
+    // Treat invalid dates as expired (secure default)
+    if (!Number.isFinite(expiresAtMs)) {
+      return true;
+    }
     // Consider expired if within buffer period
-    return expiresAt.getTime() - EXPIRY_BUFFER_MS <= now.getTime();
+    return expiresAtMs - EXPIRY_BUFFER_MS <= Date.now();
   }
 
   /**

@@ -111,6 +111,8 @@ export class PKCEFlowService {
    */
   async exchangeCodeForTokens(code: string): Promise<TokenResponse> {
     const url = `${this.baseUrl}/oauth/token`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
     try {
       const response = await fetch(url, {
@@ -125,6 +127,7 @@ export class PKCEFlowService {
           code,
           redirect_uri: this.redirectUri,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -136,6 +139,9 @@ export class PKCEFlowService {
 
       return (await response.json()) as TokenResponse;
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw AuthError.timeout('Token exchange timed out');
+      }
       if (err instanceof AuthError) {
         throw err;
       }
@@ -143,6 +149,8 @@ export class PKCEFlowService {
         'Failed to exchange code for tokens',
         err instanceof Error ? err : undefined,
       );
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
