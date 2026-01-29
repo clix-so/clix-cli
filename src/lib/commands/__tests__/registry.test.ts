@@ -97,8 +97,12 @@ describe('Command Registry', () => {
     test('should include skill commands', () => {
       const helpText = generateHelpText();
       expect(helpText).toContain('Skills:');
-      expect(helpText).toContain('/integration');
-      expect(helpText).toContain('/event-tracking');
+      // Check for visible skills (install, doctor are not hidden)
+      expect(helpText).toContain('/install');
+      expect(helpText).toContain('/doctor');
+      // Hidden skills should NOT appear in help text
+      expect(helpText).not.toContain('/integration');
+      expect(helpText).not.toContain('/event-tracking');
     });
 
     test('should include system commands', () => {
