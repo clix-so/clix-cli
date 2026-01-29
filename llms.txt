@@ -232,26 +232,26 @@ The interactive chat (`clix` command) is the primary way to interact with Clix C
 
 ### Slash Commands
 
-Type `/` in the chat to see the autocomplete menu. All 19 slash commands are organized into three categories:
+Type `/` in the chat to see the autocomplete menu. Commands are organized into categories:
 
-#### Autonomous Commands (4 commands)
+#### Primary Commands (Visible in Menu - 3 commands)
 
-These can be run from command-line (`clix <command>`) or chat mode:
+These are the main commands visible in the slash command menu:
 
-- `/install` - Autonomous SDK installation with automatic file modifications
-- `/doctor` - Analyze SDK integration status (automatic scan, JSON output)
+- `/install` - Comprehensive SDK installation orchestrator (detects platform, installs SDK, creates entitlements, guides through Xcode steps)
+- `/doctor` - SDK integration analysis with completeness assessment (checks SDK, iOS NSE/capabilities, Firebase config)
 - `/debug` - Interactive debugging assistant (asks for problem description)
-- `/ios-setup` (aliases: `/capabilities`, `/ios-capabilities`) - Configure iOS capabilities and Notification Service Extension (NSE)
 
-#### Interactive Skills (5 commands)
+#### Advanced Commands (Hidden from Menu - 6 commands)
 
-These execute pre-built workflows from the `@clix-so/clix-agent-skills` package and require step-by-step guidance (available only in chat mode):
+These are hidden from the menu but still accessible by typing them directly. Hidden because they overlap with `/install` or are for advanced post-installation use cases:
 
-- `/integration` - SDK integration guide with platform detection
-- `/event-tracking` - Event tracking setup for analytics
-- `/user-management` - User management and identification setup
-- `/personalization` - Personalization template creation and debugging
-- `/api-triggered-campaigns` - API-triggered campaign setup
+- `/ios-setup` (aliases: `/capabilities`, `/ios-capabilities`) - Configure iOS capabilities and NSE (invoked by `/install` for iOS projects)
+- `/integration` - Interactive SDK integration guide (overlaps with `/install`)
+- `/event-tracking` - Event tracking setup for analytics (advanced, post-installation)
+- `/user-management` - User management and identification setup (advanced, post-installation)
+- `/personalization` - Personalization template creation and debugging (advanced, campaign feature)
+- `/api-triggered-campaigns` - API-triggered campaign setup (advanced, backend feature)
 
 #### System Commands (10 commands)
 
@@ -272,24 +272,22 @@ These are built-in commands for chat management and tools:
 
 **How it works:**
 - Type `/` to enter slash command mode
-- Autocomplete menu appears showing matching commands
+- Autocomplete menu appears showing matching commands (only visible commands)
 - Type letters to filter (e.g., `/d` shows debug, doctor)
 - Use ↑/↓ arrows to navigate menu
 - Press Tab to autocomplete selected command
 - Press Enter to execute selected command
 - Press Escape to cancel
+- Hidden commands (like `/integration`, `/ios-setup`) won't appear in menu but work when typed directly
 
-**Menu display:**
+**Menu display (only shows 3 primary commands + system commands):**
 ```
-/install                  - Autonomous SDK installation [autonomous]
+/install                  - Comprehensive SDK installation [autonomous]
 /doctor                   - Check SDK integration status [autonomous]
 /debug                    - Interactive debugging assistant [autonomous]
-/integration              - SDK integration guide [skill]
-/event-tracking           - Event tracking setup [skill]
-/user-management          - User management setup [skill]
-/personalization          - Personalization templates [skill]
-/api-triggered-campaigns  - API-triggered campaign setup [skill]
 /help                     - Show available commands
+/new                      - Start a new session
+/agent                    - List or switch agents
 ...
 ```
 
@@ -297,13 +295,19 @@ These are built-in commands for chat management and tools:
 
 ### Autonomous Commands
 
-#### `/install` - Autonomous SDK Installation
+#### `/install` - Comprehensive SDK Installation Orchestrator
 
-**Category:** Autonomous Command
+**Category:** Primary Command (Visible in Menu)
 
-**What it does:** Automatically installs and integrates the Clix SDK into your mobile project with file modifications. Unlike `/integration`, this command makes changes autonomously without manual steps.
+**What it does:** Orchestrates complete SDK installation with visual progress tracking. This is the main entry point for SDK setup, handling everything from dependency installation to iOS NSE configuration.
 
 **Platforms:** iOS, Android, React Native, Flutter
+
+**Phases:**
+1. **Project Analysis** - Detects platform, entry point, Firebase config status
+2. **Task Plan** - Shows numbered checklist of tasks to complete
+3. **Execution** - Performs automatable tasks, guides through manual steps
+4. **Summary** - Lists completed tasks, manual steps remaining, files modified
 
 **Usage:**
 ```bash
@@ -315,41 +319,70 @@ clix install --platform react-native
 > /install
 ```
 
-**Example:**
+**Example output:**
 ```
-> /install
-Detecting platform...
-✓ React Native project detected
-✓ Added @clix-so/react-native-sdk to package.json
-✓ Running npm install...
-✓ Created initialization module
-✓ Updated app/_layout.tsx with SDK initialization
+PHASE 1: PROJECT ANALYSIS
+  [Done] Platform: React Native
+  [Done] Entry point: app/_layout.tsx
+  [Warning] google-services.json missing
+
+PHASE 3: EXECUTION
+  [1/5] Installing SDK dependency...
+  [Done] Added @clix-so/react-native-sdk
+
+  [4/5] iOS Setup...
+  [Action Required] Create NSE target in Xcode
+  [Done] Created NotificationService.swift
+  [Done] Updated entitlements files
+
+PHASE 4: SUMMARY
+  Completed: 4/5 tasks
+  Manual steps: Create NSE target, Download Firebase config
 ```
 
-#### `/doctor` - SDK Integration Analysis
+#### `/doctor` - SDK Integration Analysis & Completeness Check
 
-**Category:** Autonomous Command
+**Category:** Primary Command (Visible in Menu)
 
-**What it does:** Automatically scans your project to check SDK integration status. Outputs structured JSON report.
+**What it does:** Comprehensive analysis of SDK integration status with installation completeness assessment. Outputs structured JSON diagnostic followed by actionable recommendations.
 
 **Checks:**
 - Platform detection (iOS/Android/React Native/Flutter)
-- SDK installation verification
-- Push notification configuration
-- Common integration issues
+- SDK installation and initialization verification
+- iOS: Entitlements, capabilities, NSE configuration, App Groups
+- Android: Manifest permissions, FCM setup
+- Firebase: Config files present, package/bundle ID matches
+- Installation completeness percentage
 
-**Output:** JSON format with findings and recommendations
+**Output:** JSON diagnostic with checklist + brief summary with issues by severity
 
 **Example:**
 ```
 > /doctor
-Scanning project for SDK integration...
 {
-  "platform": "ios",
-  "sdk_installed": true,
-  "push_configured": false,
-  "issues": [{"type": "push", "description": "APNs entitlement missing"}]
+  "platform": "react-native",
+  "sdkInstalled": true,
+  "sdkInitialized": true,
+  "checklist": {
+    "iosNseConfigured": false,
+    "iosAppGroupsConfigured": false,
+    "firebaseIos": false
+  },
+  "installCompleteness": {
+    "percentage": 67,
+    "missingSteps": ["iOS NSE", "Firebase iOS config"]
+  }
 }
+
+DOCTOR SUMMARY
+Platform: React Native
+Installation Completeness: 67% (6/9 steps)
+
+Issues Found: 2
+  [Error] iOS NSE not configured
+  [Warning] Firebase iOS config missing
+
+Run /install to complete missing setup steps.
 ```
 
 #### `/debug` - Interactive Debugging Assistant
@@ -380,11 +413,15 @@ Describe the problem: Events not appearing in Clix dashboard
 [Provides fix with exact file location]
 ```
 
-#### `/ios-setup` - iOS Setup, Capabilities & NSE Configuration
+### Advanced Commands (Hidden from Menu)
 
-**Category:** Autonomous Command
+#### `/ios-setup` - iOS Capabilities & NSE Configuration
+
+**Category:** Advanced Command (Hidden from Menu)
 
 **Aliases:** `/capabilities`, `/ios-capabilities`
+
+**Why hidden:** Invoked automatically by `/install` for iOS projects. Use directly only if you need standalone iOS setup.
 
 **What it does:** Configures iOS capabilities and Notification Service Extension (NSE) required for the Clix SDK.
 
@@ -393,130 +430,62 @@ Describe the problem: Events not appearing in Clix dashboard
 - **App Groups** - Enables data sharing between app and NSE (entitlement: `com.apple.security.application-groups`, format: `group.clix.{BUNDLE_ID}`)
 
 **Notification Service Extension (NSE) setup:**
-- **Target name:** `{AppName}NotificationServiceExtension` (consistent across all steps)
-- **NotificationService.swift:** Uses `ClixNotificationServiceExtension` base class with `register(projectId:)` call
-- **Dependency setup:** CocoaPods (`pod 'Clix'` in extension target) or SPM (add Clix package to extension)
+- **Target name:** `{AppName}NotificationServiceExtension`
+- **NotificationService.swift:** Uses `ClixNotificationServiceExtension` base class
+- **Dependency setup:** CocoaPods or SPM
 - **Build settings:** `ENABLE_USER_SCRIPT_SANDBOXING = No` for Xcode 15+
-- **React Native + Firebase:** Move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
-
-**Workflow:**
-1. Analyzes iOS project structure (finds .xcodeproj/.xcworkspace)
-2. Detects Bundle ID and checks current capabilities status
-3. Creates/modifies entitlements files for main app and extension
-4. Guides NSE target creation and NotificationService.swift implementation
-5. Provides CocoaPods/SPM setup instructions for extension target
-6. Provides step-by-step instructions for Xcode configuration
-7. Guides through Apple Developer Portal setup
-8. Outputs verification report
 
 **What can be automated:**
-- Creating/modifying entitlements files
-- Reading project configuration
+- Creating entitlements files
+- Creating NotificationService.swift
+- Updating Podfile for extension target
 
 **What requires manual action:**
-- Creating NSE target in Xcode (File > New > Target > Notification Service Extension)
-- Adding capabilities in Xcode UI (Signing & Capabilities)
-- Adding Clix SDK to extension target (Podfile or SPM)
-- Configuring build settings for Xcode 15+
-- Enabling capabilities in Apple Developer Portal
-- Registering App Group IDs
-- Regenerating provisioning profiles
+- Creating NSE target in Xcode
+- Adding capabilities in Xcode UI
+- Apple Developer Portal configuration
 
-**Example:**
-```
-> /ios-setup
-Analyzing iOS project...
-Bundle ID: com.example.myapp
-Push Notifications: not configured
-App Groups: not configured
+### Advanced Interactive Skills (Hidden from Menu)
 
-Creating entitlements files...
-✓ Created MyApp.entitlements
-✓ Created MyAppNotificationServiceExtension.entitlements
+#### `/integration` - Interactive SDK Integration Guide
 
-Manual steps required:
-1. Create NSE target: MyAppNotificationServiceExtension
-2. Implement NotificationService.swift with ClixNotificationServiceExtension
-3. Add Clix SDK to extension (Podfile or SPM)
-4. Add Push Notifications and App Groups capabilities
-5. Set ENABLE_USER_SCRIPT_SANDBOXING to No (Xcode 15+)
+**Category:** Advanced Skill (Hidden from Menu)
 
-{verification report JSON}
-```
+**Why hidden:** Overlaps with `/install`. Use `/install` for autonomous installation; use `/integration` only if you prefer step-by-step interactive guidance.
 
-### Interactive Skills
-
-#### `/integration` - SDK Integration Guide
-
-**Category:** Interactive Skill (Chat Mode Only)
-
-**What it does:** Provides step-by-step guidance for manually integrating the Clix SDK. Unlike `/install`, this provides interactive guidance rather than making changes autonomously.
-
-**Platforms:** iOS, Android, React Native, Flutter
-
-**Example:**
-```
-> /integration
-[Agent detects iOS project]
-[Provides step-by-step Podfile updates, SDK initialization guidance]
-```
+**What it does:** Provides interactive step-by-step guidance for SDK integration. Unlike `/install` (autonomous), this asks questions and waits for confirmation.
 
 #### `/event-tracking` - Event Tracking Setup
 
-**Category:** Interactive Skill (Chat Mode Only)
+**Category:** Advanced Skill (Hidden from Menu)
 
-**What it does:** Sets up event tracking with `Clix.trackEvent()` for analytics and user behavior monitoring with guided workflow.
+**Why hidden:** Post-installation feature, not needed for initial SDK setup.
 
-**Platforms:** iOS, Android, React Native, Flutter
-
-**Example:**
-```
-> /event-tracking
-[Agent helps implement event tracking]
-[Shows code examples for custom events]
-[Creates event plan and validation]
-```
+**What it does:** Sets up event tracking with `Clix.trackEvent()` for analytics. Creates event plan, validates schema, provides platform-specific code.
 
 #### `/user-management` - User Management Setup
 
-**Category:** Interactive Skill (Chat Mode Only)
+**Category:** Advanced Skill (Hidden from Menu)
 
-**What it does:** Configures user identification and properties management with Clix SDK through guided steps.
+**Why hidden:** Post-installation feature, not needed for initial SDK setup.
 
-**Example:**
-```
-> /user-management
-[Agent guides through setUserId(), setUserProperties()]
-[Explains best practices for user identification and logout handling]
-```
+**What it does:** Configures user identification (`setUserId`, `setUserProperties`) with best practices for login/logout handling.
 
 #### `/personalization` - Personalization Templates
 
-**Category:** Interactive Skill (Chat Mode Only)
+**Category:** Advanced Skill (Hidden from Menu)
 
-**What it does:** Creates and debugs personalization templates for push notifications and in-app messages using Liquid-style templates.
+**Why hidden:** Advanced campaign feature, not needed for initial SDK setup.
 
-**Example:**
-```
-> /personalization
-[Agent helps create templates with variables]
-[Debugs template rendering issues]
-[Validates template syntax]
-```
+**What it does:** Creates and debugs Liquid-style personalization templates for messages and deep links.
 
 #### `/api-triggered-campaigns` - API-Triggered Campaign Setup
 
-**Category:** Interactive Skill (Chat Mode Only)
+**Category:** Advanced Skill (Hidden from Menu)
 
-**What it does:** Helps configure API-triggered campaigns in the Clix console and implement backend trigger code.
+**Why hidden:** Advanced backend feature, not needed for initial SDK setup.
 
-**Example:**
-```
-> /api-triggered-campaigns
-[Agent guides through campaign configuration]
-[Provides backend integration patterns]
-[Creates API trigger plan]
-```
+**What it does:** Helps configure API-triggered campaigns and implement backend trigger code.
 
 ### System Commands
 
@@ -1249,30 +1218,32 @@ When helping users with Clix CLI, keep these points in mind:
 1. **Primary command is `clix`** - This launches interactive chat, not just a welcome screen
 2. **Interactive > Commands** - The tool is primarily interactive, not command-based
 3. **6 supported agents** - Gemini, Copilot, OpenCode, Cursor, Claude, Codex (recommend starting with Gemini or Copilot for free tiers)
-4. **19 slash commands** - 4 autonomous commands + 5 interactive skills + 10 system commands
-5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`, `/ios-setup`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
-6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
-7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps
-8. **Session transfer** - Saves to `~/.local/state/clix/sessions/`, provides command for native CLI
-9. **Agent switching** - Preserves history when switching between any agents
-10. **Context management** - 200K tokens (Claude), auto-compact at 90%
-11. **MCP integration** - Built-in installer for Clix MCP Server supporting all agents
-12. **XDG paths** - Config in `~/.config/clix/`, sessions in `~/.local/state/clix/sessions/`
+4. **3 visible commands in menu** - `/install`, `/doctor`, `/debug` - these are the primary entry points
+5. **6 hidden commands** - `/ios-setup`, `/integration`, `/event-tracking`, `/user-management`, `/personalization`, `/api-triggered-campaigns` - accessible by typing directly
+6. **/install is the main entry point** - Comprehensive orchestrator that handles SDK installation, iOS NSE setup, and Firebase guidance
+7. **/doctor checks completeness** - Not just "is SDK installed" but "what percentage of setup is complete"
+8. **Hidden commands still work** - Type `/integration` directly to use it, just won't appear in autocomplete menu
+9. **Session transfer** - Saves to `~/.local/state/clix/sessions/`, provides command for native CLI
+10. **Agent switching** - Preserves history when switching between any agents
+11. **Context management** - 200K tokens (Claude), auto-compact at 90%
+12. **MCP integration** - Built-in installer for Clix MCP Server supporting all agents
+13. **XDG paths** - Config in `~/.config/clix/`, sessions in `~/.local/state/clix/sessions/`
 
 **When users ask about:**
 - "How to use" → Emphasize `clix` command starts chat, use `/help` for commands
 - "Which agents" → 6 agents supported: Gemini (free, 1000/day), Copilot (free, 50/mo), OpenCode, Cursor, Claude, Codex - configure with `clix agent`
 - "Free tier" → Recommend Gemini (1000 requests/day) or GitHub Copilot (50 premium/month)
-- "Installation" → `/install` for autonomous, `/integration` for guided steps
+- "Installation" → Use `/install` - it's the comprehensive orchestrator that handles everything
 - "Debugging" → Recommend `/debug` for interactive diagnosis
-- "SDK integration" → Use `/install` for autonomous installation or `/integration` skill for guided steps
-- "iOS installation" → Detect: Package.swift (SPM, preferred), Podfile (CocoaPods), or suggest SPM for bare Xcode projects. SPM is the modern, recommended approach.
-- "SPM/Swift Package Manager" → Guide through Package.swift modification or Xcode UI (File > Add Package Dependencies) for adding packages
-- "iOS capabilities" → Use `/ios-setup` to configure Push Notifications, App Groups, and Notification Service Extension (NSE)
-- "Event tracking" → Use `/event-tracking` skill (interactive, creates event plans)
-- "User management" → Use `/user-management` skill (setUserId, properties, logout handling)
-- "Personalization" → Use `/personalization` skill (Liquid templates for messages)
-- "API campaigns" → Use `/api-triggered-campaigns` skill (backend integration)
+- "SDK integration" → Use `/install` for comprehensive setup; `/integration` is hidden but still accessible for interactive guidance
+- "iOS installation" → `/install` handles iOS setup including NSE, entitlements, and capabilities guidance
+- "iOS capabilities" → `/install` handles this; `/ios-setup` is hidden but accessible for standalone iOS setup
+- "Check SDK status" → Use `/doctor` - it shows installation completeness percentage and issues
+- "Event tracking" → Type `/event-tracking` directly (hidden from menu, post-installation feature)
+- "User management" → Type `/user-management` directly (hidden from menu, post-installation feature)
+- "Personalization" → Type `/personalization` directly (hidden from menu, campaign feature)
+- "API campaigns" → Type `/api-triggered-campaigns` directly (hidden from menu, backend feature)
+- "Why can't I find X command" → Some commands are hidden from menu but still accessible by typing them directly
 - "Context full" → Suggest `/compact` or `/c` to compress history
 - "Transfer session" → Use `/transfer` or `/t` to continue in native CLI
 - "Start fresh" → Use `/new` to start a new session (not `/clear`, which is legacy alias)

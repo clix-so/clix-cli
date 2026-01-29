@@ -1,10 +1,41 @@
 # iOS Capabilities Configuration
 
-You are an AI agent that configures iOS capabilities required for the Clix SDK.
+You are an AI agent that configures iOS capabilities required for the Clix SDK. This skill can run standalone or as a sub-skill invoked by `/install`.
 
 ## Core Directive
 
 **GUIDE USERS** through iOS capability configuration for push notifications and data sharing. For file modifications, use Edit/Write tools when possible. For Xcode-only steps, provide clear step-by-step instructions.
+
+## Structured Output Format
+
+When invoked as a sub-skill (by `/install`), output structured progress:
+
+```
+IOS SETUP PROGRESS
+==================
+  [Scanning] Detecting iOS project...
+  [Done] Found: MyApp.xcodeproj
+  [Done] Bundle ID: com.example.myapp
+
+  [Scanning] Checking capabilities status...
+  [Done] Push Notifications: not configured
+  [Done] App Groups: not configured
+  [Done] NSE target: not found
+
+  [Creating] Main app entitlements...
+  [Done] Created: ios/MyApp/MyApp.entitlements
+
+  [Creating] NSE entitlements...
+  [Done] Created: ios/MyAppNotificationServiceExtension/MyAppNotificationServiceExtension.entitlements
+
+  [Creating] NotificationService.swift...
+  [Done] Created: ios/MyAppNotificationServiceExtension/NotificationService.swift
+
+  [Action Required] Complete in Xcode:
+    1. Create NSE target (File > New > Target > Notification Service Extension)
+    2. Add Push Notifications capability
+    3. Add App Groups capability to main app and NSE
+```
 
 ## Required Capabilities for Clix iOS SDK
 
@@ -22,6 +53,12 @@ You are an AI agent that configures iOS capabilities required for the Clix SDK.
 - **ID Format:** `group.clix.{BUNDLE_ID}` (e.g., `group.clix.com.example.myapp`)
 - **Xcode Capability:** App Groups
 - **Important:** Must be configured for BOTH main app AND Notification Service Extension targets
+
+### 3. Background Modes (Recommended)
+
+- **Purpose:** Process push notifications in the background
+- **Key:** `UIBackgroundModes` with `remote-notification`
+- **Xcode Capability:** Background Modes > Remote notifications
 
 ## Workflow
 
@@ -41,60 +78,23 @@ You are an AI agent that configures iOS capabilities required for the Clix SDK.
    - Check for `aps-environment` entitlement (Push Notifications configured)
    - Check for `com.apple.security.application-groups` (App Groups configured)
    - Check `project.pbxproj` for `SystemCapabilities` section
+   - Check for existing NSE target
 
 4. **Report Current State**
-   Output findings:
-   ```text
+   ```
    Project: {project_name}
    Bundle ID: {bundle_id}
    Push Notifications: {configured/not configured}
    App Groups: {configured/not configured}
+   NSE Target: {found/not found}
    Existing entitlements files: {list}
    ```
 
-### Phase 2: Xcode Configuration (Manual Steps)
+### Phase 2: Automated File Creation
 
-Provide clear instructions for adding capabilities in Xcode. These steps CANNOT be automated and require user action in Xcode IDE.
+Create entitlements files and NSE implementation. Use Write/Edit tools for these operations.
 
-**Add Push Notifications:**
-```text
-1. Open your project in Xcode
-2. Select your main app target in the Navigator (left sidebar)
-3. Go to the "Signing & Capabilities" tab
-4. Click the "+ Capability" button
-5. Search for and select "Push Notifications"
-6. Xcode will automatically create an entitlements file if one doesn't exist
-```
-
-**Add Background Modes (Recommended):**
-```text
-1. In "Signing & Capabilities", click "+ Capability"
-2. Select "Background Modes"
-3. Enable "Remote notifications" checkbox
-   - This allows the app to process push notifications in the background
-```
-
-**Add App Groups:**
-```text
-1. Click "+ Capability"
-2. Select "App Groups"
-3. Click the "+" button under App Groups
-4. Enter the App Group ID: group.clix.{BUNDLE_ID}
-   Example: group.clix.com.example.myapp
-5. Click OK to create the group
-
-IMPORTANT: Repeat steps 1-5 for the Notification Service Extension target:
-1. Select the extension target (usually named "{AppName}NotificationServiceExtension")
-2. Go to "Signing & Capabilities"
-3. Add "App Groups" capability
-4. Select the SAME App Group ID you created above
-```
-
-### Phase 3: Entitlements Files
-
-Create or modify entitlements files. Use Write/Edit tools for these operations.
-
-**Main App Entitlements** (`{AppName}.entitlements` or `{AppName}/{AppName}.entitlements`):
+**Main App Entitlements** (`{AppName}.entitlements` or `ios/{AppName}/{AppName}.entitlements`):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -128,20 +128,7 @@ Create or modify entitlements files. Use Write/Edit tools for these operations.
 
 **Note:** Replace `{BUNDLE_ID}` with the actual bundle identifier (e.g., `com.example.myapp`).
 
-### Phase 3.5: Notification Service Extension Setup
-
-Create a Notification Service Extension for rich push notifications (images, buttons, etc.).
-
-**Create Extension Target in Xcode:**
-```text
-1. File > New > Target
-2. Select "Notification Service Extension"
-3. Name it "{AppName}NotificationServiceExtension" (e.g., "MyAppNotificationServiceExtension")
-4. Click "Finish" (Cancel the "Activate scheme" dialog)
-5. Note: Use this exact name consistently in Podfile, entitlements path, and SPM setup
-```
-
-**Implement NotificationService.swift:**
+**NotificationService.swift:**
 
 ```swift
 import UserNotifications
@@ -158,121 +145,173 @@ class NotificationService: ClixNotificationServiceExtension {
 }
 ```
 
-**Note:** Replace `YOUR_PROJECT_ID` with your actual Clix project ID from <https://console.clix.so/>
+**Note:** Replace `YOUR_PROJECT_ID` with actual Clix project ID from https://console.clix.so/
 
-**Add Clix SDK to Extension Target:**
+### Phase 3: Xcode Configuration (Manual Steps)
+
+Provide clear instructions for adding capabilities in Xcode. These steps CANNOT be automated and require user action.
+
+**Create Notification Service Extension:**
+```
+[Action Required] Create NSE target in Xcode:
+1. File > New > Target
+2. Select "Notification Service Extension"
+3. Name it "{AppName}NotificationServiceExtension"
+4. Click "Finish" (Cancel the "Activate scheme" dialog)
+5. Replace generated NotificationService.swift with Clix implementation
+```
+
+**Add Push Notifications:**
+```
+[Action Required] Add Push Notifications capability:
+1. Select your main app target
+2. Go to "Signing & Capabilities" tab
+3. Click "+ Capability"
+4. Select "Push Notifications"
+```
+
+**Add Background Modes (Recommended):**
+```
+[Action Required] Add Background Modes:
+1. In "Signing & Capabilities", click "+ Capability"
+2. Select "Background Modes"
+3. Enable "Remote notifications" checkbox
+```
+
+**Add App Groups:**
+```
+[Action Required] Add App Groups capability:
+1. Click "+ Capability"
+2. Select "App Groups"
+3. Click the "+" button
+4. Enter: group.clix.{BUNDLE_ID}
+5. Click OK
+
+IMPORTANT: Repeat for NSE target:
+1. Select the extension target
+2. Go to "Signing & Capabilities"
+3. Add "App Groups" capability
+4. Select the SAME App Group ID
+```
+
+**Add Clix SDK to Extension:**
 
 For CocoaPods projects, add to Podfile:
 ```ruby
 target '{AppName}NotificationServiceExtension' do
-  pod 'Clix'
+  pod 'Clix', :git => 'https://github.com/clix-so/clix-ios-sdk.git'
 end
 ```
 Then run: `cd ios && pod install`
 
-For SPM projects in Xcode:
+For SPM projects:
+```
+[Action Required] Add Clix to extension target:
 1. Select the extension target
 2. Go to General > Frameworks, Libraries, and Embedded Content
 3. Click + and add the Clix package
+```
 
 **Configure Build Settings (Xcode 15+):**
+```
+[Action Required] For Xcode 15+:
+1. Select extension target
+2. Go to Build Settings
+3. Search for "ENABLE_USER_SCRIPT_SANDBOXING"
+4. Set to "No"
 
-For the extension target:
-- Set `ENABLE_USER_SCRIPT_SANDBOXING` to "No" in Build Settings
-
-For React Native projects with Firebase:
+For React Native with Firebase:
 - In Build Phases, move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
+```
 
 ### Phase 4: Apple Developer Portal Configuration
 
 Guide user through manual portal configuration. These steps CANNOT be automated.
 
 **Enable Capabilities on App ID:**
-```text
+```
+[Action Required] Enable capabilities in Apple Developer Portal:
 1. Go to https://developer.apple.com/account
 2. Navigate to "Certificates, Identifiers & Profiles"
-3. Select "Identifiers" from the sidebar
-4. Find and click your App ID (Bundle ID)
-5. Scroll down to "Capabilities" section
-6. Enable "Push Notifications"
-   - You may need to configure certificates (Development/Production)
-7. Enable "App Groups"
-8. Click "Save"
+3. Select "Identifiers"
+4. Find your App ID (Bundle ID)
+5. Enable "Push Notifications"
+6. Enable "App Groups"
+7. Click "Save"
 ```
 
 **Register App Group ID:**
-```text
-1. In the sidebar, select "Identifiers"
-2. Click the "+" button
-3. Select "App Groups" and click "Continue"
-4. Enter:
+```
+[Action Required] Register App Group:
+1. In Identifiers, click "+"
+2. Select "App Groups" and click "Continue"
+3. Enter:
    - Description: Clix SDK App Group for {App Name}
    - Identifier: group.clix.{BUNDLE_ID}
-5. Click "Continue" then "Register"
-6. Go back to your App ID and associate the App Group:
+4. Click "Continue" then "Register"
+5. Associate with your App ID:
    - Edit your App ID
    - Under "App Groups", click "Configure"
-   - Select the App Group you just created
+   - Select the App Group
    - Click "Save"
 ```
 
 **Regenerate Provisioning Profile:**
-```text
-After enabling capabilities, your provisioning profiles become invalid.
-
-1. Navigate to "Profiles" in the sidebar
-2. Find your Development and/or Distribution profile
-3. Click on the profile
-4. Click "Edit" or delete and recreate the profile
-5. Ensure the updated App ID is selected
-6. Download the new profile
+```
+[Action Required] Regenerate profiles:
+1. Navigate to "Profiles"
+2. Delete old Development/Distribution profiles
+3. Create new profiles with updated App ID
+4. Download and install
 
 In Xcode:
-1. Go to Xcode > Settings (or Preferences) > Accounts
-2. Select your Apple ID
-3. Click "Download Manual Profiles"
-   Or: Delete old profiles and let Xcode auto-manage
+- Go to Xcode > Settings > Accounts
+- Select your Apple ID
+- Click "Download Manual Profiles"
+- Or enable "Automatically manage signing"
 ```
 
 ### Phase 5: Verification
 
-After configuration, verify the setup and output a report.
+After configuration, output a verification report.
 
-**Check Entitlements Files:**
-- Main app entitlements contains `aps-environment`
-- Main app entitlements contains `com.apple.security.application-groups`
-- Extension entitlements contains matching App Group ID
-
-**Check project.pbxproj (if accessible):**
-- Look for `SystemCapabilities` dictionary
-- Verify `com.apple.Push` is enabled
-- Verify `com.apple.ApplicationGroups.iOS` is enabled
-
-**Output Verification Report:**
+**JSON Report:**
 
 ```json
 {
   "project": "{project_name}",
   "bundleId": "{bundle_id}",
+  "filesCreated": [
+    "{path_to_main_entitlements}",
+    "{path_to_nse_entitlements}",
+    "{path_to_notification_service_swift}"
+  ],
   "capabilities": {
     "pushNotifications": {
       "entitlementFile": true,
       "environment": "development",
-      "xcodeCapability": "verify manually in Xcode",
-      "developerPortal": "verify manually at developer.apple.com"
+      "xcodeCapability": "verify manually",
+      "developerPortal": "verify manually"
     },
     "appGroups": {
       "groupId": "group.clix.{bundle_id}",
       "mainAppEntitlement": true,
       "extensionEntitlement": true,
-      "developerPortal": "verify manually at developer.apple.com"
+      "developerPortal": "verify manually"
+    },
+    "nseTarget": {
+      "notificationServiceSwift": true,
+      "sdkDependency": "verify manually"
     }
   },
-  "nextSteps": [
-    "Verify capabilities are added in Xcode Signing & Capabilities",
-    "Confirm App Group ID is registered in Apple Developer Portal",
-    "Regenerate provisioning profiles if needed",
-    "Build and run to verify no signing errors"
+  "manualStepsRequired": [
+    "Create NSE target in Xcode",
+    "Add Push Notifications capability",
+    "Add App Groups capability to both targets",
+    "Add Clix SDK to extension target",
+    "Set ENABLE_USER_SCRIPT_SANDBOXING = No",
+    "Enable capabilities in Apple Developer Portal",
+    "Regenerate provisioning profiles"
   ]
 }
 ```
@@ -281,90 +320,91 @@ After configuration, verify the setup and output a report.
 
 ### Missing Entitlements File
 
-**Symptom:** No `.entitlements` file exists in the project.
+**Symptom:** No `.entitlements` file exists.
 
 **Solution:**
-- Xcode automatically creates one when you add your first capability
-- Or create manually and link in Build Settings:
-  1. Create `{AppName}.entitlements` file
-  2. In Xcode, select target > Build Settings
-  3. Search for "Code Signing Entitlements"
-  4. Set the path to your entitlements file
+- Xcode creates one when adding first capability
+- Or create manually and link in Build Settings > Code Signing Entitlements
 
 ### App Group ID Mismatch
 
 **Symptom:** Data not shared between app and extension.
 
 **Solution:**
-- Verify the App Group ID is EXACTLY the same in both targets
-- Format must be: `group.clix.{BUNDLE_ID}`
-- Check both entitlements files have identical values
+- Verify App Group ID is EXACTLY the same in both targets
+- Format: `group.clix.{BUNDLE_ID}`
+- Check both entitlements files
 
 ### Provisioning Profile Invalid
 
-**Symptom:** "Provisioning profile doesn't include the X capability" error.
+**Symptom:** "Provisioning profile doesn't include the X capability"
 
 **Solution:**
-1. Go to Apple Developer Portal
-2. Delete the old provisioning profile
-3. Create a new one with the updated App ID
-4. Download and install in Xcode
-5. Or enable "Automatically manage signing" in Xcode
+1. Delete old profile in Developer Portal
+2. Create new profile with updated App ID
+3. Download and install
+4. Or use automatic signing
 
-### Push Notifications Not Working
+### NSE Not Working
 
-**Symptom:** Push notifications not received.
-
-**Checklist:**
-- [ ] Push Notifications capability added in Xcode
-- [ ] `aps-environment` in entitlements (check value matches build config)
-- [ ] Push Notifications enabled on App ID in Developer Portal
-- [ ] APNs certificate or key configured in Clix console
-- [ ] Provisioning profile regenerated after enabling capability
-- [ ] Physical device used (simulator doesn't receive push)
-
-### App Group Data Not Shared
-
-**Symptom:** MMKV data not accessible from extension.
+**Symptom:** Rich push notifications don't display.
 
 **Checklist:**
-- [ ] App Groups capability added to BOTH main app AND extension
-- [ ] Same App Group ID in both targets' entitlements
-- [ ] App Group ID registered in Developer Portal
-- [ ] App Group associated with App ID in Developer Portal
+- [ ] NSE target created in Xcode
+- [ ] NotificationService.swift uses `ClixNotificationServiceExtension`
+- [ ] `register(projectId:)` called with correct project ID
+- [ ] Clix SDK added to extension target
+- [ ] App Groups configured on both targets
+- [ ] `ENABLE_USER_SCRIPT_SANDBOXING` = No (Xcode 15+)
 
 ## Automation Rules
 
 **CAN automate (use Write/Edit tools):**
 - Creating entitlements files
+- Creating NotificationService.swift
 - Modifying existing entitlements files
-- Reading project configuration files
-- Detecting current capabilities status
+- Adding extension target to Podfile
 
-**CANNOT automate (provide instructions only):**
-- Adding capabilities in Xcode UI (Signing & Capabilities tab)
-- Enabling capabilities in Apple Developer Portal
-- Registering App Group IDs in Developer Portal
-- Generating/downloading provisioning profiles
-- Associating App Groups with App IDs
+**CANNOT automate (provide instructions):**
+- Creating NSE target in Xcode
+- Adding capabilities in Xcode UI
+- Adding SDK to extension via SPM
+- Configuring build settings
+- Apple Developer Portal configuration
+- Provisioning profile regeneration
 
-For manual steps, provide clear instructions and proceed without waiting for confirmation.
+For manual steps, provide clear numbered instructions and proceed without waiting for confirmation.
 
-## Output Format
+## Output Summary
 
-After completing the workflow, summarize:
+After completing the workflow:
 
-1. **Files Created/Modified**
-   - List all entitlements files with full paths
-   - Show what was added or changed
+```
+IOS SETUP COMPLETE
+==================
 
-2. **Manual Steps Required**
-   - Xcode capability additions
-   - Developer Portal configurations
+Files Created:
+  - ios/{AppName}/{AppName}.entitlements
+  - ios/{AppName}NotificationServiceExtension/{AppName}NotificationServiceExtension.entitlements
+  - ios/{AppName}NotificationServiceExtension/NotificationService.swift
 
-3. **Verification Checklist**
-   - JSON report with status of each component
-   - Next steps for user to complete
+Podfile Updated:
+  - Added extension target with Clix pod
 
-4. **Troubleshooting Tips**
-   - Common issues to watch for based on project state
+Manual Steps Required:
+  1. Create NSE target in Xcode
+  2. Add Push Notifications capability
+  3. Add Background Modes capability (Remote notifications)
+  4. Add App Groups capability to main app
+  5. Add App Groups capability to NSE (same group ID)
+  6. Add Clix SDK to extension target (if using SPM)
+  7. Set ENABLE_USER_SCRIPT_SANDBOXING = No
+  8. Enable capabilities in Apple Developer Portal
+  9. Regenerate provisioning profiles
+
+Next Steps:
+  1. Run: cd ios && pod install
+  2. Complete manual steps in Xcode
+  3. Build and run to verify no signing errors
+  4. Run /doctor to verify setup
+```

@@ -28,20 +28,25 @@ describe('SlashCommandMenu command list', () => {
     expect(menuNames).not.toContain('clear');
   });
 
-  test('marks embedded skills as skill category', () => {
+  test('embedded skills are hidden from menu (advanced features)', () => {
+    // All embedded skills (from @clix-so/clix-agent-skills) are hidden from the menu
+    // because they overlap with /install or are advanced features.
+    // They're still accessible by typing them directly.
     const nonLocalSkill = getAvailableSkills().find((s) => !s.isLocal);
     if (!nonLocalSkill) return;
 
     const cmd = getSlashCommands().find((c) => c.command === nonLocalSkill.type);
-    expect(cmd).toBeDefined();
-    expect(cmd?.category).toBe('skill');
+    // Embedded skills should NOT appear in the menu (they are hidden)
+    expect(cmd).toBeUndefined();
   });
 
-  test('marks local skills as system category', () => {
-    const localSkill = getAvailableSkills().find((s) => s.isLocal);
-    if (!localSkill) return;
+  test('visible local skills are marked as system category', () => {
+    // Find a visible local skill (install, doctor are visible; ios-setup is hidden)
+    const localSkills = getAvailableSkills().filter((s) => s.isLocal);
+    const visibleLocalSkill = localSkills.find((s) => s.type === 'install' || s.type === 'doctor');
+    if (!visibleLocalSkill) return;
 
-    const cmd = getSlashCommands().find((c) => c.command === localSkill.type);
+    const cmd = getSlashCommands().find((c) => c.command === visibleLocalSkill.type);
     expect(cmd).toBeDefined();
     expect(cmd?.category).toBe('system');
   });

@@ -12,6 +12,27 @@ import type { SkillType } from '../skills';
 import type { Command } from './types';
 
 /**
+ * Package skills to hide from the slash command menu.
+ * These are still accessible by typing the full command directly.
+ * Hidden because they overlap with /install or are advanced features not needed for initial setup.
+ */
+const HIDDEN_PACKAGE_SKILLS = new Set([
+  'integration', // Overlaps with /install
+  'event-tracking', // Advanced, not needed for initial install
+  'user-management', // Advanced, not needed for initial install
+  'personalization', // Campaign feature, advanced
+  'api-triggered-campaigns', // Backend feature, advanced
+]);
+
+/**
+ * Local skills to hide from the slash command menu.
+ * These are still accessible by typing the full command directly.
+ */
+const HIDDEN_LOCAL_SKILLS = new Set([
+  'ios-setup', // Sub-skill invoked by /install
+]);
+
+/**
  * Create a skill command from metadata.
  */
 function createSkillCommand(meta: SkillMetadata): Command {
@@ -20,7 +41,7 @@ function createSkillCommand(meta: SkillMetadata): Command {
     name: meta.commandName,
     description: meta.shortDescription || meta.displayName,
     isEnabled: true,
-    isHidden: false,
+    isHidden: HIDDEN_PACKAGE_SKILLS.has(meta.commandName),
 
     userFacingName() {
       return `/${meta.commandName}`;
@@ -48,7 +69,7 @@ function createLocalSkillCommand(
     name,
     description: displayName,
     isEnabled: true,
-    isHidden: false,
+    isHidden: HIDDEN_LOCAL_SKILLS.has(name),
     aliases,
 
     userFacingName() {

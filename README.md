@@ -105,10 +105,9 @@ clix
 **Shortcuts:**
 
 - `/help` - Show all available commands
+- `/install` - Comprehensive SDK installation (orchestrates all setup tasks)
+- `/doctor` - SDK health check and completeness verification
 - `/debug` - Interactive debugging assistant
-- `/install` - Autonomous SDK installation
-- `/doctor` - SDK health check
-- `/integration` - Interactive SDK integration guide
 - `/agent` - Switch AI agents
 - `/transfer` - Transfer session to native CLI
 - `/exit` - Exit chat
@@ -132,7 +131,13 @@ Detects available agents (Claude, Codex, Gemini, OpenCode, Cursor, GitHub Copilo
 
 ### `clix install`
 
-Autonomous SDK installation with automatic file modifications. The AI agent will detect your platform, install dependencies, create initialization files, and integrate the SDK without manual intervention.
+Comprehensive SDK installation orchestrator with visual progress tracking. The AI agent will:
+
+1. **Analyze** your project (platform, entry point, Firebase status)
+2. **Plan** the installation tasks
+3. **Execute** automatable tasks (install dependency, initialize SDK, create entitlements)
+4. **Guide** you through manual steps (Xcode capabilities, Firebase config download)
+5. **Summarize** what was done and what remains
 
 ```bash
 clix install
@@ -152,13 +157,31 @@ The install command automatically detects and supports both Swift Package Manage
 - **SPM (Recommended)**: Detected via `Package.swift` or Xcode project with SPM packages
 - **CocoaPods**: Detected via `Podfile`
 
+**iOS NSE Setup:**
+
+For iOS projects, `/install` also handles Notification Service Extension (NSE) setup:
+- Creates entitlements files for main app and extension
+- Creates `NotificationService.swift` with Clix implementation
+- Updates Podfile for extension target (CocoaPods projects)
+- Provides step-by-step Xcode instructions for manual steps
+
 ### `clix doctor`
 
-Analyze SDK integration status in your project.
+Analyze SDK integration status and completeness in your project.
 
 ```bash
 clix doctor
 ```
+
+**What it checks:**
+
+- SDK dependency and initialization
+- iOS: Entitlements, capabilities, NSE configuration
+- Android: Manifest permissions, FCM setup
+- Firebase: Config files, package/bundle ID matches
+- Installation completeness percentage
+
+**Output:** JSON diagnostic report with issues categorized by severity (error/warning/info) and actionable recommendations.
 
 ### `clix ios-setup`
 
@@ -201,52 +224,37 @@ clix update --force
 - `--dry-run` - Preview update without executing
 - `--force` - Skip confirmation prompt
 
-### Interactive Skills (Chat Mode Only)
+### Advanced Skills (Hidden from Menu)
 
-The following skills require step-by-step guidance and are only available in chat mode. Run `clix` to start interactive chat, then use `/<skill>` commands.
+These skills are hidden from the slash command menu but still accessible by typing them directly. They're intended for advanced use cases or overlap with `/install`.
 
 #### `integration`
 
-SDK integration guide with step-by-step instructions. Unlike `clix install`, this provides interactive guidance for manual integration.
+Interactive SDK integration guide. Unlike `clix install` (autonomous), this provides step-by-step interactive guidance. Hidden because `/install` handles most integration tasks.
 
 ```
 > clix
 > /integration
 ```
 
-#### `event-tracking`
+#### `ios-setup`
 
-Event tracking setup with `Clix.trackEvent()`.
+Configure iOS capabilities and NSE. Hidden because `/install` handles iOS setup as part of the orchestrated installation.
+
+```
+> clix
+> /ios-setup
+```
+
+#### `event-tracking`, `user-management`, `personalization`, `api-triggered-campaigns`
+
+Advanced skills for post-installation tasks. Hidden because they're not needed for initial SDK setup.
 
 ```
 > clix
 > /event-tracking
-```
-
-#### `user-management`
-
-User management and identification setup.
-
-```
-> clix
 > /user-management
-```
-
-#### `personalization`
-
-Personalization templates setup.
-
-```
-> clix
 > /personalization
-```
-
-#### `api-triggered-campaigns`
-
-API-triggered campaign setup.
-
-```
-> clix
 > /api-triggered-campaigns
 ```
 
@@ -275,20 +283,22 @@ clix install-mcp codex
 
 Use these commands within the interactive chat (`clix`):
 
-### Autonomous Commands
+### Primary Commands (Visible in Menu)
+
+| Command | Description |
+|---------|-------------|
+| `/install` | Comprehensive SDK installation orchestrator |
+| `/doctor` | Check SDK integration status and completeness |
+| `/debug` | Interactive debugging assistant |
+
+### Advanced Commands (Hidden from Menu)
+
+These commands are still accessible by typing them directly:
 
 | Command | Aliases | Description |
 |---------|---------|-------------|
-| `/install` | | Autonomous SDK installation |
-| `/doctor` | | Check SDK integration status |
-| `/debug` | | Interactive debugging assistant |
 | `/ios-setup` | `/capabilities`, `/ios-capabilities` | Configure iOS capabilities and NSE |
-
-### Interactive Skills
-
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `/integration` | | SDK integration guide |
+| `/integration` | | Interactive SDK integration guide |
 | `/event-tracking` | | Event tracking setup |
 | `/user-management` | | User management setup |
 | `/personalization` | | Personalization templates |
@@ -354,8 +364,8 @@ Switching to Gemini...
 
 Pre-built workflows for common SDK tasks. Skills automatically detect your platform (iOS, Android, React Native, Flutter) and follow Clix SDK best practices.
 
-- **Autonomous Commands** (`/install`, `/doctor`, `/debug`): Can be run from command-line (`clix install`) or chat mode
-- **Interactive Skills** (`/integration`, `/event-tracking`, `/user-management`, `/personalization`, `/api-triggered-campaigns`): Require step-by-step guidance, available only in chat mode
+- **Primary Commands** (`/install`, `/doctor`, `/debug`): Visible in menu, can be run from command-line or chat mode
+- **Advanced Skills** (`/ios-setup`, `/integration`, `/event-tracking`, etc.): Hidden from menu but accessible by typing directly
 
 ## Development
 
