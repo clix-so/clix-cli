@@ -11,10 +11,13 @@ import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 
 /**
  * Remote OAuth credentials structure from https://clix.sh/secret
+ * Google OAuth client JSON format (Desktop app)
  */
 interface RemoteOAuthCredentials {
-  client_id: string;
-  client_secret: string;
+  installed: {
+    client_id: string;
+    client_secret: string;
+  };
 }
 
 /**
@@ -80,16 +83,16 @@ async function fetchRemoteCredentials(): Promise<RemoteOAuthCredentials | null> 
 
     const base64Data = await response.text();
     const jsonString = Buffer.from(base64Data, 'base64').toString('utf-8');
-    const credentials = JSON.parse(jsonString) as RemoteOAuthCredentials;
+    const data = JSON.parse(jsonString) as RemoteOAuthCredentials;
 
-    if (!credentials.client_id || !credentials.client_secret) {
+    if (!data.installed?.client_id || !data.installed?.client_secret) {
       if (process.env.DEBUG) {
         console.error('[OAuth] Invalid credentials format from remote');
       }
       return null;
     }
 
-    return credentials;
+    return data;
   } catch (error) {
     if (process.env.DEBUG) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -126,8 +129,8 @@ export async function getOAuthCredentials(): Promise<{
   const remote = await fetchRemoteCredentials();
   if (remote) {
     return {
-      clientId: remote.client_id,
-      clientSecret: remote.client_secret,
+      clientId: remote.installed.client_id,
+      clientSecret: remote.installed.client_secret,
     };
   }
 
