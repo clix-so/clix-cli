@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import plist from '@expo/plist';
+import plist, { type PlistValue } from 'plist';
 
 export interface EntitlementsConfig {
   /** Push notification environment: development or production */
@@ -39,7 +39,7 @@ export async function writeEntitlements(
   entitlementsPath: string,
   data: EntitlementsData,
 ): Promise<void> {
-  const content = plist.build(data);
+  const content = plist.build(data as PlistValue);
 
   // Ensure directory exists
   const dir = path.dirname(entitlementsPath);

@@ -24,6 +24,7 @@ export type OverlayType =
   | 'mcp'
   | 'debug'
   | 'firebase'
+  | 'ios-setup'
   | 'login'
   | 'logout'
   | 'whoami'
@@ -115,6 +116,7 @@ export function useOverlays(options: UseOverlaysOptions) {
 
   const showDebugPrompt = useCallback(() => setActiveOverlay('debug'), []);
   const showFirebaseWizard = useCallback(() => setActiveOverlay('firebase'), []);
+  const showIosSetupOverlay = useCallback(() => setActiveOverlay('ios-setup'), []);
   const showLoginOverlay = useCallback(() => setActiveOverlay('login'), []);
   const showLogoutOverlay = useCallback(() => setActiveOverlay('logout'), []);
   const showWhoamiOverlay = useCallback(() => setActiveOverlay('whoami'), []);
@@ -253,6 +255,15 @@ export function useOverlays(options: UseOverlaysOptions) {
     addSystemMessage('Firebase setup cancelled');
   }, [addSystemMessage]);
 
+  // iOS setup handlers
+  const handleIosSetupComplete = useCallback(
+    (message: string) => {
+      setActiveOverlay(null);
+      addSystemMessage(message);
+    },
+    [addSystemMessage],
+  );
+
   // Login handlers
   const handleLoginComplete = useCallback(
     (message: string) => {
@@ -319,6 +330,10 @@ export function useOverlays(options: UseOverlaysOptions) {
     showFirebaseWizard,
     handleFirebaseComplete,
     handleFirebaseCancel,
+
+    // iOS setup
+    showIosSetupOverlay,
+    handleIosSetupComplete,
 
     // Auth overlays
     showLoginOverlay,
