@@ -177,14 +177,15 @@ export const GOOGLE_OAUTH_CONFIG = {
 } as const;
 
 /**
- * Check if OAuth is configured (sync version).
+ * Check if OAuth is configured.
  *
- * Only checks environment variables. For full check, use getOAuthCredentials().
+ * Always returns true since credentials can be fetched from remote server.
+ * Actual credential availability is checked when getOAuthCredentials() is called.
  *
- * @returns True if environment variables are set
+ * @returns True (OAuth is always potentially available via remote fetch)
  */
 export function isOAuthConfigured(): boolean {
-  return !!(process.env.CLIX_GOOGLE_CLIENT_ID && process.env.CLIX_GOOGLE_CLIENT_SECRET);
+  return true;
 }
 
 /**
