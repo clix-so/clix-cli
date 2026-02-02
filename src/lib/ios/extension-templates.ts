@@ -3,20 +3,28 @@
  */
 
 /**
- * NotificationService.swift template for Clix SDK integration
+ * NotificationService.swift template for Clix SDK integration.
+ * Based on https://docs.clix.so/sdk-ios-nse
  */
 export const NOTIFICATION_SERVICE_TEMPLATE = `import UserNotifications
 import Clix
 
 class NotificationService: ClixNotificationServiceExtension {
+    override init() {
+        super.init()
+        // Register with Clix (replace with your project ID from https://console.clix.so/)
+        register(projectId: "YOUR_PROJECT_ID")
+    }
+
     override func didReceive(
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
-        // Register with Clix (replace with your project ID from https://console.clix.so/)
-        register(projectId: "YOUR_PROJECT_ID")
-
         super.didReceive(request, withContentHandler: contentHandler)
+    }
+
+    override func serviceExtensionTimeWillExpire() {
+        super.serviceExtensionTimeWillExpire()
     }
 }
 `;

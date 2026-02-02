@@ -56,12 +56,20 @@ import UserNotifications
 import Clix
 
 class NotificationService: ClixNotificationServiceExtension {
+    override init() {
+        super.init()
+        register(projectId: "YOUR_PROJECT_ID")
+    }
+
     override func didReceive(
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
-        register(projectId: "YOUR_PROJECT_ID")
         super.didReceive(request, withContentHandler: contentHandler)
+    }
+
+    override func serviceExtensionTimeWillExpire() {
+        super.serviceExtensionTimeWillExpire()
     }
 }
 \`\`\`

@@ -53,6 +53,8 @@ async function build() {
       'ws',
       'bufferutil',
       'utf-8-validate',
+      // @expo/plist uses relative requires - must be external
+      '@expo/plist',
     ],
     define: {
       // Disable dev mode to prevent react-devtools-core import

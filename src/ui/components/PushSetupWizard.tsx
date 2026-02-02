@@ -32,6 +32,7 @@ import {
   isOAuthConfigured,
 } from '@/lib/services/firebase';
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
+import { AppleLoginUI } from './AppleLoginUI';
 
 interface PushSetupWizardProps {
   projectPath: string;
@@ -134,15 +135,18 @@ function StatusPhase({
 function KeySourcePhase({
   onHasKey,
   onNoKey,
+  onAppleLogin,
   onCancel,
 }: {
   onHasKey: () => void;
   onNoKey: () => void;
+  onAppleLogin: () => void;
   onCancel: () => void;
 }): React.ReactElement {
   const items = [
     { label: 'Yes, I have an APNS key (.p8 file)', value: 'has_key' },
-    { label: 'No, I need to create one', value: 'no_key' },
+    { label: 'Create with Apple Account (auto)', value: 'apple_login' },
+    { label: 'Create manually in browser', value: 'no_key' },
     { label: 'Cancel', value: 'cancel' },
   ];
 
@@ -150,6 +154,9 @@ function KeySourcePhase({
     switch (item.value) {
       case 'has_key':
         onHasKey();
+        break;
+      case 'apple_login':
+        onAppleLogin();
         break;
       case 'no_key':
         onNoKey();
@@ -1022,6 +1029,54 @@ export const PushSetupWizard: React.FC<PushSetupWizardProps> = ({
     setPhase('apple_guide');
   }, []);
 
+  const handleAppleLogin = useCallback(() => {
+    setPhase('apple_login');
+  }, []);
+
+  const handleAppleLoginSuccess = useCallback(
+    (result: {
+      pushKey: { apnsKeyId: string; apnsKeyP8: string; teamId: string; teamName?: string };
+    }) => {
+      // Save P8 content to a file in the project directory
+      const p8FileName = `AuthKey_${result.pushKey.apnsKeyId}.p8`;
+      const p8FilePath = path.join(projectPath, p8FileName);
+
+      try {
+        fs.writeFileSync(p8FilePath, result.pushKey.apnsKeyP8, 'utf-8');
+      } catch {
+        // If we can't write to project dir, try current dir
+        const fallbackPath = path.join(process.cwd(), p8FileName);
+        fs.writeFileSync(fallbackPath, result.pushKey.apnsKeyP8, 'utf-8');
+      }
+
+      const savedPath = fs.existsSync(p8FilePath)
+        ? p8FilePath
+        : path.join(process.cwd(), p8FileName);
+
+      setContext((prev) => ({
+        ...prev,
+        pushKey: {
+          apnsKeyP8: result.pushKey.apnsKeyP8,
+          apnsKeyId: result.pushKey.apnsKeyId,
+          teamId: result.pushKey.teamId,
+        },
+        p8FilePath: savedPath,
+      }));
+      // Proceed to Firebase upload
+      if (isOAuthConfigured()) {
+        setPhase('firebase_auth');
+      } else {
+        setPhase('firebase_upload');
+      }
+    },
+    [projectPath],
+  );
+
+  const handleAppleLoginFallback = useCallback(() => {
+    // Fall back to manual browser-based key creation
+    setPhase('apple_guide');
+  }, []);
+
   const handleAppleGuideComplete = useCallback(() => {
     setPhase('p8_input');
   }, []);
@@ -1083,7 +1138,21 @@ export const PushSetupWizard: React.FC<PushSetupWizardProps> = ({
 
     case 'key_source':
       return (
-        <KeySourcePhase onHasKey={handleHasKey} onNoKey={handleNoKey} onCancel={handleCancel} />
+        <KeySourcePhase
+          onHasKey={handleHasKey}
+          onNoKey={handleNoKey}
+          onAppleLogin={handleAppleLogin}
+          onCancel={handleCancel}
+        />
+      );
+
+    case 'apple_login':
+      return (
+        <AppleLoginUI
+          onSuccess={handleAppleLoginSuccess}
+          onCancel={handleCancel}
+          onFallback={handleAppleLoginFallback}
+        />
       );
 
     case 'apple_guide':

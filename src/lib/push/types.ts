@@ -36,7 +36,8 @@ export type PushSetupPhase =
   | 'detecting' // Analyzing project
   | 'status' // Showing current status
   | 'key_source' // Asking if user has existing key
-  | 'apple_guide' // Apple Portal guide (optional)
+  | 'apple_login' // Apple account login for auto key creation
+  | 'apple_guide' // Apple Portal guide (manual)
   | 'p8_input' // P8 + Key ID + Team ID input
   | 'validation' // Validating inputs
   | 'firebase_auth' // Authenticating with Firebase

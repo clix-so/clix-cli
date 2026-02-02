@@ -1,5 +1,17 @@
 import { Box, render, Text, useInput } from 'ink';
+import Spinner from 'ink-spinner';
 import type React from 'react';
+import {
+  addClixToExtensionTarget,
+  addNotificationServiceExtension,
+  backupPodfile,
+  backupProject,
+  createExtensionFiles,
+  type ExtensionContext,
+  getExtensionBundleId,
+  getExtensionName,
+  hasPodfile,
+} from '../../lib/ios';
 import type { PushSetupResult } from '../../lib/push';
 import {
   type GuidedSetupContext,
@@ -23,6 +35,21 @@ export interface IosSetupCommandOptions {
   skipPortal?: boolean;
   /** Push notification environment */
   pushEnvironment?: 'development' | 'production';
+}
+
+/**
+ * Result of automated project modification phase.
+ */
+interface ProjectModificationResult {
+  success: boolean;
+  extensionFilesCreated: boolean;
+  pbxprojModified: boolean;
+  podfileModified: boolean;
+  createdFiles: string[];
+  warnings: string[];
+  /** If true, fall back to guided wizard for manual steps */
+  requiresManualSteps: boolean;
+  error?: string;
 }
 
 function toDirectSetupOutput(result: IosSetupResult): FinalOutputResult {
@@ -92,8 +119,188 @@ async function runDirectSetup(options: IosSetupCommandOptions): Promise<IosSetup
 }
 
 /**
+ * UI component for showing project modification progress.
+ */
+function ProjectModificationUI({
+  status,
+  warnings,
+}: {
+  status: string;
+  warnings: string[];
+}): React.ReactElement {
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Box>
+        <Text color="cyan">
+          <Spinner type="dots" />
+        </Text>
+        <Text> {status}</Text>
+      </Box>
+      {warnings.map((warning) => (
+        <Box key={warning} marginLeft={2}>
+          <Text color="yellow">⚠ {warning}</Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+/**
+ * Print the result of project modification.
+ */
+function printModificationResult(result: ProjectModificationResult): void {
+  if (!result.extensionFilesCreated && !result.pbxprojModified && !result.podfileModified) {
+    return;
+  }
+
+  console.log('');
+  if (result.extensionFilesCreated) {
+    console.log('✓ Extension files created');
+    for (const file of result.createdFiles) {
+      console.log(`  • ${file}`);
+    }
+  }
+  if (result.pbxprojModified) {
+    console.log('✓ Xcode project updated (NSE target added)');
+  }
+  if (result.podfileModified) {
+    console.log('✓ Podfile updated (extension target added)');
+    console.log('  Run: cd ios && pod install');
+  }
+  if (result.warnings.length > 0) {
+    console.log('');
+    for (const warning of result.warnings) {
+      console.log(`⚠ ${warning}`);
+    }
+  }
+}
+
+/**
+ * Execute the project modification steps.
+ */
+async function executeProjectModification(
+  directResult: IosSetupResult,
+  result: ProjectModificationResult,
+  updateStatus: (status: string) => void,
+): Promise<void> {
+  const { agentContext } = directResult;
+  if (!agentContext) return;
+
+  const extensionName = getExtensionName(agentContext.appName);
+  const extensionBundleId = getExtensionBundleId(agentContext.bundleId, agentContext.appName);
+  const extensionDir = `${agentContext.iosDir}/${extensionName}`;
+
+  // 1. Create extension files
+  const extContext: ExtensionContext = {
+    appName: agentContext.appName,
+    bundleId: agentContext.bundleId,
+    iosDir: agentContext.iosDir,
+    pushEnvironment: 'development',
+  };
+
+  const extResult = await createExtensionFiles(extContext);
+  if (extResult.success) {
+    result.extensionFilesCreated = true;
+    result.createdFiles.push(...extResult.createdFiles);
+  } else {
+    result.warnings.push(extResult.error || 'Failed to create extension files');
+  }
+
+  // 2. Modify pbxproj
+  updateStatus('Modifying Xcode project...');
+  backupProject(agentContext.projectPath);
+
+  const pbxResult = await addNotificationServiceExtension({
+    projectPath: agentContext.projectPath,
+    extensionName,
+    extensionBundleId,
+    extensionDir,
+    appGroupId: agentContext.appGroupId,
+    teamId: directResult.projectInfo?.teamId,
+    deploymentTarget: '14.0',
+  });
+
+  if (pbxResult.success) {
+    result.pbxprojModified = pbxResult.targetAdded;
+    result.warnings.push(...pbxResult.warnings);
+  } else {
+    result.warnings.push(pbxResult.error || 'Failed to modify pbxproj');
+    result.requiresManualSteps = true;
+  }
+
+  // 3. Modify Podfile (if exists)
+  if (hasPodfile(agentContext.iosDir)) {
+    updateStatus('Updating Podfile...');
+    backupPodfile(agentContext.iosDir);
+
+    const podResult = await addClixToExtensionTarget({
+      iosDir: agentContext.iosDir,
+      extensionName,
+    });
+
+    if (podResult.success) {
+      result.podfileModified = podResult.modified;
+    } else {
+      result.warnings.push(podResult.error || 'Failed to modify Podfile');
+    }
+  }
+
+  result.success = true;
+}
+
+/**
+ * Run automated project modification phase.
+ * Creates extension files and modifies pbxproj/Podfile programmatically.
+ */
+async function runProjectModification(
+  directResult: IosSetupResult,
+): Promise<ProjectModificationResult> {
+  const result: ProjectModificationResult = {
+    success: false,
+    extensionFilesCreated: false,
+    pbxprojModified: false,
+    podfileModified: false,
+    createdFiles: [],
+    warnings: [],
+    requiresManualSteps: false,
+  };
+
+  if (!directResult.agentContext) {
+    result.success = true;
+    return result;
+  }
+
+  // Render progress UI
+  const displayWarnings: string[] = [];
+  let currentStatus = 'Creating extension files...';
+
+  const { unmount, rerender } = render(
+    <ProjectModificationUI status={currentStatus} warnings={displayWarnings} />,
+    { incrementalRendering: true },
+  );
+
+  const updateStatus = (status: string) => {
+    currentStatus = status;
+    displayWarnings.push(...result.warnings.filter((w) => !displayWarnings.includes(w)));
+    rerender(<ProjectModificationUI status={currentStatus} warnings={displayWarnings} />);
+  };
+
+  try {
+    await executeProjectModification(directResult, result, updateStatus);
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    result.requiresManualSteps = true;
+  } finally {
+    unmount();
+  }
+
+  printModificationResult(result);
+  return result;
+}
+
+/**
  * Run the guided setup phase (Extension file generation + Xcode configuration guide)
- * Replaces the agent-based approach with static file generation and step-by-step guide
+ * Used as fallback when automated modification fails or for manual verification.
  */
 async function runGuidedSetup(
   directResult: IosSetupResult,
@@ -203,11 +410,66 @@ async function runPushSetup(directResult: IosSetupResult): Promise<PushSetupResu
   });
 }
 
+export async function runIosSetupCommand(options: IosSetupCommandOptions): Promise<void> {
+  // Phase 1: Direct implementation (Portal sync + Entitlements)
+  const directResult = await runDirectSetup(options);
+
+  if (!directResult.success) {
+    printFinalOutput(toDirectSetupOutput(directResult));
+    return;
+  }
+
+  // Show direct setup completion
+  printFinalOutput(toDirectSetupOutput(directResult));
+
+  // Phase 2: Automated project modification (pbxproj + Podfile)
+  let modificationResult: ProjectModificationResult | undefined;
+  let guidedResult: GuidedSetupResult | undefined;
+
+  if (directResult.agentContext) {
+    console.log('\n'); // Add spacing before modification phase
+    modificationResult = await runProjectModification(directResult);
+
+    // Fall back to guided setup if automated modification failed or requires manual steps
+    if (modificationResult.requiresManualSteps) {
+      console.log('\n'); // Add spacing before guided setup
+      console.log('Some steps require manual configuration. Starting guided setup...');
+      console.log('');
+      guidedResult = await runGuidedSetup(directResult);
+    }
+  }
+
+  // Phase 3: Push setup (optional - APNS key + Firebase)
+  // Only ask if Phase 1 & 2 were successful
+  const phase2Success =
+    modificationResult?.success && !modificationResult.requiresManualSteps
+      ? true
+      : (guidedResult?.success ?? true);
+
+  if (directResult.success && phase2Success) {
+    console.log('\n'); // Add spacing before push setup prompt
+    const shouldSetupPush = await askPushSetupConfirmation();
+
+    if (shouldSetupPush) {
+      const pushResult = await runPushSetup(directResult);
+      printConsolidatedOutputWithModification(
+        directResult,
+        modificationResult,
+        guidedResult,
+        pushResult,
+      );
+    } else {
+      printConsolidatedOutputWithModification(directResult, modificationResult, guidedResult, null);
+    }
+  }
+}
+
 /**
- * Print consolidated output for all phases
+ * Print consolidated output including modification results.
  */
-function printConsolidatedOutput(
+function printConsolidatedOutputWithModification(
   directResult: IosSetupResult,
+  modificationResult: ProjectModificationResult | undefined,
   guidedResult: GuidedSetupResult | undefined,
   pushResult: PushSetupResult | null,
 ): void {
@@ -223,14 +485,18 @@ function printConsolidatedOutput(
     console.log('✓ Entitlements created');
   }
 
-  // Phase 2 summary
-  if (guidedResult?.success) {
+  // Phase 2 summary (modification or guided)
+  if (modificationResult?.extensionFilesCreated) {
     console.log('✓ Extension files created');
-    if (guidedResult.createdFiles.length > 0) {
-      for (const file of guidedResult.createdFiles) {
-        console.log(`  • ${file}`);
-      }
-    }
+  }
+  if (modificationResult?.pbxprojModified) {
+    console.log('✓ Xcode project updated');
+  }
+  if (modificationResult?.podfileModified) {
+    console.log('✓ Podfile updated');
+  }
+  if (guidedResult?.success) {
+    console.log('✓ Guided setup completed');
   }
 
   // Phase 3 summary
@@ -244,41 +510,16 @@ function printConsolidatedOutput(
     console.log('○ APNS key setup skipped');
   }
 
+  // Warnings
+  if (modificationResult?.warnings && modificationResult.warnings.length > 0) {
+    console.log('');
+    console.log('Warnings:');
+    for (const warning of modificationResult.warnings) {
+      console.log(`  ⚠ ${warning}`);
+    }
+  }
+
   console.log('');
   console.log('Your iOS app is ready to receive push notifications!');
   console.log('');
-}
-
-export async function runIosSetupCommand(options: IosSetupCommandOptions): Promise<void> {
-  // Phase 1: Direct implementation (Portal sync + Entitlements)
-  const directResult = await runDirectSetup(options);
-
-  if (!directResult.success) {
-    printFinalOutput(toDirectSetupOutput(directResult));
-    return;
-  }
-
-  // Show direct setup completion
-  printFinalOutput(toDirectSetupOutput(directResult));
-
-  // Phase 2: Guided setup (Extension file generation + Xcode configuration guide)
-  let guidedResult: GuidedSetupResult | undefined;
-  if (directResult.agentContext) {
-    console.log('\n'); // Add spacing before guided setup phase
-    guidedResult = await runGuidedSetup(directResult);
-  }
-
-  // Phase 3: Push setup (optional - APNS key + Firebase)
-  // Only ask if Phase 1 & 2 were successful
-  if (directResult.success && (!guidedResult || guidedResult.success)) {
-    console.log('\n'); // Add spacing before push setup prompt
-    const shouldSetupPush = await askPushSetupConfirmation();
-
-    if (shouldSetupPush) {
-      const pushResult = await runPushSetup(directResult);
-      printConsolidatedOutput(directResult, guidedResult, pushResult);
-    } else {
-      printConsolidatedOutput(directResult, guidedResult, null);
-    }
-  }
 }
