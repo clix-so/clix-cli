@@ -5,7 +5,12 @@
  */
 
 export { GoogleAuthClient } from './auth-client';
-export { GOOGLE_OAUTH_CONFIG, getOAuthConfigurationError, isOAuthConfigured } from './config';
+export {
+  GOOGLE_OAUTH_CONFIG,
+  getOAuthConfigurationError,
+  getOAuthCredentials,
+  isOAuthConfigured,
+} from './config';
 export { TokenStore } from './token-store';
 export type {
   AuthResult,

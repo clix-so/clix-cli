@@ -14,7 +14,7 @@ import {
   OAUTH_CALLBACK_CONFIG,
   OAuthCallbackServer,
 } from '@/lib/utils/oauth';
-import { GOOGLE_OAUTH_CONFIG, isOAuthConfigured } from './config';
+import { GOOGLE_OAUTH_CONFIG, getOAuthCredentials, isOAuthConfigured } from './config';
 import { TokenStore } from './token-store';
 import type { AuthResult, OAuthCallbackResult, OAuthTokens } from './types';
 
@@ -59,15 +59,25 @@ export class GoogleAuthClient {
    * Generate authorization URL for browser-based authentication.
    *
    * @returns Authorization URL to open in browser
+   * @throws Error if credentials are not available
    */
-  generateAuthUrl(): string {
+  async generateAuthUrl(): Promise<string> {
+    // Get credentials from remote or environment
+    const credentials = await getOAuthCredentials();
+    if (!credentials) {
+      throw new Error(
+        'OAuth credentials are not available. Check network connection or set environment variables.',
+      );
+    }
+    const { clientId } = credentials;
+
     // Generate PKCE code verifier and challenge
     this.codeVerifier = generateCodeVerifier();
     this.oauthState = generateState();
     const codeChallenge = generateCodeChallenge(this.codeVerifier);
 
     const params = new URLSearchParams({
-      client_id: GOOGLE_OAUTH_CONFIG.clientId,
+      client_id: clientId,
       redirect_uri: GOOGLE_OAUTH_CONFIG.redirectUri,
       response_type: 'code',
       scope: GOOGLE_OAUTH_CONFIG.scopes.join(' '),
@@ -121,14 +131,24 @@ export class GoogleAuthClient {
    * Uses direct HTTP request to Google's token endpoint.
    *
    * @param code - Authorization code from callback
+   * @throws Error if credentials are not available
    */
   async exchangeCode(code: string): Promise<void> {
     if (!this.codeVerifier) {
       throw new Error('PKCE code verifier not found. Call generateAuthUrl() first.');
     }
 
+    // Get credentials from remote or environment
+    const credentials = await getOAuthCredentials();
+    if (!credentials) {
+      throw new Error(
+        'OAuth credentials are not available. Check network connection or set environment variables.',
+      );
+    }
+    const { clientId, clientSecret } = credentials;
+
     const params = new URLSearchParams({
-      client_id: GOOGLE_OAUTH_CONFIG.clientId,
+      client_id: clientId,
       code,
       code_verifier: this.codeVerifier,
       grant_type: 'authorization_code',
@@ -136,15 +156,15 @@ export class GoogleAuthClient {
     });
 
     // Include client_secret if available (required for Web application OAuth clients)
-    if (GOOGLE_OAUTH_CONFIG.clientSecret) {
-      params.set('client_secret', GOOGLE_OAUTH_CONFIG.clientSecret);
+    if (clientSecret) {
+      params.set('client_secret', clientSecret);
     }
 
     // Debug: Log request details
     if (process.env.DEBUG) {
       console.error('[OAuth Debug] Token exchange request:');
-      console.error('  Client ID:', GOOGLE_OAUTH_CONFIG.clientId);
-      console.error('  Has client_secret:', !!GOOGLE_OAUTH_CONFIG.clientSecret);
+      console.error('  Client ID:', clientId);
+      console.error('  Has client_secret:', !!clientSecret);
       console.error('  Has code_verifier:', !!this.codeVerifier);
     }
 
@@ -193,17 +213,27 @@ export class GoogleAuthClient {
 
   /**
    * Refresh access token using refresh token.
+   * @throws Error if credentials are not available
    */
   private async refreshAccessToken(refreshToken: string): Promise<OAuthTokens> {
+    // Get credentials from remote or environment
+    const credentials = await getOAuthCredentials();
+    if (!credentials) {
+      throw new Error(
+        'OAuth credentials are not available. Check network connection or set environment variables.',
+      );
+    }
+    const { clientId, clientSecret } = credentials;
+
     const params = new URLSearchParams({
-      client_id: GOOGLE_OAUTH_CONFIG.clientId,
+      client_id: clientId,
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     });
 
     // Include client_secret if available (required for Web application OAuth clients)
-    if (GOOGLE_OAUTH_CONFIG.clientSecret) {
-      params.set('client_secret', GOOGLE_OAUTH_CONFIG.clientSecret);
+    if (clientSecret) {
+      params.set('client_secret', clientSecret);
     }
 
     const response = await fetch(GOOGLE_OAUTH_CONFIG.tokenEndpoint, {
@@ -275,7 +305,7 @@ export class GoogleAuthClient {
    */
   async authenticate(openBrowser: (url: string) => void): Promise<AuthResult> {
     try {
-      const authUrl = this.generateAuthUrl();
+      const authUrl = await this.generateAuthUrl();
       openBrowser(authUrl);
 
       const { code } = await this.waitForCallback();
