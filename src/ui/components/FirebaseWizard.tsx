@@ -942,7 +942,6 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         }
 
         // Re-detect to verify
-        service.clearCache();
         const newResult = await service.detect();
         setResult(newResult);
         setPhase('status');
@@ -1167,12 +1166,10 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
           break;
 
         case 'redetect':
-          service.clearCache();
           setPhase('detecting');
           break;
 
         case 'redetect_platform':
-          service.clearCache();
           setValidatingPlatform(action.platform);
           setPhase('detecting');
           break;
@@ -1182,7 +1179,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
           setPhase('validating');
           // Re-detect to validate
           try {
-            const newResult = await service.detect(true);
+            const newResult = await service.detect();
             setResult(newResult);
             setPhase('status');
           } catch (err) {

@@ -24,7 +24,6 @@ import { extractProjectId, extractProjectIdFromPlist, validateProjectIdMatch } f
  */
 export class FirebaseService {
   private projectPath: string;
-  private cachedResult: FirebaseDetectionResult | null = null;
 
   /**
    * Create a new FirebaseService instance.
@@ -38,16 +37,12 @@ export class FirebaseService {
   /**
    * Detect Firebase configuration in the project.
    *
-   * @param forceRefresh - Force re-detection even if cached
+   * Always performs fresh detection to ensure current state.
+   *
    * @returns Detection result with credential files and issues
    */
-  async detect(forceRefresh = false): Promise<FirebaseDetectionResult> {
-    if (!forceRefresh && this.cachedResult) {
-      return this.cachedResult;
-    }
-
-    this.cachedResult = await detectFirebaseConfig(this.projectPath);
-    return this.cachedResult;
+  async detect(): Promise<FirebaseDetectionResult> {
+    return await detectFirebaseConfig(this.projectPath);
   }
 
   /**
@@ -254,13 +249,6 @@ export class FirebaseService {
     }
 
     return lines.join('\n');
-  }
-
-  /**
-   * Clear the cached detection result.
-   */
-  clearCache(): void {
-    this.cachedResult = null;
   }
 
   /**
