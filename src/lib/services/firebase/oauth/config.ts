@@ -1,60 +1,146 @@
 /**
  * OAuth configuration for Google authentication.
  *
- * ## Security Note: Public OAuth Credentials
- *
- * The OAuth Client ID and Client Secret in this file are **intentionally public**.
- * This is standard practice for Desktop/Native OAuth applications.
- *
- * According to Google's official documentation:
- * > "The client secret is not treated as a secret for native apps. Every copy
- * > of your application uses the same client secret, making it impossible to
- * > keep it truly secret. The security of native app OAuth flows relies on
- * > PKCE (Proof Key for Code Exchange) instead."
- *
- * Reference: https://developers.google.com/identity/protocols/oauth2/native-app
- *
- * This is the same pattern used by:
- * - Firebase CLI (firebase-tools)
- * - Google Cloud CLI (gcloud)
- * - Other official Google SDKs
- *
- * The credentials are scoped to Firebase Management API and cannot access
- * user data without explicit user consent through the OAuth flow.
+ * Credentials are fetched from https://clix.sh/secret or provided via environment variables.
  *
  * @module services/firebase/oauth/config
  */
 
+import { createHash } from 'node:crypto';
 import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 
 /**
- * Google OAuth configuration.
+ * Remote OAuth credentials structure from https://clix.sh/secret
+ */
+interface RemoteOAuthCredentials {
+  client_id: string;
+  client_secret: string;
+}
+
+/**
+ * Remote credentials endpoint.
+ */
+const CREDENTIALS_ENDPOINT = 'https://clix.sh/secret';
+
+/**
+ * Fetch timeout in milliseconds.
+ */
+const FETCH_TIMEOUT_MS = 5000;
+
+/**
+ * Time window for auth token in milliseconds (5 minutes).
+ */
+const AUTH_TIME_WINDOW_MS = 5 * 60 * 1000;
+
+/**
+ * Generate time-based authorization token.
  *
- * Client ID is loaded from the `CLIX_GOOGLE_CLIENT_ID` environment variable.
- * Supports both Desktop apps (PKCE, no secret) and Web apps (requires secret).
+ * Creates a dynamic token based on current time window for simple server-side validation.
+ *
+ * @returns Authorization token string
+ */
+function generateAuthToken(): string {
+  // Get current time window (5-minute intervals)
+  const timeWindow = Math.floor(Date.now() / AUTH_TIME_WINDOW_MS);
+
+  // Create token from time window and identifier
+  const payload = `clix:${timeWindow}:${process.platform}`;
+  const hash = createHash('sha256').update(payload).digest('hex');
+
+  return hash.substring(0, 32);
+}
+
+/**
+ * Fetch OAuth credentials from remote server.
+ *
+ * @returns Remote credentials or null on failure
+ */
+async function fetchRemoteCredentials(): Promise<RemoteOAuthCredentials | null> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const authToken = generateAuthToken();
+
+    const response = await fetch(CREDENTIALS_ENDPOINT, {
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'User-Agent': 'Clix-CLI',
+        Accept: 'text/plain',
+      },
+    });
+
+    if (!response.ok) {
+      if (process.env.DEBUG) {
+        console.error(`[OAuth] Failed to fetch credentials: HTTP ${response.status}`);
+      }
+      return null;
+    }
+
+    const base64Data = await response.text();
+    const jsonString = Buffer.from(base64Data, 'base64').toString('utf-8');
+    const credentials = JSON.parse(jsonString) as RemoteOAuthCredentials;
+
+    if (!credentials.client_id || !credentials.client_secret) {
+      if (process.env.DEBUG) {
+        console.error('[OAuth] Invalid credentials format from remote');
+      }
+      return null;
+    }
+
+    return credentials;
+  } catch (error) {
+    if (process.env.DEBUG) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[OAuth] Credentials fetch error: ${message}`);
+    }
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Get OAuth credentials.
+ *
+ * Priority:
+ * 1. Environment variables (CLIX_GOOGLE_CLIENT_ID, CLIX_GOOGLE_CLIENT_SECRET)
+ * 2. Remote fetch from https://clix.sh/secret
+ *
+ * @returns OAuth client credentials or null if not available
+ */
+export async function getOAuthCredentials(): Promise<{
+  clientId: string;
+  clientSecret: string;
+} | null> {
+  // 1. Environment variables take precedence
+  if (process.env.CLIX_GOOGLE_CLIENT_ID && process.env.CLIX_GOOGLE_CLIENT_SECRET) {
+    return {
+      clientId: process.env.CLIX_GOOGLE_CLIENT_ID,
+      clientSecret: process.env.CLIX_GOOGLE_CLIENT_SECRET,
+    };
+  }
+
+  // 2. Fetch from remote
+  const remote = await fetchRemoteCredentials();
+  if (remote) {
+    return {
+      clientId: remote.client_id,
+      clientSecret: remote.client_secret,
+    };
+  }
+
+  // No credentials available
+  return null;
+}
+
+/**
+ * Google OAuth configuration (static settings only).
+ *
+ * For client credentials, use `getOAuthCredentials()` instead.
  */
 export const GOOGLE_OAUTH_CONFIG = {
-  /**
-   * OAuth Client ID (Public - see module documentation).
-   *
-   * This is Clix's official OAuth Desktop app client ID.
-   * Can be overridden via CLIX_GOOGLE_CLIENT_ID environment variable.
-   */
-  clientId:
-    process.env.CLIX_GOOGLE_CLIENT_ID ||
-    '187555663323-31u81ha3ji7285f4ct1q9tn8vm6glunq.apps.googleusercontent.com',
-
-  /**
-   * OAuth Client Secret (Public - NOT a real secret for Desktop apps).
-   *
-   * Per Google's OAuth2 spec for native apps, this is NOT treated as a secret.
-   * Security is provided by PKCE, not by keeping this value private.
-   * See module documentation for details.
-   *
-   * Can be overridden via CLIX_GOOGLE_CLIENT_SECRET environment variable.
-   */
-  clientSecret: process.env.CLIX_GOOGLE_CLIENT_SECRET || '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',
-
   /**
    * Google OAuth 2.0 authorization endpoint.
    */
@@ -91,12 +177,14 @@ export const GOOGLE_OAUTH_CONFIG = {
 } as const;
 
 /**
- * Check if OAuth is configured (Client ID is set).
+ * Check if OAuth is configured (sync version).
  *
- * @returns True if OAuth client ID is available (default or from environment variable)
+ * Only checks environment variables. For full check, use getOAuthCredentials().
+ *
+ * @returns True if environment variables are set
  */
 export function isOAuthConfigured(): boolean {
-  return !!GOOGLE_OAUTH_CONFIG.clientId;
+  return !!(process.env.CLIX_GOOGLE_CLIENT_ID && process.env.CLIX_GOOGLE_CLIENT_SECRET);
 }
 
 /**
@@ -105,9 +193,11 @@ export function isOAuthConfigured(): boolean {
  * @returns User-friendly error message with setup instructions
  */
 export function getOAuthConfigurationError(): string {
-  return `OAuth client ID is not configured.
+  return `OAuth credentials are not available.
 
-Clix uses a default OAuth client, but you can use your own:
+Failed to fetch credentials from remote server.
+
+You can set your own OAuth credentials:
 
 1. Create OAuth Client ID at https://console.cloud.google.com/apis/credentials
    - Application type: Desktop app
