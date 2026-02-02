@@ -58,12 +58,7 @@ const LOCAL_SKILLS: SkillInfo[] = [
     description: 'Interactive debugging assistant',
     isLocal: true,
   },
-  {
-    type: 'ios-setup',
-    name: 'iOS Setup',
-    description: 'Configure iOS capabilities for push notifications and app groups',
-    isLocal: true,
-  },
+  // NOTE: ios-setup is now a LocalJSXCommand in registry.ts, not a skill
 ];
 
 /**
@@ -321,8 +316,6 @@ async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions)
         projectPath: options?.projectPath ?? process.cwd(),
         oneShot: options?.oneShot,
       });
-    case 'ios-setup':
-      return getIosSetupPrompt(options);
     default:
       throw new Error(`Unknown local skill: ${skillType}`);
   }
@@ -346,28 +339,6 @@ function getDoctorPrompt(options?: SkillOptions): string {
   // Load the doctor prompt from external file
   const doctorPrompt = readLocalSkillPrompt('doctor');
   prompt += doctorPrompt;
-
-  return prompt;
-}
-
-/**
- * Get prompt for the ios-setup skill.
- * Configures iOS capabilities for push notifications and app groups.
- * Prompt is loaded from src/lib/skills/ios-setup/SKILL.md
- */
-function getIosSetupPrompt(options?: SkillOptions): string {
-  const projectPath = options?.projectPath ?? process.cwd();
-
-  let prompt = `Project path: ${projectPath}\n\n`;
-
-  // Add one-shot instruction for autonomous execution
-  if (options?.oneShot) {
-    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
-  }
-
-  // Load the ios-setup prompt from external file
-  const iosSetupPrompt = readLocalSkillPrompt('ios-setup');
-  prompt += iosSetupPrompt;
 
   return prompt;
 }

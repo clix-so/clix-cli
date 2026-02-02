@@ -162,24 +162,33 @@ clix doctor
 
 ### `clix ios-setup`
 
-Configure iOS capabilities and Notification Service Extension (NSE) for the Clix SDK.
+Configure iOS capabilities, Notification Service Extension (NSE), and APNS key for the Clix SDK.
 
 ```bash
 clix ios-setup
 ```
 
 **What it does:**
-1. Analyzes your iOS project structure
-2. Checks current capabilities status (Push Notifications, App Groups)
-3. Creates/modifies entitlements files
-4. Guides NSE setup for rich push notifications:
-   - Creates `{AppName}NotificationServiceExtension` target
-   - Implements `NotificationService.swift` with `ClixNotificationServiceExtension`
-   - Configures CocoaPods/SPM dependencies for extension target
-   - Sets build settings (`ENABLE_USER_SCRIPT_SANDBOXING` for Xcode 15+)
-5. Guides you through Xcode and Apple Developer Portal configuration
+1. **Phase 1 - Capabilities & Entitlements (Automatic):**
+   - Analyzes your iOS project structure
+   - Syncs capabilities with Apple Developer Portal (Push Notifications, App Groups)
+   - Creates/modifies entitlements files
 
-**Note:** Some steps require manual action in Xcode and Apple Developer Portal.
+2. **Phase 2 - Extension Setup (Guided):**
+   - Auto-generates NSE files:
+     - `NotificationService.swift` with `ClixNotificationServiceExtension`
+     - `Info.plist` for extension
+     - Extension entitlements file
+   - Step-by-step guide for Xcode configuration:
+     - Creating extension target in Xcode
+     - Configuring build settings (`ENABLE_USER_SCRIPT_SANDBOXING` for Xcode 15+)
+     - Adding CocoaPods/SPM dependencies
+
+3. **Phase 3 - APNS Key Setup (Optional):**
+   - APNS authentication key (.p8 file) creation guide
+   - Firebase Console upload for push notification delivery
+
+**Note:** Phase 2 & 3 require manual action in Xcode, Apple Developer Portal, and Firebase Console.
 
 ### `clix update`
 

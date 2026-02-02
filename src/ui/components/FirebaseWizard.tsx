@@ -1,10 +1,10 @@
-import { spawn } from 'node:child_process';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { openBrowser } from '@/lib/auth/browser';
 import {
   type AndroidApp,
   type CredentialAction,
@@ -170,31 +170,6 @@ function buildMenuItems(result: FirebaseDetectionResult): MenuAction[] {
   }
 
   return items;
-}
-
-/**
- * Open URL in default browser.
- * Uses spawn with argument array to prevent shell injection.
- */
-function openBrowser(url: string): void {
-  const platform = process.platform;
-
-  let command: string;
-  let args: string[];
-
-  if (platform === 'darwin') {
-    command = 'open';
-    args = [url];
-  } else if (platform === 'win32') {
-    // Windows 'start' requires empty title as first arg for URLs
-    command = 'cmd';
-    args = ['/c', 'start', '""', url];
-  } else {
-    command = 'xdg-open';
-    args = [url];
-  }
-
-  spawn(command, args, { detached: true, stdio: 'ignore' }).unref();
 }
 
 /**

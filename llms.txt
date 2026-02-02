@@ -9,7 +9,7 @@ Clix CLI is an interactive command-line tool that provides a chat interface with
 **Core Features:**
 - Interactive chat interface as the primary interaction mode
 - Support for 6 AI agents: Claude, Codex, Gemini, OpenCode, Cursor, and GitHub Copilot
-- 19 slash commands for quick actions
+- 20 slash commands for quick actions
 - Skills system with 5 interactive skills + 4 autonomous commands
 - Interactive debug assistant for problem diagnosis
 - Session transfer to native agent CLIs
@@ -70,14 +70,14 @@ clix
 **Features:**
 - Natural language conversation with AI
 - Real-time streaming responses
-- 19 slash commands (type `/` to see menu)
+- 20 slash commands (type `/` to see menu)
 - Context usage tracking (200K token window for Claude Sonnet)
 - History navigation with ↑/↓ arrow keys
 - Press Escape to cancel streaming requests
 - Automatic history compaction at 90% context threshold
 
 **Available within chat:**
-- All 19 slash commands (4 autonomous + 5 skills + 10 system)
+- All 20 slash commands (4 autonomous + 5 skills + 11 system)
 - Natural language queries
 - File exploration and code analysis by agent
 - Real-time tool execution visibility
@@ -232,7 +232,7 @@ The interactive chat (`clix` command) is the primary way to interact with Clix C
 
 ### Slash Commands
 
-Type `/` in the chat to see the autocomplete menu. All 19 slash commands are organized into three categories:
+Type `/` in the chat to see the autocomplete menu. All 20 slash commands are organized into three categories:
 
 #### Autonomous Commands (4 commands)
 
@@ -253,7 +253,7 @@ These execute pre-built workflows from the `@clix-so/clix-agent-skills` package 
 - `/personalization` - Personalization template creation and debugging
 - `/api-triggered-campaigns` - API-triggered campaign setup
 
-#### System Commands (10 commands)
+#### System Commands (11 commands)
 
 These are built-in commands for chat management and tools:
 
@@ -380,13 +380,13 @@ Describe the problem: Events not appearing in Clix dashboard
 [Provides fix with exact file location]
 ```
 
-#### `/ios-setup` - iOS Setup, Capabilities & NSE Configuration
+#### `/ios-setup` - iOS Setup, Capabilities, NSE & APNS Key Configuration
 
 **Category:** Autonomous Command
 
 **Aliases:** `/capabilities`, `/ios-capabilities`
 
-**What it does:** Configures iOS capabilities and Notification Service Extension (NSE) required for the Clix SDK.
+**What it does:** Configures iOS capabilities, Notification Service Extension (NSE), and optionally sets up APNS authentication key for Firebase push notifications.
 
 **Capabilities configured:**
 - **Push Notifications** - Enables APNs communication (entitlement: `aps-environment`)
@@ -399,21 +399,38 @@ Describe the problem: Events not appearing in Clix dashboard
 - **Build settings:** `ENABLE_USER_SCRIPT_SANDBOXING = No` for Xcode 15+
 - **React Native + Firebase:** Move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
 
-**Workflow:**
-1. Analyzes iOS project structure (finds .xcodeproj/.xcworkspace)
-2. Detects Bundle ID and checks current capabilities status
-3. Creates/modifies entitlements files for main app and extension
-4. Guides NSE target creation and NotificationService.swift implementation
-5. Provides CocoaPods/SPM setup instructions for extension target
-6. Provides step-by-step instructions for Xcode configuration
-7. Guides through Apple Developer Portal setup
-8. Outputs verification report
+**APNS Key Setup (Phase 3 - Optional):**
+After iOS capabilities setup completes, prompts user to configure APNS authentication key:
+- **APNS Key Creation:** Opens Apple Developer Portal to create/download .p8 key file
+- **Key Validation:** Validates P8 file format, extracts Key ID from filename
+- **Firebase Upload:** Opens Firebase Console and displays Key ID, Team ID for manual upload
 
-**What can be automated:**
+**Workflow (3 Phases):**
+1. **Phase 1 - Direct Setup (Automatic):**
+   - Analyzes iOS project structure (finds .xcodeproj/.xcworkspace)
+   - Detects Bundle ID and checks current capabilities status
+   - Syncs capabilities with Apple Developer Portal (if credentials provided)
+   - Creates/modifies entitlements files for main app
+2. **Phase 2 - Guided Setup (Static file generation + UI guide):**
+   - Auto-generates NSE files:
+     - `NotificationService.swift` with `ClixNotificationServiceExtension`
+     - `Info.plist` for extension
+     - Extension entitlements file
+   - Step-by-step Xcode configuration guide:
+     - Creating NSE target in Xcode
+     - Configuring build settings (`ENABLE_USER_SCRIPT_SANDBOXING` for Xcode 15+)
+     - Adding CocoaPods/SPM dependencies
+3. **Phase 3 - Push Setup (Optional):**
+   - Prompts: "Set up APNS key for Firebase push notifications? [Y/n]"
+   - If yes, opens PushSetupWizard for APNS key creation and Firebase upload
+
+**What is automated:**
 - Creating/modifying entitlements files
 - Reading project configuration
+- Generating NSE source files (NotificationService.swift, Info.plist)
+- P8 file format validation
 
-**What requires manual action:**
+**What requires manual action (guided by UI):**
 - Creating NSE target in Xcode (File > New > Target > Notification Service Extension)
 - Adding capabilities in Xcode UI (Signing & Capabilities)
 - Adding Clix SDK to extension target (Podfile or SPM)
@@ -421,27 +438,36 @@ Describe the problem: Events not appearing in Clix dashboard
 - Enabling capabilities in Apple Developer Portal
 - Registering App Group IDs
 - Regenerating provisioning profiles
+- Creating APNS key in Apple Developer Portal
+- Uploading P8 file to Firebase Console
 
 **Example:**
 ```
 > /ios-setup
 Analyzing iOS project...
-Bundle ID: com.example.myapp
-Push Notifications: not configured
-App Groups: not configured
+✓ Found: MyApp.xcodeproj
+✓ Bundle ID: com.example.myapp
 
 Creating entitlements files...
 ✓ Created MyApp.entitlements
-✓ Created MyAppNotificationServiceExtension.entitlements
 
-Manual steps required:
-1. Create NSE target: MyAppNotificationServiceExtension
-2. Implement NotificationService.swift with ClixNotificationServiceExtension
-3. Add Clix SDK to extension (Podfile or SPM)
-4. Add Push Notifications and App Groups capabilities
-5. Set ENABLE_USER_SCRIPT_SANDBOXING to No (Xcode 15+)
+Creating Notification Service Extension files...
+✓ Created MyAppNotificationServiceExtension/NotificationService.swift
+✓ Created MyAppNotificationServiceExtension/Info.plist
+✓ Created MyAppNotificationServiceExtension/MyAppNotificationServiceExtension.entitlements
 
-{verification report JSON}
+Step 1: Create Notification Service Extension Target in Xcode
+[Enter to continue...]
+
+Step 2: Configure Build Settings
+[Enter to continue...]
+
+Step 3: Add Clix SDK to Extension Target
+[Enter to continue...]
+
+✓ Extension setup guide complete!
+
+Set up APNS key for Firebase push notifications? [Y/n]
 ```
 
 ### Interactive Skills
@@ -1249,7 +1275,7 @@ When helping users with Clix CLI, keep these points in mind:
 1. **Primary command is `clix`** - This launches interactive chat, not just a welcome screen
 2. **Interactive > Commands** - The tool is primarily interactive, not command-based
 3. **6 supported agents** - Gemini, Copilot, OpenCode, Cursor, Claude, Codex (recommend starting with Gemini or Copilot for free tiers)
-4. **19 slash commands** - 4 autonomous commands + 5 interactive skills + 10 system commands
+4. **20 slash commands** - 4 autonomous commands + 5 interactive skills + 11 system commands
 5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`, `/ios-setup`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
 6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
 7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps
