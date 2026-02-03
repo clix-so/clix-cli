@@ -630,12 +630,16 @@ function FirebaseUploadPhase({
   const [browserOpened, setBrowserOpened] = useState(false);
 
   useEffect(() => {
-    if (!browserOpened && selectedProject) {
-      const url = PUSH_SETUP_URLS.firebaseConsole(selectedProject.projectId);
-      openBrowser(url);
-      setBrowserOpened(true);
+    if (!browserOpened) {
+      // Use selectedProject if available, otherwise fall back to context.firebaseProjectId
+      const projectId = selectedProject?.projectId ?? context.firebaseProjectId;
+      if (projectId) {
+        const url = PUSH_SETUP_URLS.firebaseConsole(projectId);
+        openBrowser(url);
+        setBrowserOpened(true);
+      }
     }
-  }, [browserOpened, selectedProject]);
+  }, [browserOpened, selectedProject, context.firebaseProjectId]);
 
   useInput((_input, key) => {
     if (key.return) {
@@ -740,7 +744,7 @@ function CompletePhase({
           </Text>
         </Box>
         <Box>
-          <Text dimColor>You can run /push-setup later to configure push notifications.</Text>
+          <Text dimColor>You can run /ios-setup later to configure push notifications.</Text>
         </Box>
       </Box>
     );
@@ -1041,17 +1045,22 @@ export const PushSetupWizard: React.FC<PushSetupWizardProps> = ({
       const p8FileName = `AuthKey_${result.pushKey.apnsKeyId}.p8`;
       const p8FilePath = path.join(projectPath, p8FileName);
 
+      let savedPath: string | null = null;
       try {
         fs.writeFileSync(p8FilePath, result.pushKey.apnsKeyP8, 'utf-8');
+        savedPath = p8FilePath;
       } catch {
         // If we can't write to project dir, try current dir
-        const fallbackPath = path.join(process.cwd(), p8FileName);
-        fs.writeFileSync(fallbackPath, result.pushKey.apnsKeyP8, 'utf-8');
+        try {
+          const fallbackPath = path.join(process.cwd(), p8FileName);
+          fs.writeFileSync(fallbackPath, result.pushKey.apnsKeyP8, 'utf-8');
+          savedPath = fallbackPath;
+        } catch {
+          setError('Failed to write APNS key file. Check directory permissions and try again.');
+          setPhase('error');
+          return;
+        }
       }
-
-      const savedPath = fs.existsSync(p8FilePath)
-        ? p8FilePath
-        : path.join(process.cwd(), p8FileName);
 
       setContext((prev) => ({
         ...prev,

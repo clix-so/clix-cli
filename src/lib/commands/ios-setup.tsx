@@ -25,12 +25,16 @@ export const iosSetupCommand: Command = {
   },
 
   async call(onDone: CommandDoneCallback): Promise<ReactNode> {
-    // Run the iOS setup command (skipPortal=true by default for chat mode)
-    await runIosSetupCommand({
-      skipPortal: true,
-    });
-
-    onDone?.('iOS setup complete');
+    try {
+      // Run the iOS setup command (skipPortal=true by default for chat mode)
+      await runIosSetupCommand({
+        skipPortal: true,
+      });
+      onDone?.('iOS setup complete');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'iOS setup failed';
+      onDone?.(message);
+    }
     return null;
   },
 };

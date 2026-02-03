@@ -182,6 +182,7 @@ async function executeProjectModification(
   directResult: IosSetupResult,
   result: ProjectModificationResult,
   updateStatus: (status: string) => void,
+  pushEnvironment?: 'development' | 'production',
 ): Promise<void> {
   const { agentContext } = directResult;
   if (!agentContext) return;
@@ -195,7 +196,7 @@ async function executeProjectModification(
     appName: agentContext.appName,
     bundleId: agentContext.bundleId,
     iosDir: agentContext.iosDir,
-    pushEnvironment: 'development',
+    pushEnvironment: pushEnvironment ?? 'development',
   };
 
   const extResult = await createExtensionFiles(extContext);
@@ -204,6 +205,8 @@ async function executeProjectModification(
     result.createdFiles.push(...extResult.createdFiles);
   } else {
     result.warnings.push(extResult.error || 'Failed to create extension files');
+    result.requiresManualSteps = true;
+    return;
   }
 
   // 2. Modify pbxproj
@@ -254,6 +257,7 @@ async function executeProjectModification(
  */
 async function runProjectModification(
   directResult: IosSetupResult,
+  pushEnvironment?: 'development' | 'production',
 ): Promise<ProjectModificationResult> {
   const result: ProjectModificationResult = {
     success: false,
@@ -286,7 +290,7 @@ async function runProjectModification(
   };
 
   try {
-    await executeProjectModification(directResult, result, updateStatus);
+    await executeProjectModification(directResult, result, updateStatus, pushEnvironment);
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
     result.requiresManualSteps = true;
@@ -428,7 +432,7 @@ export async function runIosSetupCommand(options: IosSetupCommandOptions): Promi
 
   if (directResult.agentContext) {
     console.log('\n'); // Add spacing before modification phase
-    modificationResult = await runProjectModification(directResult);
+    modificationResult = await runProjectModification(directResult, options.pushEnvironment);
 
     // Fall back to guided setup if automated modification failed or requires manual steps
     if (modificationResult.requiresManualSteps) {

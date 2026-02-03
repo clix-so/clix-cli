@@ -59,7 +59,7 @@ export async function getPasswordAsync({
   username,
   serviceName,
 }: Pick<KeychainCredentials, 'serviceName' | 'username'>): Promise<string | null> {
-  if (!IS_MAC) {
+  if (!IS_MAC || CLIX_NO_KEYCHAIN) {
     return null;
   }
 
@@ -89,7 +89,7 @@ export async function setPasswordAsync({
   username,
   password,
 }: KeychainCredentials): Promise<boolean> {
-  if (!IS_MAC) {
+  if (!IS_MAC || CLIX_NO_KEYCHAIN) {
     return Promise.resolve(false);
   }
 

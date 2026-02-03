@@ -101,7 +101,18 @@ export async function createPushKeyAsync(
     });
 
     // Download the key content (.p8)
-    const apnsKeyP8 = await Keys.downloadKeyAsync(context, { id: key.id });
+    let apnsKeyP8: string;
+    try {
+      apnsKeyP8 = await Keys.downloadKeyAsync(context, { id: key.id });
+    } catch (downloadErr) {
+      // Best-effort cleanup to avoid leaking a limited key slot (max 2 APNS keys per account)
+      try {
+        await Keys.revokeKeyAsync(context, { id: key.id });
+      } catch {
+        // Swallow revoke failure; original error is more relevant
+      }
+      throw downloadErr;
+    }
 
     return {
       apnsKeyId: key.id,

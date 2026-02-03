@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import xcode from 'xcode';
 
 const NSE_PRODUCT_TYPE = 'com.apple.product-type.app-extension';
+const APP_PRODUCT_TYPE = 'com.apple.product-type.application';
 
 /**
  * Options for pbxproj modification operations.
@@ -93,6 +94,24 @@ export function restoreProject(backupPath: string, projectPath: string): void {
 }
 
 /**
+ * Find the main app target UUID by productType.
+ */
+function findAppTargetUuid(project: {
+  pbxNativeTargetSection: () => Record<string, unknown> | null;
+}): string | null {
+  const targets = project.pbxNativeTargetSection();
+  if (!targets) return null;
+
+  for (const key of Object.keys(targets)) {
+    const t = targets[key] as { productType?: string } | undefined;
+    if (t && typeof t === 'object' && t.productType === APP_PRODUCT_TYPE) {
+      return key;
+    }
+  }
+  return null;
+}
+
+/**
  * Add Notification Service Extension target to Xcode project.
  */
 export async function addNotificationServiceExtension(
@@ -154,10 +173,15 @@ export async function addNotificationServiceExtension(
 
     // 5. Set build settings for the extension target
     const deploymentTarget = options.deploymentTarget || '14.0';
+    // Compute project-relative paths from extensionDir
+    const projectDir = path.dirname(options.projectPath);
+    const extensionRelDir = path.relative(projectDir, options.extensionDir);
+    const entitlementsPath = path.join(extensionRelDir, `${options.extensionName}.entitlements`);
+    const infoPlistPath = path.join(extensionRelDir, 'Info.plist');
     const buildSettings: Record<string, string> = {
-      CODE_SIGN_ENTITLEMENTS: `${options.extensionName}/${options.extensionName}.entitlements`,
+      CODE_SIGN_ENTITLEMENTS: entitlementsPath,
       ENABLE_USER_SCRIPT_SANDBOXING: 'NO',
-      INFOPLIST_FILE: `${options.extensionName}/Info.plist`,
+      INFOPLIST_FILE: infoPlistPath,
       PRODUCT_BUNDLE_IDENTIFIER: options.extensionBundleId,
       IPHONEOS_DEPLOYMENT_TARGET: deploymentTarget,
       SWIFT_VERSION: '5.0',
@@ -180,15 +204,18 @@ export async function addNotificationServiceExtension(
     }
 
     // 6. Add target dependency to main app (embed extension)
-    const firstTarget = project.getFirstTarget();
-    if (firstTarget?.uuid) {
+    // Find the main app target by productType instead of using getFirstTarget()
+    const appTargetUuid = findAppTargetUuid(project);
+    if (appTargetUuid) {
       try {
-        project.addTargetDependency(firstTarget.uuid, [target.uuid]);
+        project.addTargetDependency(appTargetUuid, [target.uuid]);
       } catch {
         result.warnings.push(
           'Could not add target dependency, extension may need manual embedding',
         );
       }
+    } else {
+      result.warnings.push('Could not find main app target, extension may need manual embedding');
     }
 
     // 7. Write changes to project file

@@ -4,7 +4,7 @@
  */
 import { Box, Text, useInput } from 'ink';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { PushSetupResult } from '../../lib/push';
 import { type IosSetupResult, IosSetupUI } from '../IosSetupUI';
 import {
@@ -213,6 +213,13 @@ export const IosSetupFlow: React.FC<IosSetupFlowProps> = ({ onComplete }) => {
     };
   };
 
+  // Handle edge case where guided_setup has no context (avoid setState during render)
+  useEffect(() => {
+    if (phase === 'guided_setup' && !directResult?.agentContext) {
+      setPhase('push_confirm');
+    }
+  }, [phase, directResult?.agentContext]);
+
   // Render based on current phase
   switch (phase) {
     case 'intro':
@@ -224,8 +231,7 @@ export const IosSetupFlow: React.FC<IosSetupFlowProps> = ({ onComplete }) => {
     case 'guided_setup': {
       const context = getGuidedSetupContext();
       if (!context) {
-        // Shouldn't happen, but handle gracefully
-        setPhase('push_confirm');
+        // Will be handled by useEffect above
         return null;
       }
       return <GuidedSetupWizard context={context} onComplete={handleGuidedSetupComplete} />;

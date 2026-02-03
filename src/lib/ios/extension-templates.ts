@@ -51,7 +51,9 @@ export const EXTENSION_INFO_PLIST_TEMPLATE = `<?xml version="1.0" encoding="UTF-
  * CocoaPods Podfile snippet for extension target
  */
 export function generatePodfileSnippet(extensionName: string): string {
-  return `target '${extensionName}' do
+  // Escape apostrophes for Ruby single-quoted strings
+  const safeName = extensionName.replace(/'/g, "\\'");
+  return `target '${safeName}' do
   pod 'Clix'
 end`;
 }
