@@ -958,45 +958,50 @@ export const PushSetupWizard: React.FC<PushSetupWizardProps> = ({
 
   // Firebase authentication effect
   useEffect(() => {
+    let cancelled = false;
+
+    const handleProjectSelection = (fetchedProjects: FirebaseProject[]) => {
+      // If pre-detected project exists, try to find and auto-select it
+      if (context.firebaseProjectId) {
+        const matchingProject = fetchedProjects.find(
+          (p) => p.projectId === context.firebaseProjectId,
+        );
+        if (matchingProject) {
+          setSelectedProject(matchingProject);
+          setPhase('firebase_upload');
+          return true;
+        }
+      }
+
+      // Otherwise, show project selection based on count
+      if (fetchedProjects.length === 1) {
+        setSelectedProject(fetchedProjects[0]);
+        setPhase('firebase_upload');
+      } else if (fetchedProjects.length > 1) {
+        setPhase('firebase_projects');
+      } else {
+        setError('No Firebase projects found');
+        setPhase('error');
+      }
+      return false;
+    };
+
     const authenticateAndFetchProjects = async () => {
       try {
-        // Create downloader if not exists
         if (!downloaderRef.current) {
           downloaderRef.current = new FirebaseDownloader();
         }
         const downloader = downloaderRef.current;
 
-        // Authenticate with Firebase
         await downloader.authenticate(openBrowser);
 
-        // Fetch projects
         const fetchedProjects = await downloader.listProjects();
+        if (cancelled) return;
+
         setProjects(fetchedProjects);
-
-        // If pre-detected project exists, try to find and auto-select it
-        if (context.firebaseProjectId) {
-          const matchingProject = fetchedProjects.find(
-            (p) => p.projectId === context.firebaseProjectId,
-          );
-          if (matchingProject) {
-            setSelectedProject(matchingProject);
-            setPhase('firebase_upload');
-            return;
-          }
-        }
-
-        // Otherwise, show project selection
-        if (fetchedProjects.length === 1) {
-          // Auto-select if only one project
-          setSelectedProject(fetchedProjects[0]);
-          setPhase('firebase_upload');
-        } else if (fetchedProjects.length > 1) {
-          setPhase('firebase_projects');
-        } else {
-          setError('No Firebase projects found');
-          setPhase('error');
-        }
+        handleProjectSelection(fetchedProjects);
       } catch (err) {
+        if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Firebase authentication failed';
         setError(message);
         setPhase('error');
@@ -1006,6 +1011,10 @@ export const PushSetupWizard: React.FC<PushSetupWizardProps> = ({
     if (phase === 'firebase_auth') {
       authenticateAndFetchProjects();
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [phase, context.firebaseProjectId]);
 
   const handleContinue = useCallback(() => {
