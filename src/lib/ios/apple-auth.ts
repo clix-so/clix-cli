@@ -17,6 +17,7 @@ import {
   Token,
 } from '@expo/apple-utils';
 
+import type { ApiKeyAuthConfig } from './apple-portal';
 import {
   CLIX_NO_KEYCHAIN,
   deletePasswordAsync,
@@ -44,14 +45,8 @@ export interface AppleTeam {
   inHouse: boolean;
 }
 
-/**
- * API Key authentication configuration.
- */
-export interface ApiKeyAuthConfig {
-  keyId: string;
-  issuerId: string;
-  keyP8: string;
-}
+// Re-export ApiKeyAuthConfig from apple-portal for backwards compatibility
+export type { ApiKeyAuthConfig };
 
 /**
  * User authentication context (Apple ID/Password).

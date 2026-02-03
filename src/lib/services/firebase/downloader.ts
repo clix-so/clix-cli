@@ -228,7 +228,7 @@ export class FirebaseDownloader {
     projectPath: string,
   ): Promise<{ android: string | null; ios: string | null; platform: Platform }> {
     const platform = await detectPlatform(projectPath);
-    const paths = getExpectedPaths(platform, projectPath);
+    const paths = getExpectedPaths(platform);
 
     // For unknown platform, assume both platforms are needed
     const needsAndroid = platformNeedsAndroid(platform) || platform === 'unknown';

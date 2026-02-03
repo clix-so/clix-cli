@@ -5,7 +5,6 @@ export { type AgentContext, buildAgentContext } from './agent-prompt-generator';
 
 // Apple account authentication (supports both API Key and User login)
 export {
-  type ApiKeyAuthConfig as ApiKeyAuthConfigNew,
   type ApiKeyAuthContext,
   type AppleTeam,
   type AuthContext,

@@ -181,7 +181,7 @@ export async function detectPlatform(projectPath: string): Promise<Platform> {
 /**
  * Get expected credential file paths based on platform.
  */
-export function getExpectedPaths(platform: Platform, _projectPath: string): ExpectedPaths {
+export function getExpectedPaths(platform: Platform): ExpectedPaths {
   const androidPaths: string[] = [];
   const iosPaths: string[] = [];
 
@@ -641,7 +641,7 @@ function generateIssues(
  */
 export async function detectFirebaseConfig(projectPath: string): Promise<FirebaseDetectionResult> {
   const platform = await detectPlatform(projectPath);
-  const expectedPaths = getExpectedPaths(platform, projectPath);
+  const expectedPaths = getExpectedPaths(platform);
 
   const android = await detectAndroidCredential(projectPath, expectedPaths.android);
   const ios = await detectIosCredential(projectPath, expectedPaths.ios);
