@@ -1063,13 +1063,17 @@ export const PushSetupWizard: React.FC<PushSetupWizardProps> = ({
 
       let savedPath: string | null = null;
       try {
-        fs.writeFileSync(p8FilePath, result.pushKey.apnsKeyP8, 'utf-8');
+        // Use mode 0o600 to restrict APNS key file to current user only
+        fs.writeFileSync(p8FilePath, result.pushKey.apnsKeyP8, { encoding: 'utf-8', mode: 0o600 });
         savedPath = p8FilePath;
       } catch {
         // If we can't write to project dir, try current dir
         try {
           const fallbackPath = path.join(process.cwd(), p8FileName);
-          fs.writeFileSync(fallbackPath, result.pushKey.apnsKeyP8, 'utf-8');
+          fs.writeFileSync(fallbackPath, result.pushKey.apnsKeyP8, {
+            encoding: 'utf-8',
+            mode: 0o600,
+          });
           savedPath = fallbackPath;
         } catch {
           setError('Failed to write APNS key file. Check directory permissions and try again.');
