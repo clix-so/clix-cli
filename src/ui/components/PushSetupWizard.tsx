@@ -629,15 +629,23 @@ function FirebaseUploadPhase({
 }): React.ReactElement {
   const [browserOpened, setBrowserOpened] = useState(false);
 
+  // Compute project label with fallback
+  const projectLabel =
+    selectedProject?.displayName ||
+    selectedProject?.projectId ||
+    context.firebaseProjectId ||
+    'Unknown';
+
   useEffect(() => {
     if (!browserOpened) {
       // Use selectedProject if available, otherwise fall back to context.firebaseProjectId
       const projectId = selectedProject?.projectId ?? context.firebaseProjectId;
-      if (projectId) {
-        const url = PUSH_SETUP_URLS.firebaseConsole(projectId);
-        openBrowser(url);
-        setBrowserOpened(true);
-      }
+      // If no project ID is known, open the generic Firebase console
+      const url = projectId
+        ? PUSH_SETUP_URLS.firebaseConsole(projectId)
+        : PUSH_SETUP_URLS.firebaseConsoleGeneric;
+      openBrowser(url);
+      setBrowserOpened(true);
     }
   }, [browserOpened, selectedProject, context.firebaseProjectId]);
 
@@ -663,8 +671,7 @@ function FirebaseUploadPhase({
       </Box>
       <Box marginBottom={1}>
         <Text dimColor>
-          Project:{' '}
-          <Text color="cyan">{selectedProject?.displayName || selectedProject?.projectId}</Text>
+          Project: <Text color="cyan">{projectLabel}</Text>
         </Text>
       </Box>
       <Box marginBottom={1}>
