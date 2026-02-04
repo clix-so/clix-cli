@@ -509,8 +509,8 @@ function P8InputPhase({
       <Box marginTop={1}>
         <Text dimColor>
           {stage === 'p8_select'
-            ? '↑↓ navigate · Enter select · Esc cancel'
-            : 'Enter to continue · Esc to cancel'}
+            ? '↑↓ navigate · Enter select · Esc/Ctrl+C cancel'
+            : 'Enter to continue · Esc/Ctrl+C to cancel'}
         </Text>
       </Box>
     </Box>
