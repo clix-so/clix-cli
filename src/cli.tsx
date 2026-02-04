@@ -4,7 +4,7 @@ import { chatCommand } from './commands/chat';
 import { debugCommand } from './commands/debug';
 import { firebaseCommand } from './commands/firebase';
 import { installMCPCommand } from './commands/install-mcp';
-import { iosSetupCommand } from './commands/ios-setup/index';
+import { runIosSetupCommand } from './commands/ios-setup/index';
 import { loginCommand } from './commands/login';
 import { logoutCommand } from './commands/logout';
 import { resumeCommand } from './commands/resume';
@@ -210,7 +210,7 @@ async function main() {
           process.exit(1);
         }
         const pushEnv = pushEnvRaw as 'development' | 'production' | undefined;
-        await iosSetupCommand({
+        await runIosSetupCommand({
           apiKeyPath: cli.flags.apiKey,
           keyId: cli.flags.keyId,
           issuerId: cli.flags.issuerId,

@@ -12,6 +12,7 @@ import { exitCommand } from './exit';
 import { firebaseCommand } from './firebase';
 import { helpCommand } from './help';
 import { installMcpCommand } from './install-mcp';
+import { iosSetupCommand } from './ios-setup';
 import { loginCommand } from './login';
 import { logoutCommand } from './logout';
 import { newCommand } from './new';
@@ -34,6 +35,7 @@ const BUILT_IN_COMMANDS: Command[] = [
   agentCommand,
   debugCommand,
   firebaseCommand,
+  iosSetupCommand,
   transferCommand,
   resumeCommand,
   installMcpCommand,

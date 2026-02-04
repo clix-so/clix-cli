@@ -152,7 +152,7 @@ export class FirebaseService {
    */
   async getExpectedPath(platform: 'android' | 'ios'): Promise<string> {
     const detectedPlatform = await detectPlatform(this.projectPath);
-    const paths = getExpectedPaths(detectedPlatform, this.projectPath);
+    const paths = getExpectedPaths(detectedPlatform);
     const platformPaths = platform === 'android' ? paths.android : paths.ios;
     return (
       platformPaths[0] ||

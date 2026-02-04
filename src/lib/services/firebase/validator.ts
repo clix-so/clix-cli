@@ -165,64 +165,6 @@ export function validateGoogleServiceInfoPlist(content: unknown): ValidationResu
 }
 
 /**
- * Validate that the package name in google-services.json matches the expected package.
- *
- * @param googleServices - Validated google-services.json content
- * @param expectedPackageName - Expected Android package name
- * @returns Validation result
- */
-export function validatePackageNameMatch(
-  googleServices: GoogleServicesJson,
-  expectedPackageName: string,
-): ValidationResult {
-  const packageNames = googleServices.client.map(
-    (client) => client.client_info.android_client_info.package_name,
-  );
-
-  if (packageNames.includes(expectedPackageName)) {
-    return { valid: true, errors: [] };
-  }
-
-  return {
-    valid: false,
-    errors: [
-      {
-        path: 'client.client_info.android_client_info.package_name',
-        message: `Package name mismatch. Expected "${expectedPackageName}", found: ${packageNames.join(', ')}`,
-        code: 'PACKAGE_MISMATCH',
-      },
-    ],
-  };
-}
-
-/**
- * Validate that the bundle ID in GoogleService-Info.plist matches the expected bundle ID.
- *
- * @param serviceInfo - Validated GoogleService-Info.plist content
- * @param expectedBundleId - Expected iOS bundle ID
- * @returns Validation result
- */
-export function validateBundleIdMatch(
-  serviceInfo: GoogleServiceInfoPlist,
-  expectedBundleId: string,
-): ValidationResult {
-  if (serviceInfo.BUNDLE_ID === expectedBundleId) {
-    return { valid: true, errors: [] };
-  }
-
-  return {
-    valid: false,
-    errors: [
-      {
-        path: 'BUNDLE_ID',
-        message: `Bundle ID mismatch. Expected "${expectedBundleId}", found: "${serviceInfo.BUNDLE_ID}"`,
-        code: 'BUNDLE_MISMATCH',
-      },
-    ],
-  };
-}
-
-/**
  * Extract project ID from google-services.json.
  *
  * @param content - google-services.json content

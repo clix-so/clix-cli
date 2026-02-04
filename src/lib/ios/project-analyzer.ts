@@ -14,6 +14,8 @@ export interface IosProjectInfo {
   targets: string[];
   /** Existing entitlements file paths */
   entitlementsFiles: string[];
+  /** Apple Team ID from project settings (DEVELOPMENT_TEAM) */
+  teamId?: string;
 }
 
 export interface ProjectAnalysisResult {
@@ -65,6 +67,9 @@ export async function analyzeIosProject(cwd: string): Promise<ProjectAnalysisRes
   // Extract targets
   const targets = extractTargets(pbxprojContent);
 
+  // Extract team ID
+  const teamId = extractTeamId(pbxprojContent);
+
   // Find existing entitlements files
   const entitlementsFiles = await findEntitlementsFiles(cwd);
 
@@ -77,6 +82,7 @@ export async function analyzeIosProject(cwd: string): Promise<ProjectAnalysisRes
       appName,
       targets,
       entitlementsFiles,
+      teamId,
     },
   };
 }
@@ -184,6 +190,27 @@ function extractAppName(pbxprojContent: string, projectPath: string): string {
   // Fallback: use project directory name
   const projectName = path.basename(projectPath, '.xcodeproj');
   return projectName;
+}
+
+/**
+ * Extract Apple Team ID (DEVELOPMENT_TEAM) from pbxproj content
+ */
+function extractTeamId(pbxprojContent: string): string | undefined {
+  // Pattern: DEVELOPMENT_TEAM = XXXXXXXXXX;
+  // or: DEVELOPMENT_TEAM = "XXXXXXXXXX";
+  const patterns = [
+    /DEVELOPMENT_TEAM\s*=\s*"?([A-Z0-9]{10})"?\s*;/,
+    /DEVELOPMENT_TEAM\s*=\s*([A-Z0-9]{10})\s*;/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pbxprojContent.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return undefined;
 }
 
 /**

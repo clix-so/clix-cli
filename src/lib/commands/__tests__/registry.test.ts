@@ -145,6 +145,25 @@ describe('Command Registry', () => {
       const transfer = getCommand('transfer');
       expect(transfer?.aliases).toContain('t');
     });
+
+    test('should have ios-setup command with aliases', () => {
+      const iosSetup = getCommand('ios-setup');
+      expect(iosSetup).toBeDefined();
+      expect(iosSetup?.name).toBe('ios-setup');
+      expect(iosSetup?.aliases).toContain('capabilities');
+      expect(iosSetup?.aliases).toContain('ios-capabilities');
+    });
+
+    test('should find ios-setup by alias', () => {
+      const iosSetup = getCommand('capabilities');
+      expect(iosSetup).toBeDefined();
+      expect(iosSetup?.name).toBe('ios-setup');
+    });
+
+    test('ios-setup should be local-jsx type not skill', () => {
+      const iosSetup = getCommand('ios-setup');
+      expect(iosSetup?.type).toBe('local-jsx');
+    });
   });
 
   describe('skill commands', () => {

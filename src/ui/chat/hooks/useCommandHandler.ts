@@ -46,6 +46,7 @@ interface UseCommandHandlerOptions {
     | 'showMCPInstallSelector'
     | 'showDebugPrompt'
     | 'showFirebaseWizard'
+    | 'showIosSetupOverlay'
     | 'showLoginOverlay'
     | 'showLogoutOverlay'
     | 'showWhoamiOverlay'
@@ -89,6 +90,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
     showMCPInstallSelector,
     showDebugPrompt,
     showFirebaseWizard,
+    showIosSetupOverlay,
     showLoginOverlay,
     showLogoutOverlay,
     showWhoamiOverlay,
@@ -165,6 +167,10 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
           showFirebaseWizard();
           return;
 
+        case 'ios-setup':
+          showIosSetupOverlay();
+          return;
+
         case 'login':
           showLoginOverlay();
           return;
@@ -211,6 +217,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
       showMCPInstallSelector,
       showDebugPrompt,
       showFirebaseWizard,
+      showIosSetupOverlay,
       showLoginOverlay,
       showLogoutOverlay,
       showWhoamiOverlay,

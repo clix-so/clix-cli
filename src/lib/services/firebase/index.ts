@@ -30,9 +30,7 @@ export * from './types';
 export {
   extractProjectId,
   extractProjectIdFromPlist,
-  validateBundleIdMatch,
   validateGoogleServiceInfoPlist,
   validateGoogleServicesJson,
-  validatePackageNameMatch,
   validateProjectIdMatch,
 } from './validator';

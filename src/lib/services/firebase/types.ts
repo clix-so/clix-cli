@@ -78,6 +78,8 @@ export interface GoogleServiceInfoPlist {
   IS_APPINVITE_ENABLED?: boolean;
   IS_GCM_ENABLED?: boolean;
   IS_SIGNIN_ENABLED?: boolean;
+  /** Apple Team ID (optional, may be present in some Firebase configs) */
+  TEAM_ID?: string;
 }
 
 /**

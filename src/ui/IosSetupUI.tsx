@@ -1,6 +1,6 @@
-import { Box, Text, useApp } from 'ink';
+import { Box, Text, useApp, useInput } from 'ink';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   type AgentContext,
   analyzeIosProject,
@@ -17,6 +17,8 @@ import {
   syncCapabilities,
   updateEntitlementsForClix,
 } from '@/lib/ios';
+import { FirebaseService } from '@/lib/services/firebase';
+import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
 import { Header } from '@/ui/components/Header';
 import { StatusMessage } from '@/ui/components/StatusMessage';
 
@@ -51,6 +53,12 @@ export interface IosSetupResult {
   error?: string;
   /** Context for agent to complete remaining tasks */
   agentContext?: AgentContext;
+  /** Bundle ID for push setup integration */
+  bundleId?: string;
+  /** Firebase Project ID for push setup integration */
+  firebaseProjectId?: string | null;
+  /** Apple Team ID for push setup integration (from GoogleService-Info.plist) */
+  teamId?: string | null;
 }
 
 interface IosSetupUIProps {
@@ -204,6 +212,27 @@ async function runSetup(
     entitlementsResult.iosDir,
   );
 
+  // Detect Firebase project ID and Team ID for push setup integration
+  result.bundleId = bundleId;
+  // Use Team ID from Xcode project settings (DEVELOPMENT_TEAM) if available
+  result.teamId = project.teamId || null;
+  try {
+    const firebaseService = new FirebaseService(process.cwd());
+    const firebaseDetection = await firebaseService.detect();
+    const iosContent = firebaseDetection.ios?.content as GoogleServiceInfoPlist | undefined;
+    const androidContent = firebaseDetection.android?.content as GoogleServicesJson | undefined;
+    result.firebaseProjectId =
+      iosContent?.PROJECT_ID || androidContent?.project_info?.project_id || null;
+    // Override Team ID from Firebase config if available (more likely to be correct)
+    if (iosContent?.TEAM_ID) {
+      result.teamId = iosContent.TEAM_ID;
+    }
+  } catch {
+    // Firebase detection is optional, don't fail if it errors
+    result.firebaseProjectId = null;
+    // Keep the teamId from project settings if Firebase detection fails
+  }
+
   result.success = true;
   setState((s) => ({ ...s, phase: 'complete' }));
   return result;
@@ -218,30 +247,40 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     updatedFiles: [],
     errorMessage: '',
   });
+  const [result, setResult] = useState<IosSetupResult | null>(null);
 
   const { phase, projectInfo, portalResult, updatedFiles, errorMessage } = state;
+
+  // Handle user input for complete/error phases
+  const handleContinue = useCallback(() => {
+    if (phase === 'complete' && result) {
+      onComplete?.(result);
+      if (!onComplete) exit();
+    } else if (phase === 'error') {
+      onComplete?.({ success: false, entitlementsUpdated: [], error: errorMessage });
+      if (!onComplete) exit();
+    }
+  }, [phase, result, errorMessage, onComplete, exit]);
+
+  useInput((_input, key) => {
+    if ((phase === 'complete' || phase === 'error') && key.return) {
+      handleContinue();
+    }
+  });
 
   useEffect(() => {
     const execute = async () => {
       try {
-        const result = await runSetup(options, setState);
-        setTimeout(() => {
-          onComplete?.(result);
-          if (!onComplete) exit();
-        }, 1500);
+        const setupResult = await runSetup(options, setState);
+        setResult(setupResult);
       } catch (error) {
         const message = error instanceof Error ? getAppleApiErrorMessage(error) : String(error);
         setState((s) => ({ ...s, errorMessage: message, phase: 'error' }));
-
-        setTimeout(() => {
-          onComplete?.({ success: false, entitlementsUpdated: [], error: message });
-          if (!onComplete) exit();
-        }, 1500);
       }
     };
 
     execute();
-  }, [options, onComplete, exit]);
+  }, [options]);
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -291,6 +330,9 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
         <Box flexDirection="column">
           <ProjectInfoStatus projectInfo={projectInfo} />
           <StatusMessage type="error" message={errorMessage} />
+          <Box marginTop={1}>
+            <Text color="cyan">Press Enter to continue</Text>
+          </Box>
         </Box>
       )}
     </Box>
@@ -385,6 +427,10 @@ const CompletePhase: React.FC<{
         <Text>3. Verify the capabilities are enabled</Text>
         {!skipPortal && <Text>4. Regenerate provisioning profiles if needed</Text>}
       </Box>
+    </Box>
+
+    <Box marginTop={1}>
+      <Text color="cyan">Press Enter to continue</Text>
     </Box>
   </Box>
 );

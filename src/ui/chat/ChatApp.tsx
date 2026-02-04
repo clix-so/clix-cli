@@ -6,6 +6,7 @@ import type { InstallationMethod, UpdateCheckResult } from '../../lib/services/u
 import { AgentSelector } from '../components/AgentSelector';
 import { DebugPrompt } from '../components/DebugPrompt';
 import { FirebaseWizard } from '../components/FirebaseWizard';
+import { IosSetupFlow } from '../components/IosSetupFlow';
 import { MCPInstallSelector } from '../components/MCPInstallSelector';
 import { SessionSelector } from '../components/SessionSelector';
 import { TransferSelector } from '../components/TransferSelector';
@@ -226,6 +227,13 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
           projectPath={process.cwd()}
           onComplete={overlays.handleFirebaseComplete}
           onCancel={overlays.handleFirebaseCancel}
+        />
+      )}
+      {overlays.activeOverlay === 'ios-setup' && (
+        <IosSetupFlow
+          onComplete={(result) => {
+            overlays.handleIosSetupComplete(result.message);
+          }}
         />
       )}
       {overlays.activeOverlay === 'login' && (
