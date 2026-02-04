@@ -14,6 +14,11 @@ export const ERROR_CODES = {
   CONFIG_INVALID: 'CONFIG_INVALID',
   CONFIG_MIGRATION_FAILED: 'CONFIG_MIGRATION_FAILED',
 
+  // Project configuration errors
+  PROJECT_CONFIG_NOT_FOUND: 'PROJECT_CONFIG_NOT_FOUND',
+  PROJECT_CONFIG_INVALID: 'PROJECT_CONFIG_INVALID',
+  PROJECT_CONFIG_SAVE_FAILED: 'PROJECT_CONFIG_SAVE_FAILED',
+
   // Network errors
   NETWORK_ERROR: 'NETWORK_ERROR',
   NETWORK_TIMEOUT: 'NETWORK_TIMEOUT',
@@ -209,5 +214,18 @@ export class FirebaseError extends ClixError {
     this.name = 'FirebaseError';
     this.platform = platform;
     this.file = file;
+  }
+}
+
+/**
+ * Error for project configuration failures.
+ */
+export class ProjectConfigError extends ClixError {
+  public readonly projectPath?: string;
+
+  constructor(message: string, code?: ErrorCode, projectPath?: string) {
+    super(message, code ?? ERROR_CODES.PROJECT_CONFIG_INVALID, true, { projectPath });
+    this.name = 'ProjectConfigError';
+    this.projectPath = projectPath;
   }
 }

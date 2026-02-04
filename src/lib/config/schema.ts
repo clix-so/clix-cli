@@ -53,26 +53,6 @@ export const UpdateConfigSchema = z.object({
 });
 
 /**
- * Schema for linked project configuration.
- */
-export const LinkedProjectSchema = z.object({
-  /** Project ID */
-  projectId: z.string(),
-  /** Project name */
-  projectName: z.string(),
-  /** Organization ID */
-  organizationId: z.string(),
-  /** Organization name */
-  organizationName: z.string(),
-});
-
-/**
- * Schema for workspace-to-project mappings.
- * Maps absolute directory paths to linked project info.
- */
-export const WorkspaceMappingsSchema = z.record(z.string(), LinkedProjectSchema);
-
-/**
  * Main configuration schema with versioning for migrations.
  * Validation-only schema - does not enforce defaults.
  */
@@ -91,8 +71,6 @@ export const ConfigSchema = z.object({
   experimental: ExperimentalSchema,
   /** Update configuration */
   update: UpdateConfigSchema,
-  /** Workspace-to-project mappings (directory path -> project info) */
-  workspaces: WorkspaceMappingsSchema.optional(),
 });
 
 /**
@@ -107,8 +85,6 @@ export type UIConfig = z.infer<typeof UIConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type ExperimentalConfig = z.infer<typeof ExperimentalSchema>;
 export type UpdateConfig = z.infer<typeof UpdateConfigSchema>;
-export type LinkedProject = z.infer<typeof LinkedProjectSchema>;
-export type WorkspaceMappings = z.infer<typeof WorkspaceMappingsSchema>;
 export type Config = z.infer<typeof ConfigSchema>;
 
 /**
@@ -156,14 +132,13 @@ export const DEFAULT_UPDATE_CONFIG: UpdateConfig = {
  * Default configuration values.
  */
 export const DEFAULT_CONFIG: Config = {
-  version: 4,
+  version: 5,
   selectedAgent: '',
   lastUsedAt: undefined,
   ui: DEFAULT_UI_CONFIG,
   agents: {},
   experimental: DEFAULT_EXPERIMENTAL_CONFIG,
   update: DEFAULT_UPDATE_CONFIG,
-  workspaces: {},
 };
 
 /**

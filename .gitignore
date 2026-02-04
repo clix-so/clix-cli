@@ -75,3 +75,6 @@ chrome-debug.log
 # Firebase credentials
 ios/GoogleService-Info.plist
 android/app/google-services.json
+
+# Clix CLI local config
+.clix/

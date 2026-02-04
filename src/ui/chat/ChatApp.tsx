@@ -2,6 +2,7 @@ import { Box, useApp } from 'ink';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AgentInfo } from '../../lib/agents';
+import { getProjectConfigManager, type ProjectConfig } from '../../lib/config';
 import type { InstallationMethod, UpdateCheckResult } from '../../lib/services/update-service';
 import { AgentSelector } from '../components/AgentSelector';
 import { DebugPrompt } from '../components/DebugPrompt';
@@ -46,6 +47,17 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
   const { exit } = useApp();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
+  const [projectConfig, setProjectConfig] = useState<ProjectConfig | null>(null);
+
+  // Load project config on mount
+  useEffect(() => {
+    const loadProjectConfig = async () => {
+      const configManager = getProjectConfigManager();
+      const config = await configManager.load();
+      setProjectConfig(config);
+    };
+    loadProjectConfig();
+  }, []);
 
   // Handle update check result
   useEffect(() => {
@@ -159,7 +171,7 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
 
   return (
     <Box flexDirection="column" minHeight={20}>
-      <ChatHeader agent={currentAgent} isStreaming={isStreaming} />
+      <ChatHeader agent={currentAgent} isStreaming={isStreaming} projectConfig={projectConfig} />
 
       {/* Update notification */}
       {showUpdateNotification &&

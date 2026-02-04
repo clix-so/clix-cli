@@ -18,7 +18,7 @@ import {
  * Current configuration schema version.
  * Increment when making breaking changes to config structure.
  */
-const CURRENT_VERSION = 4;
+const CURRENT_VERSION = 5;
 
 /**
  * Migration function type.
@@ -75,16 +75,23 @@ const MIGRATIONS: Record<number, MigrationFn> = {
     return migrated;
   },
 
-  // Migration from v3 to v4: Add workspace mappings
+  // Migration from v3 to v4: Add workspace mappings (legacy)
   4: (config: RawConfig): RawConfig => {
     const migrated: RawConfig = { ...config, version: 4 };
 
-    // Initialize empty workspaces if not present
+    // Initialize empty workspaces if not present (legacy)
     if (!migrated.workspaces) {
       migrated.workspaces = {};
     }
 
     return migrated;
+  },
+
+  // Migration from v4 to v5: Remove workspace mappings (moved to project-local .clix/config.jsonc)
+  5: (config: RawConfig): RawConfig => {
+    // Destructure to exclude workspaces field
+    const { workspaces: _removed, ...rest } = config;
+    return { ...rest, version: 5 };
   },
 };
 
@@ -223,7 +230,6 @@ export class ConfigManager {
         ...config.update,
       },
       agents: config.agents ?? {},
-      workspaces: config.workspaces ?? {},
     };
   }
 

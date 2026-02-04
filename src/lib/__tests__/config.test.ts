@@ -29,7 +29,7 @@ describe('ConfigManager', () => {
     const config = await manager.load();
 
     expect(config.selectedAgent).toBe('');
-    expect(config.version).toBe(4);
+    expect(config.version).toBe(5);
     expect(config.ui).toBeDefined();
     expect(config.ui.streaming).toBe(true);
   });
@@ -69,7 +69,7 @@ describe('ConfigManager', () => {
     const config = await manager.load();
 
     expect(config.selectedAgent).toBe('claude');
-    expect(config.version).toBe(4);
+    expect(config.version).toBe(5);
   });
 
   test('should create config directory if it does not exist', async () => {

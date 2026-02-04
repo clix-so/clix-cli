@@ -22,13 +22,14 @@ import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
 
-type LoginPhase =
-  | 'checking_existing'
+type SetupPhase =
+  | 'checking_auth'
   | 'starting_auth'
   | 'waiting_for_auth'
   | 'exchanging_code'
-  | 'verifying'
+  | 'fetching_data'
   | 'selecting_project'
+  | 'saving_config'
   | 'complete'
   | 'error';
 
@@ -37,11 +38,13 @@ interface OrgWithProjects {
   projects: Project[];
 }
 
-interface LoginUIProps {
-  /** Called when login completes successfully */
-  onComplete?: (credentials: Credentials) => void;
+interface SetupUIProps {
+  /** Called when setup completes successfully */
+  onComplete?: () => void;
   /** Called on error */
   onError?: (error: Error) => void;
+  /** Project path (defaults to cwd) */
+  projectPath?: string;
 }
 
 /** Fetch current member info */
@@ -86,37 +89,23 @@ async function fetchOrganizationsWithProjects(): Promise<OrgWithProjects[]> {
   return orgsWithProjects;
 }
 
-/** Check if user is already logged in with valid credentials */
-async function checkExistingLogin(): Promise<{ isLoggedIn: boolean; userName: string }> {
-  const credentialsManager = getCredentialsManager();
-  const existingToken = await credentialsManager.getValidToken();
-
-  if (!existingToken) {
-    return { isLoggedIn: false, userName: '' };
-  }
-
-  // Token exists - user is logged in. Try to fetch userName but don't fail login on error.
-  const config = getAuth0Config();
-  const userName = await fetchUserName(new PKCEFlowService(config));
-  return { isLoggedIn: true, userName };
-}
-
-export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
+export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPath }) => {
   const { exit } = useApp();
-  const [phase, setPhase] = useState<LoginPhase>('checking_existing');
+  const [phase, setPhase] = useState<SetupPhase>('checking_auth');
   const [browserOpened, setBrowserOpened] = useState(false);
   const [authUrl, setAuthUrl] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
   const [organizations, setOrganizations] = useState<OrgWithProjects[]>([]);
   const [savedConfig, setSavedConfig] = useState<ProjectConfig | null>(null);
-  const [workspacePath] = useState(() => process.cwd());
+  const [workspacePath] = useState(() => projectPath ?? process.cwd());
   const pkceServiceRef = useRef<PKCEFlowService | null>(null);
-  const credentialsRef = useRef<Credentials | null>(null);
   const memberRef = useRef<Member | null>(null);
 
   const handleProjectSelect = useCallback(
     async (project: Project, org: Organization) => {
+      setPhase('saving_config');
+
       try {
         // Fetch member info if not already fetched
         let member = memberRef.current;
@@ -126,7 +115,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         }
 
         // Create project config
-        const projectConfig: ProjectConfig = {
+        const config: ProjectConfig = {
           version: CURRENT_PROJECT_CONFIG_VERSION,
           member: {
             id: member.id,
@@ -147,16 +136,17 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
 
         // Save to .clix/config.jsonc
         const projectConfigManager = getProjectConfigManager(workspacePath);
-        await projectConfigManager.save(projectConfig);
+        await projectConfigManager.save(config);
 
         // Ensure .clix is in .gitignore
         await projectConfigManager.ensureGitignore();
 
-        setSavedConfig(projectConfig);
+        setSavedConfig(config);
         setPhase('complete');
+
         setTimeout(() => {
-          if (onComplete && credentialsRef.current) {
-            onComplete(credentialsRef.current);
+          if (onComplete) {
+            onComplete();
           } else {
             exit();
           }
@@ -165,21 +155,18 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         const message = error instanceof Error ? error.message : 'Failed to save configuration';
         setErrorMessage(message);
         setPhase('error');
+        if (onError) {
+          onError(error instanceof Error ? error : new Error(message));
+        }
       }
     },
-    [workspacePath, onComplete, exit],
+    [workspacePath, onComplete, onError, exit],
   );
 
   const handleProjectSkip = useCallback(() => {
-    setPhase('complete');
-    setTimeout(() => {
-      if (onComplete && credentialsRef.current) {
-        onComplete(credentialsRef.current);
-      } else {
-        exit();
-      }
-    }, 1500);
-  }, [onComplete, exit]);
+    // Cannot skip project selection in setup - it's required
+    // This callback is provided but should not be used
+  }, []);
 
   useEffect(() => {
     const config = getAuth0Config();
@@ -187,31 +174,38 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
     pkceServiceRef.current = pkceService;
     const credentialsManager = getCredentialsManager();
 
-    const runLogin = async () => {
+    const runSetup = async () => {
       try {
-        // Check existing credentials
-        setPhase('checking_existing');
-        const existing = await checkExistingLogin();
-        if (existing.isLoggedIn) {
-          setUserName(existing.userName);
+        // Check if already authenticated
+        setPhase('checking_auth');
+        const isAuthenticated = await credentialsManager.isAuthenticated();
 
-          // Fetch organizations and projects for existing login
+        if (isAuthenticated) {
+          // Already logged in, fetch data
+          setPhase('fetching_data');
+          const name = await fetchUserName(pkceService);
+          setUserName(name);
+
+          const member = await fetchMember();
+          memberRef.current = member;
+
           const orgsData = await fetchOrganizationsWithProjects();
           setOrganizations(orgsData);
 
-          setPhase('complete');
-          setTimeout(() => {
-            const creds = credentialsManager.credentials;
-            if (onComplete && creds) {
-              onComplete(creds);
-            } else {
-              exit();
-            }
-          }, 1500);
+          // Check if there are projects to select from
+          const hasProjects = orgsData.some((o) => o.projects.length > 0);
+          if (hasProjects) {
+            setPhase('selecting_project');
+          } else {
+            setErrorMessage(
+              'No projects found. Please create a project in the Clix console first.',
+            );
+            setPhase('error');
+          }
           return;
         }
 
-        // Start PKCE flow
+        // Not authenticated - start login flow
         setPhase('starting_auth');
         const { authUrl: url } = await pkceService.startAuthFlow();
         setAuthUrl(url);
@@ -230,37 +224,30 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
 
         // Save credentials
         const issuer = getIssuerUrl(config);
-        const credentials = createCredentials(tokenResponse, issuer, config.audience);
+        const credentials: Credentials = createCredentials(tokenResponse, issuer, config.audience);
         await credentialsManager.save(credentials);
 
-        // Verify login
-        setPhase('verifying');
+        // Fetch user data
+        setPhase('fetching_data');
         const name = await fetchUserName(pkceService, tokenResponse);
         setUserName(name);
-        credentialsRef.current = credentials;
 
-        // Fetch organizations and projects
+        const member = await fetchMember();
+        memberRef.current = member;
+
         const orgsData = await fetchOrganizationsWithProjects();
         setOrganizations(orgsData);
 
         // Check if there are projects to select from
         const hasProjects = orgsData.some((o) => o.projects.length > 0);
         if (hasProjects) {
-          // Go to project selection phase
           setPhase('selecting_project');
         } else {
-          // No projects available, complete login
-          setPhase('complete');
-          setTimeout(() => {
-            if (onComplete) {
-              onComplete(credentials);
-            } else {
-              exit();
-            }
-          }, 1500);
+          setErrorMessage('No projects found. Please create a project in the Clix console first.');
+          setPhase('error');
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Login failed';
+        const message = error instanceof Error ? error.message : 'Setup failed';
         setErrorMessage(message);
         setPhase('error');
         if (onError) {
@@ -271,20 +258,20 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
       }
     };
 
-    runLogin();
+    runSetup();
 
     // Cleanup on unmount
     return () => {
       pkceServiceRef.current?.abort();
     };
-  }, [exit, onComplete, onError]);
+  }, [exit, onError]);
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Header title="Login to Clix" />
+      <Header title="Clix Project Setup" />
 
-      {phase === 'checking_existing' && (
-        <StatusMessage type="loading" message="Checking existing credentials..." />
+      {phase === 'checking_auth' && (
+        <StatusMessage type="loading" message="Checking authentication..." />
       )}
 
       {phase === 'starting_auth' && (
@@ -328,7 +315,9 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         <StatusMessage type="loading" message="Exchanging authorization code..." />
       )}
 
-      {phase === 'verifying' && <StatusMessage type="loading" message="Verifying login..." />}
+      {phase === 'fetching_data' && (
+        <StatusMessage type="loading" message="Fetching project information..." />
+      )}
 
       {phase === 'selecting_project' && (
         <Box flexDirection="column">
@@ -336,7 +325,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
             <Text color="green" bold>
               ✓
             </Text>
-            <Text> Successfully logged in!</Text>
+            <Text> Authenticated</Text>
           </Box>
           {userName && (
             <Box marginTop={1} marginLeft={2}>
@@ -344,45 +333,45 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
               <Text bold>{userName}</Text>
             </Box>
           )}
+          <Box marginTop={1}>
+            <Text dimColor>Select a project to link to this directory:</Text>
+          </Box>
           <ProjectSelector
             organizations={organizations}
             onSelect={handleProjectSelect}
             onSkip={handleProjectSkip}
             workspacePath={workspacePath}
+            showSkip={false}
           />
         </Box>
       )}
 
-      {phase === 'complete' && (
+      {phase === 'saving_config' && (
+        <StatusMessage type="loading" message="Saving project configuration..." />
+      )}
+
+      {phase === 'complete' && savedConfig && (
         <Box flexDirection="column">
           <Box>
             <Text color="green" bold>
               ✓
             </Text>
-            <Text> Successfully logged in!</Text>
+            <Text> Project setup complete!</Text>
           </Box>
-          {savedConfig && (
-            <Box flexDirection="column" marginTop={1} marginLeft={2}>
-              <Box>
-                <Text dimColor>Organization: </Text>
-                <Text>{savedConfig.organization.name}</Text>
-              </Box>
-              <Box>
-                <Text dimColor>Project: </Text>
-                <Text color="cyan">{savedConfig.project.name}</Text>
-              </Box>
-              <Box marginTop={1}>
-                <Text dimColor>Config saved to: </Text>
-                <Text color="gray">.clix/config.jsonc</Text>
-              </Box>
+          <Box flexDirection="column" marginTop={1} marginLeft={2}>
+            <Box>
+              <Text dimColor>Organization: </Text>
+              <Text>{savedConfig.organization.name}</Text>
             </Box>
-          )}
-          {userName && (
-            <Box marginTop={1} marginLeft={2}>
-              <Text dimColor>Welcome, </Text>
-              <Text bold>{userName}</Text>
+            <Box>
+              <Text dimColor>Project: </Text>
+              <Text color="cyan">{savedConfig.project.name}</Text>
             </Box>
-          )}
+            <Box marginTop={1}>
+              <Text dimColor>Config saved to: </Text>
+              <Text color="gray">.clix/config.jsonc</Text>
+            </Box>
+          </Box>
         </Box>
       )}
 
@@ -390,8 +379,8 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         <Box flexDirection="column">
           <StatusMessage type="error" message={errorMessage} />
           <Box marginTop={1}>
-            <Text dimColor>Please try again with </Text>
-            <Text color="cyan">clix login</Text>
+            <Text dimColor>Please try again or check </Text>
+            <Text color="cyan">https://console.clix.so</Text>
           </Box>
         </Box>
       )}
