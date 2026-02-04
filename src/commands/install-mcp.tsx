@@ -1,4 +1,4 @@
-import { Box, render, Text } from 'ink';
+import { Box, Text } from 'ink';
 import React, { useCallback, useState } from 'react';
 import {
   getMCPAgentDisplayName,
@@ -8,6 +8,7 @@ import {
 import { MCPInstallSelector } from '../ui/components/MCPInstallSelector';
 import { StatusMessage } from '../ui/components/StatusMessage';
 import { type FinalOutputResult, printFinalOutput } from '../ui/utils/finalOutput';
+import { safeRender } from '../ui/utils/safeRender';
 
 interface InstallMCPCommandOptions {
   agent?: MCPTargetAgent;
@@ -109,7 +110,7 @@ export async function installMCPCommand(options: InstallMCPCommandOptions): Prom
   const { agent } = options;
 
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <MCPInstallUI
         targetAgent={agent}
         onComplete={(result) => {
@@ -120,7 +121,6 @@ export async function installMCPCommand(options: InstallMCPCommandOptions): Prom
           resolve();
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }

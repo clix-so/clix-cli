@@ -1,6 +1,6 @@
-import { render } from 'ink';
 import { FirebaseWizard } from '../ui/components/FirebaseWizard';
 import { printFinalOutput } from '../ui/utils/finalOutput';
+import { safeRender } from '../ui/utils/safeRender';
 
 /**
  * Firebase command - check and configure Firebase credentials
@@ -11,7 +11,7 @@ export async function firebaseCommand(): Promise<void> {
   const projectPath = process.cwd();
 
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <FirebaseWizard
         projectPath={projectPath}
         onComplete={(result) => {
@@ -41,7 +41,6 @@ export async function firebaseCommand(): Promise<void> {
           resolve();
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }

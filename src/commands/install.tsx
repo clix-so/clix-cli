@@ -1,10 +1,10 @@
-import { render } from 'ink';
 import type { AgentInfo } from '../lib/agents';
 import type { AgentExecutor, AgentMessage } from '../lib/executor';
 import { MCPInstaller } from '../lib/mcp';
 import { PromptFetcher } from '../lib/prompt';
 import { AgentExecutionUI } from '../ui/AgentExecutionUI';
 import { printFinalOutput } from '../ui/utils/finalOutput';
+import { safeRender } from '../ui/utils/safeRender';
 import { configCommand } from './config';
 
 interface InstallOptions {
@@ -43,7 +43,7 @@ export async function installCommand(options: InstallOptions = {}): Promise<void
   }
 
   return new Promise((resolve, reject) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <AgentExecutionUI
         title="Install Clix Mobile SDK"
         description="Installing SDK using AI assistant"
@@ -69,7 +69,6 @@ export async function installCommand(options: InstallOptions = {}): Promise<void
           }
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }

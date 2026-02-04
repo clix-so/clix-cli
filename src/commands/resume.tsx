@@ -1,6 +1,6 @@
-import { render } from 'ink';
 import { listChatSessions } from '@/lib/services/session-store';
 import { SessionSelector } from '@/ui/components/SessionSelector';
+import { safeRender } from '@/ui/utils/safeRender';
 import { chatCommand } from './chat';
 
 export async function resumeCommand(): Promise<void> {
@@ -17,7 +17,7 @@ export async function resumeCommand(): Promise<void> {
   }
 
   const selected = await new Promise<string | null>((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <SessionSelector
         sessions={sessions}
         onSelect={(s) => {
@@ -29,7 +29,6 @@ export async function resumeCommand(): Promise<void> {
           resolve(null);
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 

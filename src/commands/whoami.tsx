@@ -1,4 +1,4 @@
-import { render } from 'ink';
+import { safeRender } from '../ui/utils/safeRender';
 import { WhoamiUI } from '../ui/WhoamiUI';
 
 /**
@@ -8,7 +8,7 @@ import { WhoamiUI } from '../ui/WhoamiUI';
  */
 export async function whoamiCommand(): Promise<void> {
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <WhoamiUI
         onComplete={(result) => {
           unmount();
@@ -18,7 +18,6 @@ export async function whoamiCommand(): Promise<void> {
           resolve();
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }

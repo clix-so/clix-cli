@@ -1,6 +1,6 @@
-import { render } from 'ink';
 import { LoginUI } from '../ui/LoginUI';
 import { printFinalOutput } from '../ui/utils/finalOutput';
+import { safeRender } from '../ui/utils/safeRender';
 
 /**
  * Login command - authenticates user via Auth0 Device Flow
@@ -9,7 +9,7 @@ import { printFinalOutput } from '../ui/utils/finalOutput';
  */
 export async function loginCommand(): Promise<void> {
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <LoginUI
         onComplete={(credentials) => {
           unmount();
@@ -31,7 +31,6 @@ export async function loginCommand(): Promise<void> {
           resolve();
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }

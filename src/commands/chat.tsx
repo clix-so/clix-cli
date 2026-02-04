@@ -1,4 +1,3 @@
-import { render } from 'ink';
 import type { AgentInfo } from '../lib/agents';
 import { getConfigManager } from '../lib/config/index';
 import { AgentSelectionService } from '../lib/services/agent-selection-service';
@@ -12,10 +11,11 @@ import {
 import { ChatApp } from '../ui/chat/ChatApp';
 import { AgentSelector } from '../ui/components/AgentSelector';
 import { NoAgentGuide } from '../ui/components/NoAgentGuide';
+import { safeRender } from '../ui/utils/safeRender';
 
 async function selectAgent(availableAgents: AgentInfo[]): Promise<AgentInfo> {
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <AgentSelector
         agents={availableAgents}
         onSelect={(agent) => {
@@ -23,7 +23,6 @@ async function selectAgent(availableAgents: AgentInfo[]): Promise<AgentInfo> {
           resolve(agent);
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }
@@ -87,14 +86,13 @@ export async function chatCommand(options?: ChatCommandOptions): Promise<void> {
   if (!result.agent && result.availableAgents.length === 0) {
     // No agents available - show installation guide
     return new Promise((resolve) => {
-      const { unmount } = render(
+      const { unmount } = safeRender(
         <NoAgentGuide
           onExit={() => {
             unmount();
             resolve();
           }}
         />,
-        { incrementalRendering: true },
       );
     });
   }
@@ -122,7 +120,7 @@ export async function chatCommand(options?: ChatCommandOptions): Promise<void> {
 
   // Render the chat app
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <ChatApp
         agent={agent}
         onExit={() => {
@@ -133,7 +131,7 @@ export async function chatCommand(options?: ChatCommandOptions): Promise<void> {
         disableUpdateNag={cfg.update?.disableUpdateNag ?? false}
         initialSessionId={options?.resumeSessionId}
       />,
-      { incrementalRendering: true, exitOnCtrlC: false },
+      { exitOnCtrlC: false },
     );
   });
 }

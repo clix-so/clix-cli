@@ -1,4 +1,4 @@
-import { Box, render, Text, useInput } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import type React from 'react';
 import {
@@ -21,6 +21,7 @@ import {
 import { PushSetupWizard } from '../../ui/components/PushSetupWizard';
 import { type IosSetupOptions, type IosSetupResult, IosSetupUI } from '../../ui/IosSetupUI';
 import { type FinalOutputResult, printFinalOutput } from '../../ui/utils/finalOutput';
+import { safeRender } from '../../ui/utils/safeRender';
 
 export interface IosSetupCommandOptions {
   /** Path to .p8 API Key file */
@@ -105,7 +106,7 @@ async function runDirectSetup(options: IosSetupCommandOptions): Promise<IosSetup
   };
 
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <IosSetupUI
         options={uiOptions}
         onComplete={(result) => {
@@ -113,7 +114,6 @@ async function runDirectSetup(options: IosSetupCommandOptions): Promise<IosSetup
           resolve(result);
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }
@@ -278,9 +278,8 @@ async function runProjectModification(
   const displayWarnings: string[] = [];
   let currentStatus = 'Creating extension files...';
 
-  const { unmount, rerender } = render(
+  const { unmount, rerender } = safeRender(
     <ProjectModificationUI status={currentStatus} warnings={displayWarnings} />,
-    { incrementalRendering: true },
   );
 
   const updateStatus = (status: string) => {
@@ -322,7 +321,7 @@ async function runGuidedSetup(
   };
 
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <GuidedSetupWizard
         context={context}
         onComplete={(result) => {
@@ -330,7 +329,6 @@ async function runGuidedSetup(
           resolve(result);
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }
@@ -372,7 +370,7 @@ function PushSetupConfirmation({
  */
 async function askPushSetupConfirmation(): Promise<boolean> {
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <PushSetupConfirmation
         onYes={() => {
           unmount();
@@ -383,7 +381,6 @@ async function askPushSetupConfirmation(): Promise<boolean> {
           resolve(false);
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }
@@ -395,7 +392,7 @@ async function runPushSetup(directResult: IosSetupResult): Promise<PushSetupResu
   const projectPath = process.cwd();
 
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <PushSetupWizard
         projectPath={projectPath}
         preDetectedBundleId={directResult.bundleId}
@@ -409,7 +406,6 @@ async function runPushSetup(directResult: IosSetupResult): Promise<PushSetupResu
           resolve(null);
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }

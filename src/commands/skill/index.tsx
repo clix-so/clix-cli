@@ -1,4 +1,3 @@
-import { render } from 'ink';
 import type { AgentExecutor, AgentMessage } from '../../lib/executor';
 import {
   executeSkill,
@@ -9,6 +8,7 @@ import {
 } from '../../lib/skills';
 import { AgentExecutionUI } from '../../ui/AgentExecutionUI';
 import { printFinalOutput } from '../../ui/utils/finalOutput';
+import { safeRender } from '../../ui/utils/safeRender';
 
 interface SkillCommandOptions {
   action?: string;
@@ -99,7 +99,7 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
   }
 
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <AgentExecutionUI
         title={skillInfo.name}
         description={skillInfo.description}
@@ -112,7 +112,6 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
           resolve();
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }

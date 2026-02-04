@@ -1,9 +1,9 @@
-import { render } from 'ink';
 import type { AgentInfo } from '../lib/agents';
 import type { AgentExecutor, AgentMessage } from '../lib/executor';
 import { getDebugPrompt } from '../lib/services/debug-service';
 import { AgentExecutionUI } from '../ui/AgentExecutionUI';
 import { printFinalOutput } from '../ui/utils/finalOutput';
+import { safeRender } from '../ui/utils/safeRender';
 
 interface DebugCommandOptions {
   problem?: string;
@@ -52,7 +52,7 @@ Examples:
   }
 
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <AgentExecutionUI
         title="Debug Assistant"
         description={`Investigating: ${problem}`}
@@ -65,7 +65,6 @@ Examples:
           resolve();
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }
