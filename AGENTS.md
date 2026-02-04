@@ -99,6 +99,33 @@ Key files:
 
 **Composition**: Break down UI into small, focused components. Abstract reusable logic into custom hooks.
 
+### Cancel Input Handling
+
+Use the shared `useCancelInput` hook from `@/ui/hooks` for ESC/Ctrl+C cancellation:
+
+```typescript
+import { useCancelInput } from '@/ui/hooks';
+
+// Basic usage
+useCancelInput(() => onCancel());
+
+// With options
+useCancelInput(onCancel, {
+  isActive: isOverlayVisible,
+  handleCtrlC: false  // ESC only
+});
+
+// For Ctrl+C detection in custom handlers
+import { isCtrlCInput } from '@/ui/hooks';
+if (isCtrlCInput(input, key)) { ... }
+```
+
+**New Component Checklist:**
+1. Import `useCancelInput` from `@/ui/hooks`
+2. Add cancel handler with appropriate `isActive` condition
+3. For selector-based components, extend `GenericSelector` (has built-in cancel)
+4. Update help text to include `Esc/Ctrl+C to cancel`
+
 ### UI Component Architecture
 
 Rules for separating Command mode and Interactive mode:

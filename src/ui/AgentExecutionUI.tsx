@@ -1,4 +1,4 @@
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useApp } from 'ink';
 import Spinner from 'ink-spinner';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import { Header } from '@/ui/components/Header';
 import { NoAgentGuide } from '@/ui/components/NoAgentGuide';
 import { StatusMessage } from '@/ui/components/StatusMessage';
 import { ToolCallDisplay } from '@/ui/components/ToolCallDisplay';
+import { useCancelInput } from '@/ui/hooks';
 import type { FinalOutputResult } from '@/ui/utils/finalOutput';
 import { MarkdownDisplay } from '@/ui/utils/MarkdownDisplay';
 
@@ -202,17 +203,15 @@ export const AgentExecutionUI: React.FC<AgentExecutionUIProps> = ({
   const [isExecuting, setIsExecuting] = useState(false);
 
   // Handle ESC or Ctrl+C to cancel execution
-  useInput((input, key) => {
-    if (!isExecuting) return;
-
-    const isCtrlC = (input === 'c' && key.ctrl) || input === '\x03';
-    if (key.escape || isCtrlC) {
+  useCancelInput(
+    () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
-    }
-  });
+    },
+    { isActive: isExecuting },
+  );
 
   useEffect(() => {
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

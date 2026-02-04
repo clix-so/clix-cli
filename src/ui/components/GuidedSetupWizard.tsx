@@ -15,6 +15,7 @@ import {
   verifyExtensionFiles,
 } from '@/lib/ios/extension-generator';
 import { generatePodfileSnippet } from '@/lib/ios/extension-templates';
+import { isCtrlCInput } from '@/ui/hooks';
 import { Header } from './Header';
 import { StatusMessage } from './StatusMessage';
 
@@ -118,7 +119,8 @@ export const GuidedSetupWizard: React.FC<GuidedSetupWizardProps> = ({ context, o
       }
     }
 
-    if (key.escape && phase !== 'creating_files' && phase !== 'complete') {
+    const shouldCancel = key.escape || isCtrlCInput(input, key);
+    if (shouldCancel && phase !== 'creating_files' && phase !== 'complete') {
       setState((s) => ({ ...s, phase: 'complete' }));
     }
   });

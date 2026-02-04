@@ -32,6 +32,7 @@ import {
   isOAuthConfigured,
 } from '@/lib/services/firebase';
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
+import { isCtrlCInput, useCancelInput } from '@/ui/hooks';
 import { AppleLoginUI } from './AppleLoginUI';
 
 interface PushSetupWizardProps {
@@ -87,10 +88,10 @@ function StatusPhase({
   useInput((_input, key) => {
     if (key.return) {
       onContinue();
-    } else if (key.escape) {
-      onCancel();
     }
   });
+
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -123,7 +124,7 @@ function StatusPhase({
         </Box>
       </Box>
       <Box>
-        <Text dimColor>Press Enter to continue, Esc to cancel</Text>
+        <Text dimColor>Press Enter to continue, Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );
@@ -167,11 +168,7 @@ function KeySourcePhase({
     }
   };
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -187,7 +184,7 @@ function KeySourcePhase({
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
       <Box marginTop={1}>
-        <Text dimColor>↑↓ navigate · Enter select · Esc cancel</Text>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
       </Box>
     </Box>
   );
@@ -215,10 +212,10 @@ function AppleGuidePhase({
   useInput((_input, key) => {
     if (key.return) {
       onContinue();
-    } else if (key.escape) {
-      onCancel();
     }
   });
+
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -247,7 +244,7 @@ function AppleGuidePhase({
         <Text color="yellow">Press Enter when you have copied the .p8 file to this directory</Text>
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>Esc to cancel</Text>
+        <Text dimColor>Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );
@@ -303,8 +300,10 @@ function P8InputPhase({
   }, []);
 
   useInput((input, key) => {
-    if (key.escape) {
+    // Handle cancel with ESC or Ctrl+C
+    if (key.escape || isCtrlCInput(input, key)) {
       onCancel();
+      return;
     }
     // Open Team ID page when 't' is pressed in team_id stage
     if (stage === 'team_id' && input === 't') {
@@ -522,12 +521,7 @@ function P8InputPhase({
  * Firebase authentication phase component.
  */
 function FirebaseAuthPhase({ onCancel }: { onCancel: () => void }): React.ReactElement {
-  useInput((_input, key) => {
-    const isCtrlC = (_input === 'c' && key.ctrl) || _input === '\x03';
-    if (key.escape || isCtrlC) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -584,11 +578,7 @@ function FirebaseProjectsPhase({
     [onSelect, projects],
   );
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -607,7 +597,7 @@ function FirebaseProjectsPhase({
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
       <Box marginTop={1}>
-        <Text dimColor>Esc to cancel</Text>
+        <Text dimColor>Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );
@@ -652,10 +642,10 @@ function FirebaseUploadPhase({
   useInput((_input, key) => {
     if (key.return) {
       onComplete();
-    } else if (key.escape) {
-      onCancel();
     }
   });
+
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -719,7 +709,7 @@ function FirebaseUploadPhase({
         <Text color="yellow">Press Enter when upload is complete</Text>
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>Esc to cancel</Text>
+        <Text dimColor>Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );
@@ -803,10 +793,10 @@ function ErrorPhase({
   useInput((_input, key) => {
     if (key.return) {
       onRetry();
-    } else if (key.escape) {
-      onCancel();
     }
   });
+
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -826,7 +816,7 @@ function ErrorPhase({
         <Text color="red">✗ {error}</Text>
       </Box>
       <Box>
-        <Text dimColor>Press Enter to retry, Esc to cancel</Text>
+        <Text dimColor>Press Enter to retry, Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );

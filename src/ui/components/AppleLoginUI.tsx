@@ -25,6 +25,7 @@ import {
   type PushKeyStoreInfo,
   type UserAuthContext,
 } from '@/lib/ios';
+import { useCancelInput } from '@/ui/hooks';
 
 type AppleLoginPhase =
   | 'prompt_login'
@@ -58,11 +59,7 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
   const [authContext, setAuthContext] = useState<UserAuthContext | null>(null);
   const [existingKeys, setExistingKeys] = useState<PushKeyStoreInfo[]>([]);
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   const handleStartLogin = useCallback(() => {
     setPhase('apple_id_input');

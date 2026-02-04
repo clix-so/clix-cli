@@ -21,6 +21,7 @@ import {
   type WizardPhase,
 } from '@/lib/services/firebase';
 import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
+import { useCancelInput } from '@/ui/hooks';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
 import { GenericSelector, type SelectorItem } from './GenericSelector';
 
@@ -176,12 +177,7 @@ function buildMenuItems(result: FirebaseDetectionResult): MenuAction[] {
  * Authenticating phase component.
  */
 function AuthenticatingPhase({ onCancel }: { onCancel: () => void }): React.ReactElement {
-  useInput((input, key) => {
-    const isCtrlC = (input === 'c' && key.ctrl) || input === '\x03';
-    if (key.escape || isCtrlC) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -205,7 +201,7 @@ function AuthenticatingPhase({ onCancel }: { onCancel: () => void }): React.Reac
         <Text dimColor>Complete the authentication in your browser.</Text>
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>Press Esc to cancel</Text>
+        <Text dimColor>Press Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );
@@ -228,11 +224,7 @@ function ProjectSelector({
     value: p,
   }));
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -248,7 +240,7 @@ function ProjectSelector({
       </Box>
       <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
       <Box marginTop={1}>
-        <Text dimColor>↑↓ navigate · Enter select · Esc cancel</Text>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
       </Box>
     </Box>
   );
@@ -275,11 +267,7 @@ function AppSelector({
     value: app,
   }));
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   const title = platform === 'android' ? 'Select Android App' : 'Select iOS App';
 
@@ -297,7 +285,7 @@ function AppSelector({
       </Box>
       <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
       <Box marginTop={1}>
-        <Text dimColor>↑↓ navigate · Enter select · Esc cancel</Text>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
       </Box>
     </Box>
   );
@@ -375,11 +363,7 @@ function NoAppsFoundPhase({
     value: 'cancel',
   });
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   const handleSelect = (item: { value: string }) => {
     switch (item.value) {
@@ -417,7 +401,7 @@ function NoAppsFoundPhase({
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
       <Box marginTop={1}>
-        <Text dimColor>↑↓ navigate · Enter select · Esc cancel</Text>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
       </Box>
     </Box>
   );
@@ -444,11 +428,7 @@ function CreateAppInputPhase({
   const identifierPlaceholder = isAndroid ? 'com.example.app' : 'com.example.app';
   const title = isAndroid ? 'Create Android App' : 'Create iOS App';
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   const handleIdentifierSubmit = useCallback(() => {
     if (identifier.trim()) {
@@ -490,7 +470,7 @@ function CreateAppInputPhase({
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter to continue · Esc cancel</Text>
+            <Text dimColor>Enter to continue · Esc/Ctrl+C cancel</Text>
           </Box>
         </>
       ) : (
@@ -515,7 +495,7 @@ function CreateAppInputPhase({
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter to create · Esc cancel</Text>
+            <Text dimColor>Enter to create · Esc/Ctrl+C cancel</Text>
           </Box>
         </>
       )}
@@ -595,10 +575,10 @@ function StatusPhase({
   useInput((_input, key) => {
     if (key.return) {
       onContinue();
-    } else if (key.escape) {
-      onSkip();
     }
   });
+
+  useCancelInput(onSkip);
 
   return (
     <Box
@@ -611,7 +591,7 @@ function StatusPhase({
     >
       <FirebaseStatusDisplay result={result} showDetails={true} />
       <Box marginTop={1}>
-        <Text dimColor>Press Enter to configure, Esc to skip</Text>
+        <Text dimColor>Press Enter to configure, Esc/Ctrl+C to skip</Text>
       </Box>
     </Box>
   );
@@ -727,10 +707,10 @@ function ErrorPhase({
   useInput((_input, key) => {
     if (key.return) {
       onRetry();
-    } else if (key.escape) {
-      onSkip();
     }
   });
+
+  useCancelInput(onSkip);
 
   const hint = getErrorHint(error);
 
@@ -757,7 +737,7 @@ function ErrorPhase({
         </Box>
       )}
       <Box>
-        <Text dimColor>Press Enter to retry, Esc to skip</Text>
+        <Text dimColor>Press Enter to retry, Esc/Ctrl+C to skip</Text>
       </Box>
     </Box>
   );
