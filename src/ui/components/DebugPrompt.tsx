@@ -1,7 +1,8 @@
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import type React from 'react';
 import { useState } from 'react';
+import { useCancelInput } from '@/ui/hooks';
 
 interface DebugPromptProps {
   onSubmit: (description: string) => void;
@@ -11,11 +12,7 @@ interface DebugPromptProps {
 export const DebugPrompt: React.FC<DebugPromptProps> = ({ onSubmit, onCancel }) => {
   const [value, setValue] = useState('');
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      onCancel();
-    }
-  });
+  useCancelInput(onCancel);
 
   const handleSubmit = (submittedValue: string) => {
     if (submittedValue.trim()) {
@@ -51,7 +48,7 @@ export const DebugPrompt: React.FC<DebugPromptProps> = ({ onSubmit, onCancel }) 
         />
       </Box>
       <Box marginTop={0}>
-        <Text dimColor>Enter to submit · Esc to cancel</Text>
+        <Text dimColor>Enter to submit · Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );

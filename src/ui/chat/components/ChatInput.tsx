@@ -3,6 +3,7 @@ import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isCtrlCInput } from '@/ui/hooks';
 import { getRandomPhrase } from '../constants/wittyPhrases';
 import { getFilteredCommands, SlashCommandMenu } from './SlashCommandMenu';
 
@@ -132,8 +133,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (disabled) return;
 
     // Handle Ctrl+C: clear input or exit on double press
-    const isCtrlC = (input === 'c' && key.ctrl) || input === '\x03';
-    if (isCtrlC) {
+    if (isCtrlCInput(input, key)) {
       const now = Date.now();
       if (now - lastCtrlCTime.current < DOUBLE_CTRL_C_THRESHOLD) {
         // Double Ctrl+C - exit

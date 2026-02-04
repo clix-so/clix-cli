@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import type React from 'react';
 import { useState } from 'react';
+import { useCancelInput } from '@/ui/hooks';
 
 export interface SelectorItem {
   id: string;
@@ -31,7 +32,7 @@ export function GenericSelector<T extends SelectorItem>({
   renderItem,
   currentItemId,
   emptyMessage = 'No items available.',
-  helpText = '↑↓ to navigate · Enter to select · Esc to cancel',
+  helpText = '↑↓ to navigate · Enter to select · Esc/Ctrl+C to cancel',
 }: GenericSelectorProps<T>): React.ReactElement {
   const [internalIndex, setInternalIndex] = useState(0);
 
@@ -56,10 +57,10 @@ export function GenericSelector<T extends SelectorItem>({
       if (selected) {
         onSelect(selected);
       }
-    } else if (key.escape && onCancel) {
-      onCancel();
     }
   });
+
+  useCancelInput(() => onCancel?.(), { isActive: !!onCancel });
 
   if (items.length === 0) {
     return (

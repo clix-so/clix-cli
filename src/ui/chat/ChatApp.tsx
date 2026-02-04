@@ -1,4 +1,4 @@
-import { Box, useApp, useInput } from 'ink';
+import { Box, useApp } from 'ink';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AgentInfo } from '../../lib/agents';
@@ -11,6 +11,7 @@ import { MCPInstallSelector } from '../components/MCPInstallSelector';
 import { SessionSelector } from '../components/SessionSelector';
 import { TransferSelector } from '../components/TransferSelector';
 import { UpdateNotification } from '../components/UpdateNotification';
+import { useCancelInput } from '../hooks';
 import { LoginUI } from '../LoginUI';
 import { LogoutUI } from '../LogoutUI';
 import { WhoamiUI } from '../WhoamiUI';
@@ -89,14 +90,7 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
   }, [agent, initializeAgent, preferredAgent, sessionReady]);
 
   // Handle escape key or Ctrl+C to cancel streaming
-  useInput((input, key) => {
-    if (isStreaming) {
-      const isCtrlC = (input === 'c' && key.ctrl) || input === '\x03';
-      if (key.escape || isCtrlC) {
-        cancelRequest();
-      }
-    }
-  });
+  useCancelInput(cancelRequest, { isActive: isStreaming });
 
   // Print transfer result and exit
   const handleTransferSuccess = useCallback(

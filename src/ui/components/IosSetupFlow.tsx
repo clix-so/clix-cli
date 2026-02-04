@@ -6,6 +6,7 @@ import { Box, Text, useInput } from 'ink';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import type { PushSetupResult } from '../../lib/push';
+import { isCtrlCInput, useCancelInput } from '../hooks';
 import { type IosSetupResult, IosSetupUI } from '../IosSetupUI';
 import {
   type GuidedSetupContext,
@@ -44,10 +45,10 @@ const IntroScreen: React.FC<{
   useInput((_input, key) => {
     if (key.return) {
       onContinue();
-    } else if (key.escape) {
-      onCancel();
     }
   });
+
+  useCancelInput(onCancel);
 
   return (
     <Box
@@ -70,7 +71,7 @@ const IntroScreen: React.FC<{
         <Text dimColor>3. Set up APNS key for Firebase (optional)</Text>
       </Box>
       <Box marginTop={1}>
-        <Text color="cyan">Press Enter to continue, Esc to cancel</Text>
+        <Text color="cyan">Press Enter to continue, Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );
@@ -86,7 +87,7 @@ const PushSetupConfirmation: React.FC<{
   useInput((input, key) => {
     if (input.toLowerCase() === 'y' || key.return) {
       onYes();
-    } else if (input.toLowerCase() === 'n' || key.escape) {
+    } else if (input.toLowerCase() === 'n' || key.escape || isCtrlCInput(input, key)) {
       onNo();
     }
   });
