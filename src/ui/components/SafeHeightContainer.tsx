@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
  */
 function getSafeHeight(): number {
   const rows = process.stdout.rows || 24;
-  return Math.max(rows - 1, 10);
+  return Math.max(rows - 1, 1);
 }
 
 interface SafeHeightContainerProps {
