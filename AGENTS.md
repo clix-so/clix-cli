@@ -176,25 +176,31 @@ Tests use `bun:test` (`describe`, `test`, `expect`, `mock`).
 
 ## Code Quality Requirements
 
-**After every code change**, run `bun run check && bun test` and fix ALL issues:
+**After every code change**, run the full test suite and fix ALL issues:
+
+```bash
+bun run check && bun test          # Unit tests
+bun run build && bun test tests/e2e/  # E2E tests (requires build first)
+```
 
 1. **Errors**: Must be fixed immediately - code cannot be committed with errors
 2. **Warnings**: Must also be fixed - treat warnings as errors
 3. **Unrelated issues**: If you encounter warnings/errors in files unrelated to your current change, fix them too
+4. **E2E test failures**: Must be fixed even if seemingly unrelated - E2E tests verify integrated behavior
 
 **Complexity warnings** (`noExcessiveCognitiveComplexity`):
 - When a function exceeds complexity threshold (25), refactor it by extracting helper functions
 - Common patterns: extract validation logic, split async operations, create focused sub-functions
 
-**Zero tolerance policy**: The codebase must have zero warnings AND zero errors after any change.
+**Zero tolerance policy**: The codebase must have zero warnings, zero errors, AND all tests (unit + E2E) must pass after any change.
 
 ## Commits
 
 Follow Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 
-Before committing: `bun run check && bun test`
+Before committing: `bun run check && bun test && bun run build && bun test tests/e2e/`
 
-**Important**: All lint and typecheck warnings must be resolved before committing. The codebase should have zero warnings, not just zero errors.
+**Important**: All lint, typecheck warnings, unit tests, and E2E tests must pass before committing. The codebase should have zero warnings, not just zero errors.
 
 ## OAuth Callback URL Convention
 
