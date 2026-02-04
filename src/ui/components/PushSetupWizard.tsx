@@ -916,52 +916,73 @@ export const PushSetupWizard: React.FC<PushSetupWizardProps> = ({
   const [projects, setProjects] = useState<FirebaseProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<FirebaseProject | null>(null);
 
+  // Helper to apply detection results to state
+  const applyDetectionResult = useCallback(
+    (result: {
+      firebaseProjectId: string | null;
+      bundleId: string | null;
+      teamId: string | null;
+    }) => {
+      if (result.teamId) {
+        setDetectedTeamId(result.teamId);
+      }
+      setContext((prev) => ({
+        ...prev,
+        firebaseProjectId: result.firebaseProjectId,
+        bundleId: result.bundleId,
+      }));
+      setPhase('status');
+    },
+    [],
+  );
+
   // Initial detection
   useEffect(() => {
+    let cancelled = false;
+
     const detect = async () => {
       // Use pre-detected values if available (from ios-setup integration)
       if (preDetectedBundleId !== undefined || preDetectedFirebaseProjectId !== undefined) {
-        setContext((prev) => ({
-          ...prev,
+        if (cancelled) return;
+        applyDetectionResult({
           firebaseProjectId: preDetectedFirebaseProjectId ?? null,
           bundleId: preDetectedBundleId ?? null,
-        }));
-        if (preDetectedTeamId) {
-          setDetectedTeamId(preDetectedTeamId);
-        }
-        setPhase('status');
+          teamId: preDetectedTeamId ?? null,
+        });
         return;
       }
 
       // Detect from Firebase config
       const firebaseResult = await detectFromFirebase(projectPath);
+      if (cancelled) return;
       let { firebaseProjectId, bundleId, teamId } = firebaseResult;
 
       // Try Xcode project if Team ID not found in Firebase config
       if (!teamId) {
         const xcodeResult = await detectFromXcodeProject(projectPath);
+        if (cancelled) return;
         teamId = xcodeResult.teamId;
-        if (!bundleId) {
-          bundleId = xcodeResult.bundleId;
-        }
+        bundleId = bundleId || xcodeResult.bundleId;
       }
 
-      if (teamId) {
-        setDetectedTeamId(teamId);
-      }
-
-      setContext((prev) => ({
-        ...prev,
-        firebaseProjectId,
-        bundleId,
-      }));
-      setPhase('status');
+      applyDetectionResult({ firebaseProjectId, bundleId, teamId });
     };
 
     if (phase === 'detecting') {
       detect();
     }
-  }, [phase, projectPath, preDetectedBundleId, preDetectedFirebaseProjectId, preDetectedTeamId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    phase,
+    projectPath,
+    preDetectedBundleId,
+    preDetectedFirebaseProjectId,
+    preDetectedTeamId,
+    applyDetectionResult,
+  ]);
 
   // Firebase authentication effect
   useEffect(() => {
