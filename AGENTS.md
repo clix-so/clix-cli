@@ -126,6 +126,38 @@ if (isCtrlCInput(input, key)) { ... }
 3. For selector-based components, extend `GenericSelector` (has built-in cancel)
 4. Update help text to include `Esc/Ctrl+C to cancel`
 
+### Safe Rendering (Anti-Flicker)
+
+**Always use `safeRender()` instead of Ink's `render()`** to prevent terminal flickering.
+
+**Background**: When rendered content approaches terminal height, Ink causes "unintentional scrolling" resulting in screen flicker (Ink issue #450). The solution is to limit rendering height to `process.stdout.rows - 1`.
+
+**Implementation**:
+
+- `src/ui/utils/safeRender.tsx` - Wrapper around Ink's `render()`
+- `src/ui/components/SafeHeightContainer.tsx` - Height-limiting container
+
+**Usage**:
+
+```typescript
+// Before (DO NOT USE)
+import { render } from 'ink';
+render(<MyComponent />, { incrementalRendering: true });
+
+// After (ALWAYS USE THIS)
+import { safeRender } from '@/ui/utils/safeRender';
+safeRender(<MyComponent />);
+```
+
+**Features**:
+
+- Automatically wraps components with `SafeHeightContainer`
+- `incrementalRendering: true` applied by default
+- `rerender()` also applies safe height automatically
+- Use `{ disableSafeHeight: true }` option only if full terminal height is required
+
+**When adding new commands**: Always use `safeRender()` for consistent flicker-free rendering.
+
 ### UI Component Architecture
 
 Rules for separating Command mode and Interactive mode:

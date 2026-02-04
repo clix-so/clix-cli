@@ -1,6 +1,6 @@
-import { render } from 'ink';
 import { LogoutUI } from '../ui/LogoutUI';
 import { printFinalOutput } from '../ui/utils/finalOutput';
+import { safeRender } from '../ui/utils/safeRender';
 
 /**
  * Logout command - removes stored credentials
@@ -9,7 +9,7 @@ import { printFinalOutput } from '../ui/utils/finalOutput';
  */
 export async function logoutCommand(): Promise<void> {
   return new Promise((resolve) => {
-    const { unmount } = render(
+    const { unmount } = safeRender(
       <LogoutUI
         onComplete={(success) => {
           unmount();
@@ -30,7 +30,6 @@ export async function logoutCommand(): Promise<void> {
           resolve();
         }}
       />,
-      { incrementalRendering: true },
     );
   });
 }
