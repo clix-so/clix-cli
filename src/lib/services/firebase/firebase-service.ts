@@ -6,16 +6,36 @@
  * @module services/firebase/firebase-service
  */
 
-import { detectFirebaseConfig, detectPlatform, getExpectedPaths } from './detector';
+import type { ProjectType } from '@/lib/config';
+import { detectFirebaseConfig, getExpectedPaths } from './detector';
 import type {
   FirebaseDetectionResult,
   FirebaseRecommendation,
   FirebaseStatus,
   GoogleServiceInfoPlist,
   GoogleServicesJson,
+  Platform,
 } from './types';
 import { FIREBASE_HELP_URLS, platformNeedsAndroid, platformNeedsIos } from './types';
 import { extractProjectId, extractProjectIdFromPlist, validateProjectIdMatch } from './validator';
+
+/**
+ * Convert ProjectType to Firebase Platform.
+ */
+function projectTypeToPlatform(projectType: ProjectType): Platform {
+  if (projectType.framework === 'flutter') {
+    return 'flutter';
+  }
+  if (projectType.framework === 'react-native' || projectType.framework === 'expo') {
+    return 'react-native';
+  }
+  if (projectType.framework === 'native') {
+    if (projectType.target === 'ios') return 'ios';
+    if (projectType.target === 'android') return 'android';
+    return 'unknown';
+  }
+  return 'unknown';
+}
 
 /**
  * Firebase configuration service.
@@ -24,25 +44,26 @@ import { extractProjectId, extractProjectIdFromPlist, validateProjectIdMatch } f
  */
 export class FirebaseService {
   private projectPath: string;
+  private projectType: ProjectType;
 
   /**
    * Create a new FirebaseService instance.
    *
    * @param projectPath - Path to the project root directory
+   * @param projectType - Already detected project type
    */
-  constructor(projectPath: string) {
+  constructor(projectPath: string, projectType: ProjectType) {
     this.projectPath = projectPath;
+    this.projectType = projectType;
   }
 
   /**
    * Detect Firebase configuration in the project.
    *
-   * Always performs fresh detection to ensure current state.
-   *
    * @returns Detection result with credential files and issues
    */
   async detect(): Promise<FirebaseDetectionResult> {
-    return await detectFirebaseConfig(this.projectPath);
+    return await detectFirebaseConfig(this.projectPath, this.projectType);
   }
 
   /**
@@ -150,8 +171,8 @@ export class FirebaseService {
    * @param platform - Target platform
    * @returns Expected file path
    */
-  async getExpectedPath(platform: 'android' | 'ios'): Promise<string> {
-    const detectedPlatform = await detectPlatform(this.projectPath);
+  getExpectedPath(platform: 'android' | 'ios'): string {
+    const detectedPlatform = projectTypeToPlatform(this.projectType);
     const paths = getExpectedPaths(detectedPlatform);
     const platformPaths = platform === 'android' ? paths.android : paths.ios;
     return (

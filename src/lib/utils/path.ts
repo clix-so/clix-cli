@@ -7,8 +7,13 @@ import { homedir } from 'node:os';
  */
 export function formatPath(path: string): string {
   const home = homedir();
-  if (path.startsWith(home)) {
-    return path.replace(home, '~');
+  // Exact match: home directory itself
+  if (path === home) {
+    return '~';
+  }
+  // Path under home directory (must have separator after home)
+  if (path.startsWith(`${home}/`)) {
+    return `~${path.slice(home.length)}`;
   }
   return path;
 }

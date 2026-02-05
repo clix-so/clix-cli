@@ -41,6 +41,8 @@ export class CLITestRig {
         ...options?.env,
         // Force non-interactive mode
         CI: 'true',
+        // Skip first-run setup for E2E tests
+        CLIX_SKIP_SETUP: '1',
       },
       stdout: 'pipe',
       stderr: 'pipe',

@@ -3,7 +3,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { getInternalApiClient, type Member } from '@/lib/api';
 import { AUTH_ENV_VARS, getCredentialsManager } from '@/lib/auth';
-import { getConfigManager, type LinkedProject } from '@/lib/config';
+import { getProjectConfigManager, type ProjectConfig } from '@/lib/config';
 import { imageToAscii } from '@/lib/utils/ascii-image';
 import { Header } from '@/ui/components/Header';
 import { StatusMessage } from '@/ui/components/StatusMessage';
@@ -30,12 +30,11 @@ async function fetchProfileAscii(profileImageUrl: string | undefined): Promise<s
   return imageToAscii(profileImageUrl, { width: 18, color: true });
 }
 
-/** Get linked project for workspace */
-async function getLinkedProject(workspacePath: string): Promise<LinkedProject | null> {
+/** Get project config for workspace */
+async function getProjectConfig(workspacePath: string): Promise<ProjectConfig | null> {
   try {
-    const configManager = getConfigManager();
-    const config = await configManager.load();
-    return config.workspaces?.[workspacePath] ?? null;
+    const projectConfigManager = getProjectConfigManager(workspacePath);
+    return await projectConfigManager.load();
   } catch {
     return null;
   }
@@ -52,7 +51,7 @@ export const WhoamiUI: React.FC<WhoamiUIProps> = ({ onComplete }) => {
   const { exit } = useApp();
   const [phase, setPhase] = useState<WhoamiPhase>('loading');
   const [member, setMember] = useState<Member | null>(null);
-  const [linkedProject, setLinkedProject] = useState<LinkedProject | null>(null);
+  const [projectConfig, setProjectConfig] = useState<ProjectConfig | null>(null);
   const [workspacePath] = useState(() => process.cwd());
   const [isEnvAuth, setIsEnvAuth] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -94,8 +93,8 @@ export const WhoamiUI: React.FC<WhoamiUIProps> = ({ onComplete }) => {
         const ascii = await fetchProfileAscii(memberInfo.profile_image_url);
         if (ascii) setProfileAscii(ascii);
 
-        const linked = await getLinkedProject(workspacePath);
-        if (linked) setLinkedProject(linked);
+        const config = await getProjectConfig(workspacePath);
+        if (config) setProjectConfig(config);
 
         setPhase('complete');
         setResult({ status: 'ok', member: memberInfo });
@@ -126,15 +125,15 @@ export const WhoamiUI: React.FC<WhoamiUIProps> = ({ onComplete }) => {
             </Box>
           )}
           <Box flexDirection="column" marginLeft={2}>
-            {linkedProject ? (
+            {projectConfig ? (
               <>
                 <Box>
                   <Text dimColor>Organization: </Text>
-                  <Text>{linkedProject.organizationName}</Text>
+                  <Text>{projectConfig.organization.name}</Text>
                 </Box>
                 <Box>
                   <Text dimColor>Project: </Text>
-                  <Text color="cyan">{linkedProject.projectName}</Text>
+                  <Text color="cyan">{projectConfig.project.name}</Text>
                 </Box>
               </>
             ) : (
@@ -147,7 +146,7 @@ export const WhoamiUI: React.FC<WhoamiUIProps> = ({ onComplete }) => {
                 </Box>
               </Box>
             )}
-            <Box marginTop={linkedProject ? 1 : 0}>
+            <Box marginTop={projectConfig ? 1 : 0}>
               <Text dimColor>Member ID: </Text>
               <Text dimColor>{member.id}</Text>
             </Box>

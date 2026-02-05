@@ -50,4 +50,11 @@ describe('formatPath', () => {
     const result = formatPath('/');
     expect(result).toBe('/');
   });
+
+  test('should not modify paths with similar prefix to home directory', () => {
+    // e.g., if home is /Users/john, /Users/johnny should NOT become ~ny
+    const inputPath = `${home}ny/some/project`;
+    const result = formatPath(inputPath);
+    expect(result).toBe(`${home}ny/some/project`);
+  });
 });

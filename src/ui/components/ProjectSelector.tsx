@@ -18,6 +18,8 @@ export interface ProjectSelectorProps {
   onSelect: (project: Project, org: Organization) => void;
   onSkip: () => void;
   workspacePath: string;
+  /** Whether to show skip option (default: true) */
+  showSkip?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   onSelect,
   onSkip,
   workspacePath,
+  showSkip = true,
 }) => {
   const flattenedProjects = useMemo(() => flattenProjects(organizations), [organizations]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -79,7 +82,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   useInput((_input, key) => {
     // Handle empty list - only Enter/Esc work
     if (totalItems === 0) {
-      if (key.return || key.escape) {
+      if (key.return || (showSkip && key.escape)) {
         onSkip();
       }
       return;
@@ -94,7 +97,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       if (selected) {
         onSelect(selected.project, selected.org);
       }
-    } else if (key.escape) {
+    } else if (showSkip && key.escape) {
       onSkip();
     }
   });
@@ -148,7 +151,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>↑↓ to navigate · Enter to select · Esc to skip</Text>
+        <Text dimColor>↑↓ to navigate · Enter to select{showSkip ? ' · Esc to skip' : ''}</Text>
       </Box>
     </Box>
   );

@@ -8,10 +8,12 @@ import { runIosSetupCommand } from './commands/ios-setup/index';
 import { loginCommand } from './commands/login';
 import { logoutCommand } from './commands/logout';
 import { resumeCommand } from './commands/resume';
+import { setupCommand } from './commands/setup';
 import { skillCommand } from './commands/skill/index';
 import { uninstallCommand } from './commands/uninstall';
 import { updateCommand } from './commands/update';
 import { whoamiCommand } from './commands/whoami';
+import { checkFirstRun, shouldRunSetup } from './lib/services/first-run-service';
 import {
   getValidMCPAgents,
   isValidMCPAgent,
@@ -132,6 +134,11 @@ async function main() {
   const skillTypes = getAvailableSkillTypes();
 
   try {
+    // Check if first-run setup is needed
+    if (await shouldRunSetup(command)) {
+      await setupCommand();
+    }
+
     switch (command) {
       case 'help':
         cli.showHelp();
@@ -199,6 +206,16 @@ async function main() {
       case 'firebase':
         await firebaseCommand();
         break;
+
+      case 'setup': {
+        const status = await checkFirstRun();
+        if (status.needsSetup) {
+          await setupCommand();
+        } else {
+          console.log('Project already configured.');
+        }
+        break;
+      }
 
       case 'ios-setup':
       case 'capabilities':

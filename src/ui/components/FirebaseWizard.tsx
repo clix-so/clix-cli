@@ -5,6 +5,7 @@ import TextInput from 'ink-text-input';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { openBrowser } from '@/lib/auth/browser';
+import type { ProjectType } from '@/lib/config';
 import {
   type AndroidApp,
   type CredentialAction,
@@ -20,6 +21,7 @@ import {
   platformNeedsIos,
   type WizardPhase,
 } from '@/lib/services/firebase';
+import { detectProjectType } from '@/lib/services/project-detector';
 import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 import { useCancelInput } from '@/ui/hooks';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
@@ -27,6 +29,7 @@ import { GenericSelector, type SelectorItem } from './GenericSelector';
 
 interface FirebaseWizardProps {
   projectPath: string;
+  projectType?: ProjectType;
   onComplete: (result: FirebaseSetupResult) => void;
   onCancel?: () => void;
 }
@@ -801,6 +804,7 @@ function CompletePhase({
  */
 export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   projectPath,
+  projectType: propProjectType,
   onComplete,
   onCancel,
 }) => {
@@ -825,13 +829,18 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   const [noAppsContext, setNoAppsContext] = useState<NoAppsContext | null>(null);
   const [creatingAppPlatform, setCreatingAppPlatform] = useState<'android' | 'ios'>('android');
 
-  const [service] = useState(() => new FirebaseService(projectPath));
+  const [service, setService] = useState<FirebaseService | null>(null);
+  const [projectType, setProjectType] = useState<ProjectType | null>(propProjectType ?? null);
 
   // Initial detection
   useEffect(() => {
     const detect = async () => {
       try {
-        const detectionResult = await service.detect();
+        const detectedProjectType = propProjectType ?? (await detectProjectType(projectPath));
+        setProjectType(detectedProjectType);
+        const firebaseService = new FirebaseService(projectPath, detectedProjectType);
+        setService(firebaseService);
+        const detectionResult = await firebaseService.detect();
         setResult(detectionResult);
         setPhase('status');
       } catch (err) {
@@ -843,7 +852,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     if (phase === 'detecting') {
       detect();
     }
-  }, [phase, service]);
+  }, [phase, projectPath, propProjectType]);
 
   const handleContinue = useCallback(() => {
     setPhase('menu');
@@ -872,6 +881,12 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   // Download config files - defined first as it's called by other handlers via ref
   const handleDownloadConfigs = useCallback(
     async (project: FirebaseProject, androidApp: AndroidApp | null, iosApp: IosApp | null) => {
+      if (!projectType) {
+        setError('Project type not detected');
+        setPhase('error');
+        return;
+      }
+
       if (androidApp && iosApp) {
         setDownloadingPlatform('both');
       } else if (androidApp) {
@@ -882,7 +897,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       setPhase('downloading');
 
       try {
-        const paths = await downloader.getExpectedSavePaths(projectPath);
+        const paths = downloader.getExpectedSavePaths(projectPath, projectType);
 
         if (androidApp && paths.android) {
           await downloader.downloadAndroidConfig(
@@ -897,15 +912,17 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         }
 
         // Re-detect to verify
-        const newResult = await service.detect();
-        setResult(newResult);
+        if (service) {
+          const newResult = await service.detect();
+          setResult(newResult);
+        }
         setPhase('status');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Download failed');
         setPhase('error');
       }
     },
-    [projectPath, downloader, service],
+    [projectPath, projectType, downloader, service],
   );
 
   // Use ref to avoid circular dependencies
@@ -1134,8 +1151,10 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
           setPhase('validating');
           // Re-detect to validate
           try {
-            const newResult = await service.detect();
-            setResult(newResult);
+            if (service) {
+              const newResult = await service.detect();
+              setResult(newResult);
+            }
             setPhase('status');
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Validation failed');

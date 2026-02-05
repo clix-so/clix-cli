@@ -19,6 +19,7 @@ import {
 } from '@/lib/ios';
 import { FirebaseService } from '@/lib/services/firebase';
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
+import { detectProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { StatusMessage } from '@/ui/components/StatusMessage';
 
@@ -217,7 +218,8 @@ async function runSetup(
   // Use Team ID from Xcode project settings (DEVELOPMENT_TEAM) if available
   result.teamId = project.teamId || null;
   try {
-    const firebaseService = new FirebaseService(process.cwd());
+    const projectType = await detectProjectType(process.cwd());
+    const firebaseService = new FirebaseService(process.cwd(), projectType);
     const firebaseDetection = await firebaseService.detect();
     const iosContent = firebaseDetection.ios?.content as GoogleServiceInfoPlist | undefined;
     const androidContent = firebaseDetection.android?.content as GoogleServicesJson | undefined;

@@ -32,6 +32,7 @@ import {
   isOAuthConfigured,
 } from '@/lib/services/firebase';
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
+import { detectProjectType } from '@/lib/services/project-detector';
 import { isCtrlCInput, useCancelInput } from '@/ui/hooks';
 import { AppleLoginUI } from './AppleLoginUI';
 
@@ -842,7 +843,8 @@ async function detectFromFirebase(projectPath: string): Promise<DetectionResult>
   };
 
   try {
-    const firebaseService = new FirebaseService(projectPath);
+    const projectType = await detectProjectType(projectPath);
+    const firebaseService = new FirebaseService(projectPath, projectType);
     const detection = await firebaseService.detect();
 
     const iosContent = detection.ios?.content as GoogleServiceInfoPlist | undefined;
