@@ -121,7 +121,7 @@ export class ProjectConfigManager {
       if (!validatedConfig) {
         throw new ConfigError(
           'Invalid project configuration',
-          ERROR_CODES.CONFIG_INVALID,
+          ERROR_CODES.PROJECT_CONFIG_INVALID,
           this.configFilePath,
         );
       }
@@ -143,7 +143,7 @@ export class ProjectConfigManager {
       if (error instanceof SyntaxError) {
         throw new ConfigError(
           'Invalid JSON in project configuration file',
-          ERROR_CODES.CONFIG_INVALID,
+          ERROR_CODES.PROJECT_CONFIG_INVALID,
           this.configFilePath,
         );
       }

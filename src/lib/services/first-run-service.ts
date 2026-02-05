@@ -21,6 +21,7 @@ export const SETUP_EXEMPT_COMMANDS = [
   'help',
   'login',
   'logout',
+  'setup',
   'update',
   'upgrade',
   'uninstall',

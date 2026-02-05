@@ -18,6 +18,7 @@ import {
   getProjectConfigManager,
   type ProjectConfig,
 } from '@/lib/config';
+import { detectProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
@@ -114,6 +115,9 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
           memberRef.current = member;
         }
 
+        // Detect project type
+        const projectType = await detectProjectType(workspacePath);
+
         // Create project config
         const config: ProjectConfig = {
           version: CURRENT_PROJECT_CONFIG_VERSION,
@@ -131,6 +135,7 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
             name: project.name,
             ...(project.public_key && { publicKey: project.public_key }),
           },
+          projectType,
           linkedAt: new Date().toISOString(),
         };
 

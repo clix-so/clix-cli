@@ -207,6 +207,10 @@ async function main() {
         await firebaseCommand();
         break;
 
+      case 'setup':
+        // Setup already handled by first-run hook, just exit cleanly
+        break;
+
       case 'ios-setup':
       case 'capabilities':
       case 'ios-capabilities': {

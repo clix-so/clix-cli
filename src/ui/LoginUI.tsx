@@ -170,9 +170,12 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         const message = error instanceof Error ? error.message : 'Failed to save configuration';
         setErrorMessage(message);
         setPhase('error');
+        if (onError) {
+          onError(error instanceof Error ? error : new Error(message));
+        }
       }
     },
-    [workspacePath, onComplete, exit],
+    [workspacePath, onComplete, onError, exit],
   );
 
   const handleProjectSkip = useCallback(() => {
