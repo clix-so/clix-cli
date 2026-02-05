@@ -375,11 +375,11 @@ export class CredentialsManager {
   }
 
   /**
-   * Check if Firebase tokens exist.
+   * Check if Firebase tokens exist and have usable content.
    */
   async hasFirebaseTokens(): Promise<boolean> {
     const tokens = await this.getFirebaseTokens();
-    return tokens !== null;
+    return !!(tokens?.access_token || tokens?.refresh_token);
   }
 
   /**
@@ -389,8 +389,11 @@ export class CredentialsManager {
    * @returns true if tokens are expired or will expire within 5 minutes
    */
   isFirebaseExpired(tokens: FirebaseTokens): boolean {
+    if (!tokens.access_token) {
+      return true; // No access token, force refresh
+    }
     if (!tokens.expiry_date) {
-      return false; // No expiry info, assume valid
+      return true; // Missing expiry info, treat as expired
     }
     // Consider expired if less than 5 minutes remaining
     return Date.now() >= tokens.expiry_date - EXPIRY_BUFFER_MS;

@@ -341,10 +341,10 @@ Transfer your conversation to continue in the native agent CLI:
 
 ```
 > /transfer claude
-✅ Session saved to ~/.local/state/clix/session-1234567890.md
+✅ Session saved to .clix/sessions/session-1234567890.md
 
 To continue in Claude Code:
-claude "$(cat ~/.local/state/clix/session-1234567890.md)"
+claude "$(cat .clix/sessions/session-1234567890.md)"
 ```
 
 This preserves your entire conversation history and allows you to continue seamlessly in the agent's native interface.
