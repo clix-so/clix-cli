@@ -13,7 +13,7 @@ import { skillCommand } from './commands/skill/index';
 import { uninstallCommand } from './commands/uninstall';
 import { updateCommand } from './commands/update';
 import { whoamiCommand } from './commands/whoami';
-import { shouldRunSetup } from './lib/services/first-run-service';
+import { checkFirstRun, shouldRunSetup } from './lib/services/first-run-service';
 import {
   getValidMCPAgents,
   isValidMCPAgent,
@@ -208,13 +208,11 @@ async function main() {
         break;
 
       case 'setup': {
-        // Check if setup is needed
-        const { checkFirstRun } = await import('./lib/services/first-run-service');
         const status = await checkFirstRun();
         if (status.needsSetup) {
           await setupCommand();
         } else {
-          console.log('Project already configured. Use `clix login` to reconfigure.');
+          console.log('Project already configured.');
         }
         break;
       }
