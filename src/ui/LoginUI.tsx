@@ -18,6 +18,7 @@ import {
   getProjectConfigManager,
   type ProjectConfig,
 } from '@/lib/config';
+import { detectProjectType, formatProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
@@ -125,6 +126,9 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
           memberRef.current = member;
         }
 
+        // Detect project type
+        const projectType = await detectProjectType(workspacePath);
+
         // Create project config
         const projectConfig: ProjectConfig = {
           version: CURRENT_PROJECT_CONFIG_VERSION,
@@ -142,6 +146,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
             name: project.name,
             ...(project.public_key && { publicKey: project.public_key }),
           },
+          projectType,
           linkedAt: new Date().toISOString(),
         };
 
@@ -371,6 +376,12 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
                 <Text dimColor>Project: </Text>
                 <Text color="cyan">{savedConfig.project.name}</Text>
               </Box>
+              {savedConfig.projectType && (
+                <Box>
+                  <Text dimColor>Project type: </Text>
+                  <Text>{formatProjectType(savedConfig.projectType)}</Text>
+                </Box>
+              )}
               <Box marginTop={1}>
                 <Text dimColor>Config saved to: </Text>
                 <Text color="gray">.clix/config.jsonc</Text>

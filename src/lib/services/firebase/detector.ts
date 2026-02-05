@@ -9,6 +9,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import plist from 'plist';
+import type { ProjectType } from '@/lib/config';
+import { fileExists } from '@/lib/services/project-detector';
 import type {
   ExpectedPaths,
   FirebaseCredentialFile,
@@ -50,132 +52,21 @@ const IOS_SEARCH_PATHS = [
 const IGNORE_DIRS = new Set(['node_modules', '.git', 'build', 'dist', '.gradle', 'Pods']);
 
 /**
- * Check if Flutter project (pubspec.yaml exists).
+ * Convert ProjectType to Firebase Platform.
  */
-async function isFlutterProject(projectPath: string): Promise<boolean> {
-  try {
-    await fs.access(path.join(projectPath, 'pubspec.yaml'));
-    return true;
-  } catch {
-    return false;
+function projectTypeToPlatform(projectType: ProjectType): Platform {
+  if (projectType.framework === 'flutter') {
+    return 'flutter';
   }
-}
-
-/**
- * Check if React Native project.
- */
-async function isReactNativeProject(projectPath: string): Promise<boolean> {
-  try {
-    const packageJson = await fs.readFile(path.join(projectPath, 'package.json'), 'utf-8');
-    const pkg = JSON.parse(packageJson);
-    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
-    return Boolean(deps['react-native'] || deps.expo);
-  } catch {
-    return false;
+  if (projectType.framework === 'react-native' || projectType.framework === 'expo') {
+    return 'react-native';
   }
-}
-
-/**
- * Check if directory has build.gradle files.
- */
-async function hasBuildGradle(projectPath: string, dirName: string): Promise<boolean> {
-  const gradlePath = path.join(projectPath, dirName, 'build.gradle');
-  const gradleKtsPath = path.join(projectPath, dirName, 'build.gradle.kts');
-  try {
-    await fs.access(gradlePath);
-    return true;
-  } catch {
-    try {
-      await fs.access(gradleKtsPath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-
-/**
- * Check directory entry for iOS indicators.
- */
-function isIosIndicator(entryName: string): boolean {
-  return (
-    entryName === 'ios' || entryName.endsWith('.xcodeproj') || entryName.endsWith('.xcworkspace')
-  );
-}
-
-/**
- * Check file entry for Android indicators.
- */
-function isAndroidFile(fileName: string): boolean {
-  return (
-    fileName === 'build.gradle' ||
-    fileName === 'build.gradle.kts' ||
-    fileName === 'AndroidManifest.xml'
-  );
-}
-
-/**
- * Detect native platforms from directory entries.
- */
-async function detectNativePlatforms(
-  projectPath: string,
-): Promise<{ hasIos: boolean; hasAndroid: boolean }> {
-  const entries = await fs.readdir(projectPath, { withFileTypes: true });
-  let hasIos = false;
-  let hasAndroid = false;
-
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (isIosIndicator(entry.name)) {
-        hasIos = true;
-      }
-      if (entry.name === 'android' || entry.name === 'app') {
-        if (await hasBuildGradle(projectPath, entry.name)) {
-          hasAndroid = true;
-        }
-      }
-    }
-    if (entry.isFile() && isAndroidFile(entry.name)) {
-      hasAndroid = true;
-    }
-  }
-
-  return { hasIos, hasAndroid };
-}
-
-/**
- * Detect the project platform based on project files.
- */
-export async function detectPlatform(projectPath: string): Promise<Platform> {
-  try {
-    // Check for cross-platform frameworks first
-    if (await isFlutterProject(projectPath)) {
-      return 'flutter';
-    }
-
-    if (await isReactNativeProject(projectPath)) {
-      return 'react-native';
-    }
-
-    // Check for native platforms
-    const { hasIos, hasAndroid } = await detectNativePlatforms(projectPath);
-
-    if (hasIos && hasAndroid) {
-      // For dual-platform native projects without cross-platform framework,
-      // return 'unknown' to check all common locations
-      return 'unknown';
-    }
-    if (hasIos) {
-      return 'ios';
-    }
-    if (hasAndroid) {
-      return 'android';
-    }
-
-    return 'unknown';
-  } catch {
+  if (projectType.framework === 'native') {
+    if (projectType.target === 'ios') return 'ios';
+    if (projectType.target === 'android') return 'android';
     return 'unknown';
   }
+  return 'unknown';
 }
 
 /**
@@ -208,18 +99,6 @@ export function getExpectedPaths(platform: Platform): ExpectedPaths {
   }
 
   return { android: androidPaths, ios: iosPaths };
-}
-
-/**
- * Check if a file exists at the given path.
- */
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(filePath);
-    return stat.isFile();
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -637,10 +516,14 @@ function generateIssues(
  * Detect Firebase configuration in a project.
  *
  * @param projectPath - Path to the project root
+ * @param projectType - Already detected project type
  * @returns Detection result with credential files and issues
  */
-export async function detectFirebaseConfig(projectPath: string): Promise<FirebaseDetectionResult> {
-  const platform = await detectPlatform(projectPath);
+export async function detectFirebaseConfig(
+  projectPath: string,
+  projectType: ProjectType,
+): Promise<FirebaseDetectionResult> {
+  const platform = projectTypeToPlatform(projectType);
   const expectedPaths = getExpectedPaths(platform);
 
   const android = await detectAndroidCredential(projectPath, expectedPaths.android);

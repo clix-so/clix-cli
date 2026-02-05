@@ -8,6 +8,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { ProjectType } from '@/lib/config';
 import type {
   AndroidApp,
   CreateAndroidAppRequest,
@@ -16,7 +17,7 @@ import type {
   IosApp,
 } from './api';
 import { FirebaseApiClient } from './api';
-import { detectPlatform, getExpectedPaths } from './detector';
+import { getExpectedPaths } from './detector';
 import { GoogleAuthClient } from './oauth';
 import { type Platform, platformNeedsAndroid, platformNeedsIos } from './types';
 
@@ -223,11 +224,15 @@ export class FirebaseDownloader {
 
   /**
    * Get expected save paths for config files.
+   *
+   * @param projectPath - Project root path
+   * @param projectType - Already detected project type
    */
-  async getExpectedSavePaths(
+  getExpectedSavePaths(
     projectPath: string,
-  ): Promise<{ android: string | null; ios: string | null; platform: Platform }> {
-    const platform = await detectPlatform(projectPath);
+    projectType: ProjectType,
+  ): { android: string | null; ios: string | null; platform: Platform } {
+    const platform = this.projectTypeToPlatform(projectType);
     const paths = getExpectedPaths(platform);
 
     // For unknown platform, assume both platforms are needed
@@ -239,6 +244,24 @@ export class FirebaseDownloader {
       ios: needsIos ? path.join(projectPath, paths.ios[0]) : null,
       platform,
     };
+  }
+
+  /**
+   * Convert ProjectType to Firebase Platform.
+   */
+  private projectTypeToPlatform(projectType: ProjectType): Platform {
+    if (projectType.framework === 'flutter') {
+      return 'flutter';
+    }
+    if (projectType.framework === 'react-native' || projectType.framework === 'expo') {
+      return 'react-native';
+    }
+    if (projectType.framework === 'native') {
+      if (projectType.target === 'ios') return 'ios';
+      if (projectType.target === 'android') return 'android';
+      return 'unknown';
+    }
+    return 'unknown';
   }
 
   /**

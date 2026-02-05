@@ -1,6 +1,28 @@
 import { z } from 'zod';
 
 /**
+ * Project framework types.
+ */
+export type ProjectFramework = 'native' | 'react-native' | 'expo' | 'flutter' | 'unknown';
+
+/**
+ * Target platform types.
+ */
+export type ProjectTargetPlatform = 'ios' | 'android' | 'ios-android' | 'unknown';
+
+/**
+ * Schema for project type (framework + target platform).
+ */
+export const ProjectTypeSchema = z.object({
+  /** Framework used (native, react-native, expo, flutter, unknown) */
+  framework: z.enum(['native', 'react-native', 'expo', 'flutter', 'unknown']),
+  /** Target platform (ios, android, ios-android, unknown) */
+  target: z.enum(['ios', 'android', 'ios-android', 'unknown']),
+});
+
+export type ProjectType = z.infer<typeof ProjectTypeSchema>;
+
+/**
  * Schema for member information in project config.
  */
 export const ProjectMemberSchema = z.object({
@@ -47,6 +69,8 @@ export const ProjectConfigSchema = z.object({
   organization: ProjectOrganizationSchema,
   /** Selected project */
   project: ProjectInfoSchema,
+  /** Detected project type (framework + target platform) */
+  projectType: ProjectTypeSchema.optional(),
   /** ISO timestamp when this config was created/linked */
   linkedAt: z.string().datetime(),
 });

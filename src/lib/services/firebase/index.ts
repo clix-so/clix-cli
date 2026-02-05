@@ -10,7 +10,7 @@
 export type { AndroidApp, FirebaseProject, IosApp } from './api';
 
 // Detection and validation
-export { detectFirebaseConfig, detectPlatform, getExpectedPaths } from './detector';
+export { detectFirebaseConfig, getExpectedPaths } from './detector';
 
 // Downloader
 export type { DownloadOptions, DownloadResult } from './downloader';
