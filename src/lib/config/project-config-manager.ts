@@ -244,7 +244,21 @@ interface CommentParserState {
 
 /** Check if current position is an unescaped quote */
 function isUnescapedQuote(content: string, index: number): boolean {
-  return content[index] === '"' && (index === 0 || content[index - 1] !== '\\');
+  if (content[index] !== '"') {
+    return false;
+  }
+  if (index === 0) {
+    return true;
+  }
+  // Count consecutive backslashes before the quote
+  // Even count (including 0) = unescaped quote, odd count = escaped quote
+  let backslashCount = 0;
+  let i = index - 1;
+  while (i >= 0 && content[i] === '\\') {
+    backslashCount++;
+    i--;
+  }
+  return backslashCount % 2 === 0;
 }
 
 /** Process a character in string context */

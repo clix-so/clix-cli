@@ -207,9 +207,17 @@ async function main() {
         await firebaseCommand();
         break;
 
-      case 'setup':
-        // Setup already handled by first-run hook, just exit cleanly
+      case 'setup': {
+        // Check if setup is needed
+        const { checkFirstRun } = await import('./lib/services/first-run-service');
+        const status = await checkFirstRun();
+        if (status.needsSetup) {
+          await setupCommand();
+        } else {
+          console.log('Project already configured. Use `clix login` to reconfigure.');
+        }
         break;
+      }
 
       case 'ios-setup':
       case 'capabilities':
