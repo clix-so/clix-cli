@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { findProjectRoot } from '../utils/path';
 import { AUTH_ENV_VARS, getAuth0Config } from './config';
 import { AuthError } from './errors';
 import {
@@ -43,7 +44,7 @@ export class CredentialsManager {
   private credentialsFilePath: string;
 
   constructor(customStateDir?: string) {
-    this.stateDirPath = customStateDir ?? join(process.cwd(), '.clix');
+    this.stateDirPath = customStateDir ?? join(findProjectRoot(), '.clix');
     this.credentialsFilePath = join(this.stateDirPath, 'credentials.json');
   }
 
