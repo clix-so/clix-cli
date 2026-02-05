@@ -10,14 +10,17 @@ import type {
   CreateAndroidAppRequest,
   CreateIosAppRequest,
   FirebaseProject,
+  GcpProject,
   IosApp,
   ListAndroidAppsResponse,
+  ListGcpProjectsResponse,
   ListIosAppsResponse,
   ListProjectsResponse,
   Operation,
 } from './types';
 
 const BASE_URL = 'https://firebase.googleapis.com/v1beta1';
+const RESOURCE_MANAGER_URL = 'https://cloudresourcemanager.googleapis.com/v1';
 
 /**
  * Firebase Management API client.
@@ -257,5 +260,107 @@ export class FirebaseApiClient {
    */
   async createIosApp(projectId: string, request: CreateIosAppRequest): Promise<IosApp> {
     return this.createAppWithOperation<IosApp>(`/projects/${projectId}/iosApps`, request);
+  }
+
+  // ============================================================================
+  // GCP Project and Firebase Project Creation Methods
+  // ============================================================================
+
+  /**
+   * Make an authenticated GET request to an external URL.
+   */
+  private async requestUrl<T>(url: string): Promise<T> {
+    const token = await this.getAccessToken();
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`API error (${response.status}): ${error}`);
+    }
+
+    return response.json() as Promise<T>;
+  }
+
+  /**
+   * Fetch paginated results from an external URL.
+   */
+  private async fetchPaginatedUrl<T, R extends { nextPageToken?: string }>(
+    baseUrl: string,
+    extractor: (response: R) => T[] | undefined,
+  ): Promise<T[]> {
+    const items: T[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const url = new URL(baseUrl);
+      if (pageToken) {
+        url.searchParams.set('pageToken', pageToken);
+      }
+
+      const response = await this.requestUrl<R>(url.toString());
+
+      const extracted = extractor(response);
+      if (extracted) {
+        items.push(...extracted);
+      }
+      pageToken = response.nextPageToken;
+    } while (pageToken);
+
+    return items;
+  }
+
+  /**
+   * List GCP projects that the user has access to.
+   *
+   * This can be used to find projects that don't have Firebase yet,
+   * so Firebase can be added to them.
+   *
+   * @returns List of GCP projects
+   */
+  async listGcpProjects(): Promise<GcpProject[]> {
+    return this.fetchPaginatedUrl<GcpProject, ListGcpProjectsResponse>(
+      `${RESOURCE_MANAGER_URL}/projects`,
+      (response) => response.projects,
+    );
+  }
+
+  /**
+   * List GCP projects that don't have Firebase yet.
+   *
+   * Compares GCP projects with Firebase projects to find ones
+   * that can have Firebase added.
+   *
+   * @returns List of GCP projects without Firebase
+   */
+  async listAvailableGcpProjects(): Promise<GcpProject[]> {
+    const [gcpProjects, firebaseProjects] = await Promise.all([
+      this.listGcpProjects(),
+      this.listProjects(),
+    ]);
+
+    const firebaseProjectIds = new Set(firebaseProjects.map((p) => p.projectId));
+
+    return gcpProjects.filter(
+      (gcp) => gcp.lifecycleState === 'ACTIVE' && !firebaseProjectIds.has(gcp.projectId),
+    );
+  }
+
+  /**
+   * Add Firebase to an existing GCP project.
+   *
+   * This creates a Firebase project linked to the GCP project.
+   * The project must not already have Firebase.
+   *
+   * @param projectId - GCP project ID
+   * @returns Created Firebase project
+   */
+  async addFirebaseToProject(projectId: string): Promise<FirebaseProject> {
+    return this.createAppWithOperation<FirebaseProject>(`/projects/${projectId}:addFirebase`, {});
   }
 }

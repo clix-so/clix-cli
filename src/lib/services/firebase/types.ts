@@ -230,7 +230,8 @@ export type CredentialAction =
   | { type: 'help'; topic: keyof typeof FIREBASE_HELP_URLS }
   | { type: 'download' }
   | { type: 'skip' }
-  | { type: 'done' };
+  | { type: 'done' }
+  | { type: 'setup_service_account' };
 
 /**
  * Wizard phase states.

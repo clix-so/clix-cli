@@ -14,11 +14,19 @@ import type {
   CreateAndroidAppRequest,
   CreateIosAppRequest,
   FirebaseProject,
+  GcpProject,
   IosApp,
+  ServiceAccount,
+  ServiceAccountJson,
 } from './api';
-import { FirebaseApiClient } from './api';
+import { FirebaseApiClient, IamApiClient } from './api';
 import { getExpectedPaths } from './detector';
 import { GoogleAuthClient } from './oauth';
+import {
+  parseBase64ServiceAccountJson,
+  parseServiceAccountJson,
+  type ServiceAccountValidationResult,
+} from './service-account-validator';
 import { type Platform, platformNeedsAndroid, platformNeedsIos } from './types';
 
 /**
@@ -62,6 +70,7 @@ export interface DownloadResult {
 export class FirebaseDownloader {
   private authClient: GoogleAuthClient;
   private apiClient: FirebaseApiClient | null = null;
+  private iamClient: IamApiClient | null = null;
 
   constructor() {
     this.authClient = new GoogleAuthClient();
@@ -270,5 +279,169 @@ export class FirebaseDownloader {
   async logout(): Promise<void> {
     await this.authClient.logout();
     this.apiClient = null;
+    this.iamClient = null;
+  }
+
+  // ============================================================================
+  // GCP Project and Firebase Project Management
+  // ============================================================================
+
+  /**
+   * List GCP projects that don't have Firebase yet.
+   *
+   * These projects can have Firebase added to them.
+   */
+  async listAvailableGcpProjects(): Promise<GcpProject[]> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
+    const api = this.ensureApiClient();
+    return api.listAvailableGcpProjects();
+  }
+
+  /**
+   * Add Firebase to an existing GCP project.
+   *
+   * @param projectId - GCP project ID
+   * @returns Created Firebase project
+   */
+  async addFirebaseToProject(projectId: string): Promise<FirebaseProject> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
+    const api = this.ensureApiClient();
+    return api.addFirebaseToProject(projectId);
+  }
+
+  // ============================================================================
+  // Service Account Management
+  // ============================================================================
+
+  /**
+   * Ensure IAM client is initialized.
+   */
+  private ensureIamClient(): IamApiClient {
+    if (!this.iamClient) {
+      this.iamClient = new IamApiClient(() => this.authClient.getAccessToken());
+    }
+    return this.iamClient;
+  }
+
+  /**
+   * List service accounts in a project.
+   *
+   * @param projectId - GCP project ID
+   * @returns List of service accounts
+   */
+  async listServiceAccounts(projectId: string): Promise<ServiceAccount[]> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
+    const iam = this.ensureIamClient();
+    return iam.listServiceAccounts(projectId);
+  }
+
+  /**
+   * Create a service account and generate a key.
+   *
+   * @param projectId - GCP project ID
+   * @param accountId - Service account ID (e.g., "clix-firebase-admin")
+   * @param displayName - Optional display name
+   * @returns Service Account JSON key
+   */
+  async createServiceAccountWithKey(
+    projectId: string,
+    accountId: string,
+    displayName?: string,
+  ): Promise<ServiceAccountJson> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
+    const iam = this.ensureIamClient();
+
+    const { key } = await iam.createServiceAccountWithKey(projectId, accountId, displayName);
+
+    // Decode base64 key data
+    const result = parseBase64ServiceAccountJson(key.privateKeyData);
+    if (!result.valid || !result.data) {
+      throw new Error(`Invalid service account key data: ${result.errors.join(', ')}`);
+    }
+
+    return result.data;
+  }
+
+  /**
+   * Download a new key for an existing service account.
+   *
+   * @param projectId - GCP project ID
+   * @param serviceAccountEmail - Service account email
+   * @returns Service Account JSON key
+   */
+  async downloadServiceAccountKey(
+    projectId: string,
+    serviceAccountEmail: string,
+  ): Promise<ServiceAccountJson> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
+    const iam = this.ensureIamClient();
+
+    const key = await iam.createServiceAccountKey(projectId, serviceAccountEmail);
+
+    // Decode base64 key data
+    const result = parseBase64ServiceAccountJson(key.privateKeyData);
+    if (!result.valid || !result.data) {
+      throw new Error(`Invalid service account key data: ${result.errors.join(', ')}`);
+    }
+
+    return result.data;
+  }
+
+  /**
+   * Validate a Service Account JSON string.
+   *
+   * @param jsonString - JSON string to validate
+   * @returns Validation result
+   */
+  validateServiceAccountJson(jsonString: string): ServiceAccountValidationResult {
+    return parseServiceAccountJson(jsonString);
+  }
+
+  /**
+   * Save a Service Account JSON to the project's .clix directory.
+   *
+   * @param projectPath - Project root path
+   * @param serviceAccountJson - Service Account JSON data
+   * @returns Path where the file was saved
+   */
+  async saveServiceAccountJson(
+    projectPath: string,
+    serviceAccountJson: ServiceAccountJson,
+  ): Promise<string> {
+    const clixDir = path.join(projectPath, '.clix');
+    const savePath = path.join(clixDir, 'service-account.json');
+
+    await fs.mkdir(clixDir, { recursive: true });
+    await fs.writeFile(savePath, JSON.stringify(serviceAccountJson, null, 2), 'utf-8');
+
+    return savePath;
+  }
+
+  /**
+   * Load existing Service Account JSON from the project's .clix directory.
+   *
+   * @param projectPath - Project root path
+   * @returns Service Account JSON or null if not found
+   */
+  async loadServiceAccountJson(projectPath: string): Promise<ServiceAccountJson | null> {
+    const savePath = path.join(projectPath, '.clix', 'service-account.json');
+
+    try {
+      const content = await fs.readFile(savePath, 'utf-8');
+      const result = parseServiceAccountJson(content);
+      return result.valid && result.data ? result.data : null;
+    } catch {
+      return null;
+    }
   }
 }

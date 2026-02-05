@@ -15,10 +15,16 @@ import {
   type FirebaseProject,
   FirebaseService,
   type FirebaseSetupResult,
+  type GcpProject,
   type IosApp,
   isOAuthConfigured,
+  parseServiceAccountJson,
   platformNeedsAndroid,
   platformNeedsIos,
+  quickValidateServiceAccountJson,
+  type ServiceAccount,
+  type ServiceAccountJson,
+  type ServiceAccountValidationResult,
   type WizardPhase,
 } from '@/lib/services/firebase';
 import { detectProjectType } from '@/lib/services/project-detector';
@@ -51,7 +57,17 @@ type ExtendedWizardPhase =
   | 'no_apps_found'
   | 'create_android_app'
   | 'create_ios_app'
-  | 'creating_app';
+  | 'creating_app'
+  // New phases for no projects and service account
+  | 'no_projects'
+  | 'select_gcp_project'
+  | 'adding_firebase'
+  | 'service_account_menu'
+  | 'select_service_account'
+  | 'create_service_account'
+  | 'creating_service_account'
+  | 'paste_service_account'
+  | 'saving_service_account';
 
 /**
  * No apps found context (which platform apps are missing).
@@ -75,6 +91,89 @@ function platformNeedsAndroidWithUnknown(platform: FirebaseDetectionResult['plat
  */
 function platformNeedsIosWithUnknown(platform: FirebaseDetectionResult['platform']): boolean {
   return platformNeedsIos(platform) || platform === 'unknown';
+}
+
+/**
+ * Get Firebase project ID from detection result.
+ * Tries Android config first, then iOS config.
+ */
+function getProjectIdFromResult(result: FirebaseDetectionResult | null): string | undefined {
+  // Android config (GoogleServicesJson) has project_info.project_id
+  if (result?.android?.content && 'project_info' in result.android.content) {
+    return result.android.content.project_info?.project_id;
+  }
+  // iOS config (GoogleServiceInfoPlist) has PROJECT_ID
+  if (result?.ios?.content && 'PROJECT_ID' in result.ios.content) {
+    return result.ios.content.PROJECT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * Build Android-specific menu items.
+ */
+function buildAndroidMenuItems(
+  result: FirebaseDetectionResult,
+  needsAndroid: boolean,
+): MenuAction[] {
+  if (!needsAndroid) return [];
+
+  const items: MenuAction[] = [];
+
+  if (!result.android?.valid) {
+    items.push({
+      id: 'redetect-android',
+      label: 'Re-detect google-services.json',
+      description: result.android ? 'File found but invalid' : 'File not found',
+      action: { type: 'redetect_platform', platform: 'android' },
+    });
+  }
+  if (result.android) {
+    items.push({
+      id: 'validate-android',
+      label: 'Validate google-services.json',
+      action: { type: 'validate', platform: 'android' },
+    });
+  }
+  items.push({
+    id: 'help-android',
+    label: 'Help: Download google-services.json',
+    action: { type: 'help', topic: 'downloadConfig' },
+  });
+
+  return items;
+}
+
+/**
+ * Build iOS-specific menu items.
+ */
+function buildIosMenuItems(result: FirebaseDetectionResult, needsIos: boolean): MenuAction[] {
+  if (!needsIos) return [];
+
+  const items: MenuAction[] = [];
+
+  if (!result.ios?.valid) {
+    items.push({
+      id: 'redetect-ios',
+      label: 'Re-detect GoogleService-Info.plist',
+      description: result.ios ? 'File found but invalid' : 'File not found',
+      action: { type: 'redetect_platform', platform: 'ios' },
+    });
+  }
+  if (result.ios) {
+    items.push({
+      id: 'validate-ios',
+      label: 'Validate GoogleService-Info.plist',
+      action: { type: 'validate', platform: 'ios' },
+    });
+  }
+  items.push({
+    id: 'help-ios',
+    label: 'Help: Download GoogleService-Info.plist',
+    action: { type: 'help', topic: 'downloadConfig' },
+  });
+
+  return items;
 }
 
 /**
@@ -102,51 +201,17 @@ function buildMenuItems(result: FirebaseDetectionResult): MenuAction[] {
     });
   }
 
-  // Android actions
-  if (needsAndroid) {
-    if (!result.android?.valid) {
-      items.push({
-        id: 'redetect-android',
-        label: 'Re-detect google-services.json',
-        description: result.android ? 'File found but invalid' : 'File not found',
-        action: { type: 'redetect_platform', platform: 'android' },
-      });
-    }
-    if (result.android) {
-      items.push({
-        id: 'validate-android',
-        label: 'Validate google-services.json',
-        action: { type: 'validate', platform: 'android' },
-      });
-    }
-    items.push({
-      id: 'help-android',
-      label: 'Help: Download google-services.json',
-      action: { type: 'help', topic: 'downloadConfig' },
-    });
-  }
+  // Platform-specific actions (extracted to reduce complexity)
+  items.push(...buildAndroidMenuItems(result, needsAndroid));
+  items.push(...buildIosMenuItems(result, needsIos));
 
-  // iOS actions
-  if (needsIos) {
-    if (!result.ios?.valid) {
-      items.push({
-        id: 'redetect-ios',
-        label: 'Re-detect GoogleService-Info.plist',
-        description: result.ios ? 'File found but invalid' : 'File not found',
-        action: { type: 'redetect_platform', platform: 'ios' },
-      });
-    }
-    if (result.ios) {
-      items.push({
-        id: 'validate-ios',
-        label: 'Validate GoogleService-Info.plist',
-        action: { type: 'validate', platform: 'ios' },
-      });
-    }
+  // Service Account setup (if OAuth is configured and project is configured)
+  if (isOAuthConfigured() && result.android?.valid) {
     items.push({
-      id: 'help-ios',
-      label: 'Help: Download GoogleService-Info.plist',
-      action: { type: 'help', topic: 'downloadConfig' },
+      id: 'setup-service-account',
+      label: '🔑 Setup Service Account',
+      description: 'Create or configure Firebase Admin SDK credentials',
+      action: { type: 'setup_service_account' },
     });
   }
 
@@ -538,6 +603,537 @@ function CreatingAppPhase({ platform }: { platform: 'android' | 'ios' }): React.
 }
 
 /**
+ * No projects found phase component - offers to create or link Firebase project.
+ */
+function NoProjectsPhase({
+  onOpenConsole,
+  onSelectGcp,
+  onCancel,
+}: {
+  onOpenConsole: () => void;
+  onSelectGcp: () => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const items = [
+    {
+      label: '🌐 Open Firebase Console',
+      value: 'console',
+    },
+    {
+      label: '📦 Add Firebase to existing GCP project',
+      value: 'gcp',
+    },
+    {
+      label: '← Back',
+      value: 'cancel',
+    },
+  ];
+
+  useCancelInput(onCancel);
+
+  const handleSelect = (item: { value: string }) => {
+    switch (item.value) {
+      case 'console':
+        onOpenConsole();
+        break;
+      case 'gcp':
+        onSelectGcp();
+        break;
+      case 'cancel':
+        onCancel();
+        break;
+    }
+  };
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="yellow"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold color="yellow">
+          No Firebase Projects Found
+        </Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text>No Firebase projects are associated with this account.</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>Create a new project or add Firebase to an existing GCP project:</Text>
+      </Box>
+      <SelectInput items={items} onSelect={handleSelect} />
+      <Box marginTop={1}>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * GCP project selector component.
+ */
+function GcpProjectSelector({
+  projects,
+  onSelect,
+  onCancel,
+}: {
+  projects: GcpProject[];
+  onSelect: (project: GcpProject) => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const items = projects.map((p) => ({
+    label: p.name || p.projectId,
+    value: p,
+  }));
+
+  useCancelInput(onCancel);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Select GCP Project</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>Select a project to add Firebase:</Text>
+      </Box>
+      <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
+      <Box marginTop={1}>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Adding Firebase to GCP project phase component.
+ */
+function AddingFirebasePhase({ projectId }: { projectId: string }): React.ReactElement {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Adding Firebase</Text>
+      </Box>
+      <Box>
+        <Text dimColor>
+          <Spinner type="dots" />
+        </Text>
+        <Text> Adding Firebase to {projectId}...</Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>This may take a moment...</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Service Account menu action type.
+ */
+type ServiceAccountMenuAction =
+  | { type: 'select_existing' }
+  | { type: 'create_new' }
+  | { type: 'paste_json' }
+  | { type: 'skip' };
+
+/**
+ * Service Account menu phase component.
+ */
+function ServiceAccountMenuPhase({
+  projectId,
+  onAction,
+  onCancel,
+}: {
+  projectId: string;
+  onAction: (action: ServiceAccountMenuAction) => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const items: Array<{ label: string; value: ServiceAccountMenuAction }> = [
+    {
+      label: '➕ Create new Service Account',
+      value: { type: 'create_new' },
+    },
+    {
+      label: '📋 Select existing Service Account',
+      value: { type: 'select_existing' },
+    },
+    {
+      label: '📄 Paste Service Account JSON',
+      value: { type: 'paste_json' },
+    },
+    {
+      label: '⏭ Skip (configure later)',
+      value: { type: 'skip' },
+    },
+  ];
+
+  useCancelInput(onCancel);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>🔑 Service Account Setup</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text>Project: {projectId}</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>Service Account is required for server-side Firebase Admin SDK.</Text>
+      </Box>
+      <SelectInput items={items} onSelect={(item) => onAction(item.value)} />
+      <Box marginTop={1}>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Service Account selector component.
+ */
+function ServiceAccountSelector({
+  accounts,
+  onSelect,
+  onCancel,
+}: {
+  accounts: ServiceAccount[];
+  onSelect: (account: ServiceAccount) => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const items = accounts.map((a) => ({
+    label: a.displayName || a.email,
+    value: a,
+  }));
+
+  useCancelInput(onCancel);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Select Service Account</Text>
+      </Box>
+      <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
+      <Box marginTop={1}>
+        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Create Service Account input phase component.
+ */
+function CreateServiceAccountInputPhase({
+  projectId,
+  onSubmit,
+  onCancel,
+}: {
+  projectId: string;
+  onSubmit: (accountId: string, displayName?: string) => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const [accountId, setAccountId] = useState('clix-firebase-admin');
+  const [displayName, setDisplayName] = useState('');
+  const [stage, setStage] = useState<'accountId' | 'displayName'>('accountId');
+
+  useCancelInput(onCancel);
+
+  const handleAccountIdSubmit = useCallback(() => {
+    if (accountId.trim()) {
+      setStage('displayName');
+    }
+  }, [accountId]);
+
+  const handleDisplayNameSubmit = useCallback(() => {
+    onSubmit(accountId.trim(), displayName.trim() || undefined);
+  }, [accountId, displayName, onSubmit]);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Create Service Account</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>Project: {projectId}</Text>
+      </Box>
+
+      {stage === 'accountId' ? (
+        <>
+          <Box marginBottom={1}>
+            <Text>
+              Account ID: <Text dimColor>(e.g., clix-firebase-admin)</Text>
+            </Text>
+          </Box>
+          <Box>
+            <Text color="blue">{'> '}</Text>
+            <TextInput
+              value={accountId}
+              onChange={setAccountId}
+              placeholder="clix-firebase-admin"
+              onSubmit={handleAccountIdSubmit}
+            />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Enter to continue · Esc/Ctrl+C cancel</Text>
+          </Box>
+        </>
+      ) : (
+        <>
+          <Box marginBottom={1}>
+            <Text dimColor>Account ID: {accountId}</Text>
+          </Box>
+          <Box marginBottom={1}>
+            <Text>
+              Display Name: <Text dimColor>(optional)</Text>
+            </Text>
+          </Box>
+          <Box>
+            <Text color="blue">{'> '}</Text>
+            <TextInput
+              value={displayName}
+              onChange={setDisplayName}
+              placeholder="Clix Firebase Admin"
+              onSubmit={handleDisplayNameSubmit}
+            />
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Enter to create · Esc/Ctrl+C cancel</Text>
+          </Box>
+        </>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * Creating Service Account phase component.
+ */
+function CreatingServiceAccountPhase(): React.ReactElement {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Service Account Creation</Text>
+      </Box>
+      <Box>
+        <Text dimColor>
+          <Spinner type="dots" />
+        </Text>
+        <Text> Creating service account and generating key...</Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>This may take a moment...</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Paste Service Account JSON phase component with real-time validation.
+ */
+function PasteServiceAccountPhase({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (json: ServiceAccountJson) => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const [jsonInput, setJsonInput] = useState('');
+  const [validation, setValidation] = useState<ServiceAccountValidationResult | null>(null);
+  const [quickValidation, setQuickValidation] = useState<ReturnType<
+    typeof quickValidateServiceAccountJson
+  > | null>(null);
+
+  useCancelInput(onCancel);
+
+  // Real-time validation
+  useEffect(() => {
+    if (!jsonInput.trim()) {
+      setValidation(null);
+      setQuickValidation(null);
+      return;
+    }
+
+    // Quick validation for UI feedback
+    const quick = quickValidateServiceAccountJson(jsonInput);
+    setQuickValidation(quick);
+
+    // Full validation if it looks like service account JSON
+    if (quick.isJson && quick.isServiceAccount) {
+      const result = parseServiceAccountJson(jsonInput);
+      setValidation(result);
+    } else {
+      setValidation(null);
+    }
+  }, [jsonInput]);
+
+  const handleSubmit = useCallback(() => {
+    if (validation?.valid && validation.data) {
+      onSubmit(validation.data);
+    }
+  }, [validation, onSubmit]);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Paste Service Account JSON</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>
+          Firebase Console → Project Settings → Service accounts → Generate new private key
+        </Text>
+      </Box>
+
+      <Box marginY={1}>
+        <Text color="blue">{'> '}</Text>
+        <TextInput
+          value={jsonInput}
+          onChange={setJsonInput}
+          placeholder='{"type": "service_account", ...}'
+          onSubmit={handleSubmit}
+        />
+      </Box>
+
+      {/* Validation status display */}
+      {jsonInput.trim() && (
+        <Box flexDirection="column" marginY={1}>
+          {quickValidation && (
+            <>
+              <Box>
+                <Text color={quickValidation.isJson ? 'green' : 'red'}>
+                  {quickValidation.isJson ? '✓' : '✗'} JSON format
+                </Text>
+              </Box>
+              {quickValidation.isJson && (
+                <>
+                  <Box>
+                    <Text color={quickValidation.isServiceAccount ? 'green' : 'red'}>
+                      {quickValidation.isServiceAccount ? '✓' : '✗'} Service Account type
+                    </Text>
+                  </Box>
+                  <Box>
+                    <Text color={quickValidation.hasPrivateKey ? 'green' : 'red'}>
+                      {quickValidation.hasPrivateKey ? '✓' : '✗'} Private key present
+                    </Text>
+                  </Box>
+                  {quickValidation.projectId && (
+                    <Box>
+                      <Text dimColor> Project: {quickValidation.projectId}</Text>
+                    </Box>
+                  )}
+                </>
+              )}
+            </>
+          )}
+
+          {/* Full validation errors */}
+          {validation && !validation.valid && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text color="red">Validation errors:</Text>
+              {validation.errors.map((err) => (
+                <Box key={err}>
+                  <Text color="red"> • {err}</Text>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {/* Success message */}
+          {validation?.valid && (
+            <Box marginTop={1}>
+              <Text color="green" bold>
+                ✓ Valid Service Account JSON - Press Enter to save
+              </Text>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      <Box marginTop={1}>
+        <Text dimColor>{validation?.valid ? 'Enter to save · ' : ''}Esc/Ctrl+C cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Saving Service Account phase component.
+ */
+function SavingServiceAccountPhase(): React.ReactElement {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Saving Service Account</Text>
+      </Box>
+      <Box>
+        <Text dimColor>
+          <Spinner type="dots" />
+        </Text>
+        <Text> Saving service account key...</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * Detecting phase component.
  */
 function DetectingPhase(): React.ReactElement {
@@ -829,6 +1425,14 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   const [noAppsContext, setNoAppsContext] = useState<NoAppsContext | null>(null);
   const [creatingAppPlatform, setCreatingAppPlatform] = useState<'android' | 'ios'>('android');
 
+  // GCP project flow state (for adding Firebase to existing GCP project)
+  const [gcpProjects, setGcpProjects] = useState<GcpProject[]>([]);
+  const [selectedGcpProject, setSelectedGcpProject] = useState<GcpProject | null>(null);
+
+  // Service Account flow state
+  const [serviceAccounts, setServiceAccounts] = useState<ServiceAccount[]>([]);
+  const [, setServiceAccountJson] = useState<ServiceAccountJson | null>(null);
+
   const [service, setService] = useState<FirebaseService | null>(null);
   const [projectType, setProjectType] = useState<ProjectType | null>(propProjectType ?? null);
 
@@ -1111,8 +1715,8 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       // Fetch projects
       const fetchedProjects = await downloader.listProjects();
       if (fetchedProjects.length === 0) {
-        setError('No Firebase projects found for this account.');
-        setPhase('error');
+        // No Firebase projects - show options to create or add Firebase to GCP project
+        setPhase('no_projects');
         return;
       }
 
@@ -1129,6 +1733,37 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       setPhase('error');
     }
   }, [downloader]);
+
+  // Handler for Service Account setup (defined before handleAction to be used in it)
+  const handleServiceAccountSetup = useCallback(async () => {
+    // Get project ID from detection result
+    const projectId = getProjectIdFromResult(result);
+    if (!projectId) {
+      setError('No Firebase project configured. Please download config files first.');
+      setPhase('error');
+      return;
+    }
+
+    setPhase('authenticating');
+
+    try {
+      // Ensure authenticated
+      const isAuth = await downloader.isAuthenticated();
+      if (!isAuth) {
+        const authResult = await downloader.authenticate(openBrowser);
+        if (!authResult.success) {
+          setError(authResult.error || 'Authentication failed');
+          setPhase('error');
+          return;
+        }
+      }
+
+      setPhase('service_account_menu');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed');
+      setPhase('error');
+    }
+  }, [downloader, result]);
 
   const handleAction = useCallback(
     async (action: CredentialAction) => {
@@ -1180,9 +1815,14 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
             detection: result,
           });
           break;
+
+        case 'setup_service_account':
+          // Start service account setup flow
+          await handleServiceAccountSetup();
+          break;
       }
     },
-    [service, handleSkip, handleDownload, onComplete, result],
+    [service, handleSkip, handleDownload, onComplete, result, handleServiceAccountSetup],
   );
 
   const handleRetry = useCallback(async () => {
@@ -1302,6 +1942,170 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     setPhase('select_project');
   }, []);
 
+  // Handler for opening Firebase Console
+  const handleOpenFirebaseConsole = useCallback(() => {
+    openBrowser('https://console.firebase.google.com/');
+    // Go back to menu after opening
+    setPhase('menu');
+  }, []);
+
+  // Handler for fetching GCP projects (to add Firebase)
+  const handleFetchGcpProjects = useCallback(async () => {
+    setPhase('authenticating');
+    try {
+      const availableGcpProjects = await downloader.listAvailableGcpProjects();
+      if (availableGcpProjects.length === 0) {
+        setError('No GCP projects available to add Firebase. Create a project first.');
+        setPhase('error');
+        return;
+      }
+      setGcpProjects(availableGcpProjects);
+      setPhase('select_gcp_project');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch GCP projects');
+      setPhase('error');
+    }
+  }, [downloader]);
+
+  // Handler for GCP project selection
+  const handleGcpProjectSelect = useCallback(
+    async (project: GcpProject) => {
+      setSelectedGcpProject(project);
+      setPhase('adding_firebase');
+
+      try {
+        const firebaseProject = await downloader.addFirebaseToProject(project.projectId);
+        // Add to projects list and select it
+        setProjects([firebaseProject]);
+        projectSelectRef.current(firebaseProject);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to add Firebase to project');
+        setPhase('error');
+      }
+    },
+    [downloader],
+  );
+
+  // Handler for Service Account menu action
+  const handleServiceAccountMenuAction = useCallback(
+    async (action: ServiceAccountMenuAction) => {
+      const projectId = getProjectIdFromResult(result);
+      if (!projectId) {
+        setError('No project ID found');
+        setPhase('error');
+        return;
+      }
+
+      switch (action.type) {
+        case 'select_existing':
+          setPhase('authenticating');
+          try {
+            const accounts = await downloader.listServiceAccounts(projectId);
+            if (accounts.length === 0) {
+              setError('No service accounts found. Create a new one instead.');
+              setPhase('service_account_menu');
+              return;
+            }
+            setServiceAccounts(accounts);
+            setPhase('select_service_account');
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to fetch service accounts');
+            setPhase('error');
+          }
+          break;
+
+        case 'create_new':
+          setPhase('create_service_account');
+          break;
+
+        case 'paste_json':
+          setPhase('paste_service_account');
+          break;
+
+        case 'skip':
+          setPhase('status');
+          break;
+      }
+    },
+    [downloader, result],
+  );
+
+  // Handler for selecting existing service account
+  const handleSelectServiceAccount = useCallback(
+    async (account: ServiceAccount) => {
+      const projectId = getProjectIdFromResult(result);
+      if (!projectId) {
+        setError('No project ID found');
+        setPhase('error');
+        return;
+      }
+
+      setPhase('creating_service_account');
+
+      try {
+        const json = await downloader.downloadServiceAccountKey(projectId, account.email);
+        setServiceAccountJson(json);
+        await downloader.saveServiceAccountJson(projectPath, json);
+        setPhase('status');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to generate service account key');
+        setPhase('error');
+      }
+    },
+    [downloader, result, projectPath],
+  );
+
+  // Handler for creating new service account
+  const handleCreateServiceAccount = useCallback(
+    async (accountId: string, displayName?: string) => {
+      const projectId = getProjectIdFromResult(result);
+      if (!projectId) {
+        setError('No project ID found');
+        setPhase('error');
+        return;
+      }
+
+      setPhase('creating_service_account');
+
+      try {
+        const json = await downloader.createServiceAccountWithKey(
+          projectId,
+          accountId,
+          displayName,
+        );
+        setServiceAccountJson(json);
+        await downloader.saveServiceAccountJson(projectPath, json);
+        setPhase('status');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to create service account');
+        setPhase('error');
+      }
+    },
+    [downloader, result, projectPath],
+  );
+
+  // Handler for pasting service account JSON
+  const handleSaveServiceAccountJson = useCallback(
+    async (json: ServiceAccountJson) => {
+      setPhase('saving_service_account');
+
+      try {
+        setServiceAccountJson(json);
+        await downloader.saveServiceAccountJson(projectPath, json);
+        setPhase('status');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to save service account');
+        setPhase('error');
+      }
+    },
+    [downloader, projectPath],
+  );
+
+  // Handler for going back to service account menu
+  const handleServiceAccountCancel = useCallback(() => {
+    setPhase('service_account_menu');
+  }, []);
+
   switch (phase) {
     case 'detecting':
       return <DetectingPhase />;
@@ -1403,6 +2207,69 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
     case 'creating_app':
       return <CreatingAppPhase platform={creatingAppPlatform} />;
+
+    // New phases for no projects and service account
+    case 'no_projects':
+      return (
+        <NoProjectsPhase
+          onOpenConsole={handleOpenFirebaseConsole}
+          onSelectGcp={handleFetchGcpProjects}
+          onCancel={handleCancel}
+        />
+      );
+
+    case 'select_gcp_project':
+      return (
+        <GcpProjectSelector
+          projects={gcpProjects}
+          onSelect={handleGcpProjectSelect}
+          onCancel={handleCancel}
+        />
+      );
+
+    case 'adding_firebase':
+      return <AddingFirebasePhase projectId={selectedGcpProject?.projectId || ''} />;
+
+    case 'service_account_menu':
+      return (
+        <ServiceAccountMenuPhase
+          projectId={getProjectIdFromResult(result) || ''}
+          onAction={handleServiceAccountMenuAction}
+          onCancel={handleCancel}
+        />
+      );
+
+    case 'select_service_account':
+      return (
+        <ServiceAccountSelector
+          accounts={serviceAccounts}
+          onSelect={handleSelectServiceAccount}
+          onCancel={handleServiceAccountCancel}
+        />
+      );
+
+    case 'create_service_account':
+      return (
+        <CreateServiceAccountInputPhase
+          projectId={getProjectIdFromResult(result) || ''}
+          onSubmit={handleCreateServiceAccount}
+          onCancel={handleServiceAccountCancel}
+        />
+      );
+
+    case 'creating_service_account':
+      return <CreatingServiceAccountPhase />;
+
+    case 'paste_service_account':
+      return (
+        <PasteServiceAccountPhase
+          onSubmit={handleSaveServiceAccountJson}
+          onCancel={handleServiceAccountCancel}
+        />
+      );
+
+    case 'saving_service_account':
+      return <SavingServiceAccountPhase />;
 
     case 'error':
       return (
