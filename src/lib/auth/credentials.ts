@@ -1,9 +1,15 @@
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { xdg } from '../utils/xdg';
 import { AUTH_ENV_VARS, getAuth0Config } from './config';
 import { AuthError } from './errors';
-import { type Credentials, createCredentials, validateCredentials } from './schema';
+import {
+  type ClixCredentials,
+  CREDENTIALS_VERSION,
+  type Credentials,
+  createClixCredentials,
+  type FirebaseTokens,
+  validateCredentials,
+} from './schema';
 import type { TokenResponse } from './types';
 
 /**
@@ -15,8 +21,12 @@ const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 /**
  * CredentialsManager handles storing, loading, and refreshing auth credentials.
  *
- * Storage location: $XDG_STATE_HOME/clix/credentials.json
+ * Storage location: project/.clix/credentials.json
  * File permissions: 0600 (owner read/write only)
+ *
+ * Unified credentials file structure:
+ * - clix: Auth0/Clix authentication tokens
+ * - firebase: Firebase OAuth tokens
  *
  * @example
  * ```typescript
@@ -33,7 +43,7 @@ export class CredentialsManager {
   private credentialsFilePath: string;
 
   constructor(customStateDir?: string) {
-    this.stateDirPath = customStateDir ?? xdg.state();
+    this.stateDirPath = customStateDir ?? join(process.cwd(), '.clix');
     this.credentialsFilePath = join(this.stateDirPath, 'credentials.json');
   }
 
@@ -130,14 +140,53 @@ export class CredentialsManager {
     }
   }
 
+  // ============================================
+  // Clix (Auth0) Credentials Methods
+  // ============================================
+
   /**
-   * Check if access token is expired.
+   * Get Clix credentials from unified store.
+   */
+  async getClixCredentials(): Promise<ClixCredentials | null> {
+    const credentials = await this.load();
+    return credentials?.clix ?? null;
+  }
+
+  /**
+   * Save Clix credentials to unified store.
+   */
+  async saveClixCredentials(clixCredentials: ClixCredentials): Promise<void> {
+    const current = (await this.load()) ?? { version: CREDENTIALS_VERSION };
+    await this.save({
+      ...current,
+      version: CREDENTIALS_VERSION,
+      clix: clixCredentials,
+    });
+  }
+
+  /**
+   * Clear only Clix credentials (keep Firebase tokens).
+   */
+  async clearClixCredentials(): Promise<void> {
+    const current = await this.load();
+    if (current) {
+      const { clix: _, ...rest } = current;
+      if (rest.firebase) {
+        await this.save({ ...rest, version: CREDENTIALS_VERSION });
+      } else {
+        await this.delete();
+      }
+    }
+  }
+
+  /**
+   * Check if Clix access token is expired.
    *
-   * @param credentials - Credentials to check
+   * @param clixCredentials - Clix credentials to check
    * @returns true if expired or about to expire
    */
-  isExpired(credentials: Credentials): boolean {
-    const expiresAtMs = Date.parse(credentials.expiresAt);
+  isClixExpired(clixCredentials: ClixCredentials): boolean {
+    const expiresAtMs = Date.parse(clixCredentials.expiresAt);
     // Treat invalid dates as expired (secure default)
     if (!Number.isFinite(expiresAtMs)) {
       return true;
@@ -147,14 +196,22 @@ export class CredentialsManager {
   }
 
   /**
+   * @deprecated Use isClixExpired instead.
+   */
+  isExpired(credentials: Credentials): boolean {
+    if (!credentials.clix) return true;
+    return this.isClixExpired(credentials.clix);
+  }
+
+  /**
    * Refresh access token using refresh token.
    *
-   * @param credentials - Current credentials with refresh token
-   * @returns New credentials with fresh access token
+   * @param clixCredentials - Current Clix credentials with refresh token
+   * @returns New Clix credentials with fresh access token
    * @throws AuthError if refresh fails
    */
-  async refreshAccessToken(credentials: Credentials): Promise<Credentials> {
-    if (!credentials.refreshToken) {
+  async refreshAccessToken(clixCredentials: ClixCredentials): Promise<ClixCredentials> {
+    if (!clixCredentials.refreshToken) {
       throw AuthError.refreshFailed('No refresh token available');
     }
 
@@ -170,7 +227,7 @@ export class CredentialsManager {
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           client_id: config.clientId,
-          refresh_token: credentials.refreshToken,
+          refresh_token: clixCredentials.refreshToken,
         }),
         signal: AbortSignal.timeout(30_000),
       });
@@ -188,20 +245,20 @@ export class CredentialsManager {
       // Preserve existing refresh token if response omits it (RFC 6749 compliant)
       const mergedTokenResponse: TokenResponse = {
         ...tokenResponse,
-        refresh_token: tokenResponse.refresh_token ?? credentials.refreshToken,
+        refresh_token: tokenResponse.refresh_token ?? clixCredentials.refreshToken,
       };
 
       // Create new credentials with refreshed tokens
-      const newCredentials = createCredentials(
+      const newClixCredentials = createClixCredentials(
         mergedTokenResponse,
-        credentials.issuer,
-        credentials.audience,
+        clixCredentials.issuer,
+        clixCredentials.audience,
       );
 
       // Save updated credentials
-      await this.save(newCredentials);
+      await this.saveClixCredentials(newClixCredentials);
 
-      return newCredentials;
+      return newClixCredentials;
     } catch (error) {
       if (error instanceof AuthError) {
         throw error;
@@ -233,21 +290,21 @@ export class CredentialsManager {
       return envToken;
     }
 
-    // 2. Load stored credentials
-    const credentials = await this.load();
-    if (!credentials) {
+    // 2. Load stored Clix credentials
+    const clixCredentials = await this.getClixCredentials();
+    if (!clixCredentials) {
       return null;
     }
 
     // 3. Check if access token is expired
-    if (!this.isExpired(credentials)) {
-      return credentials.accessToken;
+    if (!this.isClixExpired(clixCredentials)) {
+      return clixCredentials.accessToken;
     }
 
     // 4. Try to refresh if we have a refresh token
-    if (credentials.refreshToken) {
+    if (clixCredentials.refreshToken) {
       try {
-        const refreshed = await this.refreshAccessToken(credentials);
+        const refreshed = await this.refreshAccessToken(clixCredentials);
         return refreshed.accessToken;
       } catch {
         // Refresh failed - return null to indicate re-login needed
@@ -277,6 +334,81 @@ export class CredentialsManager {
   isEnvAuthenticated(): boolean {
     return !!process.env[AUTH_ENV_VARS.ACCESS_TOKEN];
   }
+
+  // ============================================
+  // Firebase Token Methods
+  // ============================================
+
+  /**
+   * Get Firebase tokens from unified store.
+   */
+  async getFirebaseTokens(): Promise<FirebaseTokens | null> {
+    const credentials = await this.load();
+    return credentials?.firebase ?? null;
+  }
+
+  /**
+   * Save Firebase tokens to unified store.
+   */
+  async saveFirebaseTokens(firebaseTokens: FirebaseTokens): Promise<void> {
+    const current = (await this.load()) ?? { version: CREDENTIALS_VERSION };
+    await this.save({
+      ...current,
+      version: CREDENTIALS_VERSION,
+      firebase: firebaseTokens,
+    });
+  }
+
+  /**
+   * Clear only Firebase tokens (keep Clix credentials).
+   */
+  async clearFirebaseTokens(): Promise<void> {
+    const current = await this.load();
+    if (current) {
+      const { firebase: _, ...rest } = current;
+      if (rest.clix) {
+        await this.save({ ...rest, version: CREDENTIALS_VERSION });
+      } else {
+        await this.delete();
+      }
+    }
+  }
+
+  /**
+   * Check if Firebase tokens exist.
+   */
+  async hasFirebaseTokens(): Promise<boolean> {
+    const tokens = await this.getFirebaseTokens();
+    return tokens !== null;
+  }
+
+  /**
+   * Check if Firebase tokens are expired.
+   *
+   * @param tokens - Firebase tokens to check
+   * @returns true if tokens are expired or will expire within 5 minutes
+   */
+  isFirebaseExpired(tokens: FirebaseTokens): boolean {
+    if (!tokens.expiry_date) {
+      return false; // No expiry info, assume valid
+    }
+    // Consider expired if less than 5 minutes remaining
+    return Date.now() >= tokens.expiry_date - EXPIRY_BUFFER_MS;
+  }
+
+  /**
+   * Check if Firebase tokens have a valid refresh token.
+   *
+   * @param tokens - Firebase tokens to check
+   * @returns true if refresh token exists
+   */
+  hasFirebaseRefreshToken(tokens: FirebaseTokens): boolean {
+    return !!tokens.refresh_token;
+  }
+
+  // ============================================
+  // Utility Methods
+  // ============================================
 
   /**
    * Clear the cached credentials (useful for testing).

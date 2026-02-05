@@ -259,5 +259,7 @@ When adding new OAuth flows, use port 9005, path `/auth/callback`, the shared `O
 
 ## Security
 
-Do not commit API keys or user data. Local config lives in `$XDG_CONFIG_HOME/clix/config.json` (default: `~/.config/clix/config.json`).
-Sessions are stored in `$XDG_STATE_HOME/clix/sessions/` (default: `~/.local/state/clix/sessions/`).
+Do not commit API keys or user data. Global config lives in `$XDG_CONFIG_HOME/clix/config.json` (default: `~/.config/clix/config.json`).
+Project-local data is stored in `project/.clix/` directory:
+- Sessions: `project/.clix/sessions/`
+- Credentials: `project/.clix/credentials.json` (unified: Clix Auth + Firebase tokens)

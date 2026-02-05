@@ -4,8 +4,8 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getInternalApiClient, type Member, type Organization, type Project } from '@/lib/api';
 import {
-  type Credentials,
-  createCredentials,
+  type ClixCredentials,
+  createClixCredentials,
   getAuth0Config,
   getCredentialsManager,
   getIssuerUrl,
@@ -40,7 +40,7 @@ interface OrgWithProjects {
 
 interface LoginUIProps {
   /** Called when login completes successfully */
-  onComplete?: (credentials: Credentials) => void;
+  onComplete?: (credentials: ClixCredentials) => void;
   /** Called on error */
   onError?: (error: Error) => void;
 }
@@ -113,7 +113,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
   const [savedConfig, setSavedConfig] = useState<ProjectConfig | null>(null);
   const [workspacePath] = useState(() => process.cwd());
   const pkceServiceRef = useRef<PKCEFlowService | null>(null);
-  const credentialsRef = useRef<Credentials | null>(null);
+  const credentialsRef = useRef<ClixCredentials | null>(null);
   const memberRef = useRef<Member | null>(null);
 
   const handleProjectSelect = useCallback(
@@ -209,7 +209,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
 
           setPhase('complete');
           setTimeout(() => {
-            const creds = credentialsManager.credentials;
+            const creds = credentialsManager.credentials?.clix;
             if (onComplete && creds) {
               onComplete(creds);
             } else {
@@ -238,8 +238,8 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
 
         // Save credentials
         const issuer = getIssuerUrl(config);
-        const credentials = createCredentials(tokenResponse, issuer, config.audience);
-        await credentialsManager.save(credentials);
+        const credentials = createClixCredentials(tokenResponse, issuer, config.audience);
+        await credentialsManager.saveClixCredentials(credentials);
 
         // Verify login
         setPhase('verifying');

@@ -2,16 +2,13 @@ import { z } from 'zod';
 
 /**
  * Current credentials schema version.
- * Increment when making breaking changes to structure.
  */
 export const CREDENTIALS_VERSION = 1;
 
 /**
- * Zod schema for stored credentials.
+ * Zod schema for Clix (Auth0) credentials.
  */
-export const CredentialsSchema = z.object({
-  /** Schema version for migrations */
-  version: z.number().int().min(1),
+export const ClixCredentialsSchema = z.object({
   /** Auth0 access token */
   accessToken: z.string().min(1),
   /** Auth0 refresh token (for session persistence) */
@@ -29,8 +26,38 @@ export const CredentialsSchema = z.object({
 });
 
 /**
- * Inferred type from CredentialsSchema.
+ * Zod schema for Firebase OAuth tokens.
  */
+export const FirebaseTokensSchema = z.object({
+  /** Firebase access token */
+  access_token: z.string().nullish(),
+  /** Firebase refresh token */
+  refresh_token: z.string().nullish(),
+  /** OAuth scope */
+  scope: z.string().optional(),
+  /** Token type (e.g., "Bearer") */
+  token_type: z.string().nullish(),
+  /** Token expiration timestamp (ms) */
+  expiry_date: z.number().nullish(),
+});
+
+/**
+ * Zod schema for unified credentials file.
+ */
+export const CredentialsSchema = z.object({
+  /** Schema version */
+  version: z.number().int().min(1),
+  /** Clix (Auth0) credentials */
+  clix: ClixCredentialsSchema.optional(),
+  /** Firebase OAuth tokens */
+  firebase: FirebaseTokensSchema.optional(),
+});
+
+/**
+ * Inferred types from schemas.
+ */
+export type ClixCredentials = z.infer<typeof ClixCredentialsSchema>;
+export type FirebaseTokens = z.infer<typeof FirebaseTokensSchema>;
 export type Credentials = z.infer<typeof CredentialsSchema>;
 
 /**
@@ -45,14 +72,14 @@ export function validateCredentials(data: unknown): Credentials | null {
 }
 
 /**
- * Create credentials object from token response.
+ * Create Clix credentials object from token response.
  *
  * @param tokenResponse - Auth0 token response
  * @param issuer - Auth0 issuer URL
  * @param audience - API audience
- * @returns Credentials object ready for storage
+ * @returns ClixCredentials object ready for storage
  */
-export function createCredentials(
+export function createClixCredentials(
   tokenResponse: {
     access_token: string;
     refresh_token?: string;
@@ -61,7 +88,7 @@ export function createCredentials(
   },
   issuer: string,
   audience: string,
-): Credentials {
+): ClixCredentials {
   const now = new Date();
   const expiresInMs = tokenResponse.expires_in * 1000;
 
@@ -73,7 +100,6 @@ export function createCredentials(
   const expiresAt = new Date(now.getTime() + expiresInMs);
 
   return {
-    version: CREDENTIALS_VERSION,
     accessToken: tokenResponse.access_token,
     refreshToken: tokenResponse.refresh_token,
     idToken: tokenResponse.id_token,
@@ -83,3 +109,9 @@ export function createCredentials(
     audience,
   };
 }
+
+/**
+ * @deprecated Use createClixCredentials instead.
+ * Kept for backward compatibility during transition.
+ */
+export const createCredentials = createClixCredentials;

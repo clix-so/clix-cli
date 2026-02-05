@@ -1,40 +1,29 @@
 /**
  * Token storage for OAuth credentials.
  *
- * Stores OAuth tokens in the XDG config directory (~/.config/clix/).
+ * Delegates to CredentialsManager for unified credential storage.
  *
  * @module services/firebase/oauth/token-store
  */
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { xdg } from '@/lib/utils/xdg';
+import { getCredentialsManager } from '@/lib/auth/credentials';
 import type { OAuthTokens } from './types';
-
-const TOKEN_FILE_NAME = 'firebase-tokens.json';
 
 /**
  * Token store for persisting OAuth tokens.
+ *
+ * Uses CredentialsManager to store Firebase tokens in the unified
+ * credentials.json file at project/.clix/credentials.json
  */
 export class TokenStore {
-  private tokenPath: string;
-
-  constructor() {
-    this.tokenPath = path.join(xdg.config(), TOKEN_FILE_NAME);
-  }
-
   /**
    * Load tokens from storage.
    *
    * @returns Stored tokens or null if not found
    */
   async load(): Promise<OAuthTokens | null> {
-    try {
-      const data = await fs.readFile(this.tokenPath, 'utf-8');
-      return JSON.parse(data) as OAuthTokens;
-    } catch {
-      return null;
-    }
+    const manager = getCredentialsManager();
+    return manager.getFirebaseTokens();
   }
 
   /**
@@ -43,25 +32,16 @@ export class TokenStore {
    * @param tokens - OAuth tokens to save
    */
   async save(tokens: OAuthTokens): Promise<void> {
-    const dir = path.dirname(this.tokenPath);
-    // Create directory with restricted permissions (owner only)
-    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-    // Write token file with restricted permissions (owner read/write only)
-    await fs.writeFile(this.tokenPath, JSON.stringify(tokens, null, 2), {
-      encoding: 'utf-8',
-      mode: 0o600,
-    });
+    const manager = getCredentialsManager();
+    await manager.saveFirebaseTokens(tokens);
   }
 
   /**
    * Clear stored tokens.
    */
   async clear(): Promise<void> {
-    try {
-      await fs.unlink(this.tokenPath);
-    } catch {
-      // Ignore if file doesn't exist
-    }
+    const manager = getCredentialsManager();
+    await manager.clearFirebaseTokens();
   }
 
   /**
@@ -70,12 +50,8 @@ export class TokenStore {
    * @returns True if tokens file exists
    */
   async exists(): Promise<boolean> {
-    try {
-      await fs.access(this.tokenPath);
-      return true;
-    } catch {
-      return false;
-    }
+    const manager = getCredentialsManager();
+    return manager.hasFirebaseTokens();
   }
 
   /**
@@ -85,12 +61,8 @@ export class TokenStore {
    * @returns True if tokens are expired or will expire within 5 minutes
    */
   isExpired(tokens: OAuthTokens): boolean {
-    if (!tokens.expiry_date) {
-      return false; // No expiry info, assume valid
-    }
-    // Consider expired if less than 5 minutes remaining
-    const bufferMs = 5 * 60 * 1000;
-    return Date.now() >= tokens.expiry_date - bufferMs;
+    const manager = getCredentialsManager();
+    return manager.isFirebaseExpired(tokens);
   }
 
   /**
@@ -100,6 +72,7 @@ export class TokenStore {
    * @returns True if refresh token exists
    */
   hasRefreshToken(tokens: OAuthTokens): boolean {
-    return !!tokens.refresh_token;
+    const manager = getCredentialsManager();
+    return manager.hasFirebaseRefreshToken(tokens);
   }
 }

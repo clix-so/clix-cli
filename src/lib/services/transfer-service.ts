@@ -3,7 +3,6 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ConversationMessage } from '../executor';
 import { formatPath } from '../utils/path';
-import { xdg } from '../utils/xdg';
 
 export type TransferAgent = 'claude' | 'codex';
 
@@ -40,7 +39,7 @@ function formatHistoryAsMarkdown(history: ConversationMessage[]): string {
  * Returns the path to the saved file.
  */
 async function saveSessionHistory(history: ConversationMessage[]): Promise<string> {
-  const clixDir = xdg.state();
+  const clixDir = join(process.cwd(), '.clix');
 
   // Ensure .clix directory exists
   try {
