@@ -61,7 +61,7 @@ clix
 ```
 
 **What happens:**
-1. Loads configuration from `~/.clix/config.json`
+1. Loads configuration from `~/.config/clix/config.json`
 2. Detects available AI agents (Claude Code, Codex)
 3. Prompts for agent selection if not configured or multiple available
 4. Initializes executor with selected agent
@@ -701,7 +701,7 @@ Switching to Claude...
 - `/transfer gemini` - Transfers to Gemini
 
 **Process:**
-1. Conversation history saved to `~/.local/state/clix/sessions/session-{timestamp}.md`
+1. Conversation history saved to `.clix/sessions/session-{timestamp}.md`
 2. Markdown formatted with full history
 3. Command generated to continue in agent CLI
 4. User exits and runs provided command
@@ -711,11 +711,11 @@ Switching to Claude...
 > /transfer claude
 ✅ Session saved!
 
-File: ~/.local/state/clix/sessions/session-1704735000000.md
+File: .clix/sessions/session-1704735000000.md
 
 To continue in Claude Code:
 
-claude "$(cat ~/.local/state/clix/sessions/session-1704735000000.md)"
+claude "$(cat .clix/sessions/session-1704735000000.md)"
 ```
 
 #### `/resume` - Resume Session
@@ -1003,13 +1003,13 @@ Switching to Claude...
 clix
 [Having a long conversation]
 > /transfer claude
-✅ Session saved to ~/.local/state/clix/sessions/session-1704735000.md
+✅ Session saved to .clix/sessions/session-1704735000.md
 
 To continue in Claude Code:
-claude "$(cat ~/.local/state/clix/sessions/session-1704735000.md)"
+claude "$(cat .clix/sessions/session-1704735000.md)"
 
 # Exit and run provided command
-$ claude "$(cat ~/.local/state/clix/sessions/session-1704735000.md)"
+$ claude "$(cat .clix/sessions/session-1704735000.md)"
 [Conversation continues in native Claude CLI]
 ```
 
@@ -1118,7 +1118,7 @@ interface AgentExecutor {
 
 ### Session Files
 
-**Location:** `~/.local/state/clix/sessions/` (or `$XDG_STATE_HOME/clix/sessions/`)
+**Location:** `.clix/sessions/` (project-local)
 
 **Format:** Markdown with conversation history
 
@@ -1279,11 +1279,11 @@ When helping users with Clix CLI, keep these points in mind:
 5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`, `/ios-setup`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
 6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
 7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps
-8. **Session transfer** - Saves to `~/.local/state/clix/sessions/`, provides command for native CLI
+8. **Session transfer** - Saves to `.clix/sessions/`, provides command for native CLI
 9. **Agent switching** - Preserves history when switching between any agents
 10. **Context management** - 200K tokens (Claude), auto-compact at 90%
 11. **MCP integration** - Built-in installer for Clix MCP Server supporting all agents
-12. **XDG paths** - Config in `~/.config/clix/`, sessions in `~/.local/state/clix/sessions/`
+12. **Storage paths** - Global config in `~/.config/clix/`, project-local data in `.clix/` (sessions, credentials)
 
 **When users ask about:**
 - "How to use" → Emphasize `clix` command starts chat, use `/help` for commands

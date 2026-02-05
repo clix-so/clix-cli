@@ -4,8 +4,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getInternalApiClient, type Member, type Organization, type Project } from '@/lib/api';
 import {
-  type Credentials,
-  createCredentials,
+  createClixCredentials,
   getAuth0Config,
   getCredentialsManager,
   getIssuerUrl,
@@ -229,8 +228,8 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
 
         // Save credentials
         const issuer = getIssuerUrl(config);
-        const credentials: Credentials = createCredentials(tokenResponse, issuer, config.audience);
-        await credentialsManager.save(credentials);
+        const credentials = createClixCredentials(tokenResponse, issuer, config.audience);
+        await credentialsManager.saveClixCredentials(credentials);
 
         // Fetch user data
         setPhase('fetching_data');

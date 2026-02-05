@@ -26,7 +26,7 @@ export const LogoutUI: React.FC<LogoutUIProps> = ({ onComplete }) => {
         setPhase('checking');
         const credentials = await credentialsManager.load();
 
-        if (!credentials) {
+        if (!credentials?.clix) {
           setPhase('not_logged_in');
           setTimeout(() => {
             if (onComplete) {
@@ -38,9 +38,9 @@ export const LogoutUI: React.FC<LogoutUIProps> = ({ onComplete }) => {
           return;
         }
 
-        // Delete credentials
+        // Clear Clix credentials only (preserve Firebase tokens)
         setPhase('deleting');
-        await credentialsManager.delete();
+        await credentialsManager.clearClixCredentials();
 
         setPhase('complete');
         setTimeout(() => {

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { xdg } from '@/lib/utils/xdg';
 import type { ChatMessage } from '@/ui/chat/context/ChatContext';
+import { findProjectRoot } from '../utils/path';
 
 export const CHAT_SESSION_SCHEMA_VERSION = 1;
 
@@ -45,7 +45,7 @@ function resolveSessionsDir(): string {
   if (process.env.CLIX_SESSION_DIR) {
     return process.env.CLIX_SESSION_DIR;
   }
-  return path.join(xdg.state(), 'sessions');
+  return path.join(findProjectRoot(), '.clix', 'sessions');
 }
 
 async function ensureSessionsDir(): Promise<string> {
