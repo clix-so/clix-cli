@@ -2,9 +2,14 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ConfigError, ERROR_CODES } from '../errors/types';
 import {
+  CURRENT_PROJECT_CONFIG_VERSION,
+  ensureLatestVersion,
+  isConfigV2,
   PROJECT_CONFIG_DIR,
   PROJECT_CONFIG_FILENAME,
   type ProjectConfig,
+  type ProjectConfigV2,
+  type SetupStatus,
   safeValidateProjectConfig,
 } from './project-config-schema';
 
@@ -99,6 +104,7 @@ export class ProjectConfigManager {
   /**
    * Load project configuration from disk.
    * Returns null if config doesn't exist.
+   * Automatically migrates older versions to latest.
    *
    * @returns ProjectConfig or null if not found
    */
@@ -126,8 +132,16 @@ export class ProjectConfigManager {
         );
       }
 
-      this.cachedConfig = validatedConfig;
-      return validatedConfig;
+      // Migrate to latest version if needed
+      const migratedConfig = ensureLatestVersion(validatedConfig);
+
+      // Save migrated config if version changed
+      if (validatedConfig.version !== CURRENT_PROJECT_CONFIG_VERSION) {
+        await this.save(migratedConfig);
+      }
+
+      this.cachedConfig = migratedConfig;
+      return migratedConfig;
     } catch (error) {
       // File doesn't exist - return null
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
@@ -150,6 +164,47 @@ export class ProjectConfigManager {
 
       throw error;
     }
+  }
+
+  /**
+   * Load config and ensure it's at latest version (v2).
+   * Returns null if config doesn't exist.
+   *
+   * @returns ProjectConfigV2 or null if not found
+   */
+  async loadV2(): Promise<ProjectConfigV2 | null> {
+    const config = await this.load();
+    if (!config) {
+      return null;
+    }
+    return isConfigV2(config) ? config : ensureLatestVersion(config);
+  }
+
+  /**
+   * Update the setup status in config.
+   * Creates setup object if it doesn't exist.
+   *
+   * @param updates - Partial setup status to merge
+   */
+  async updateSetup(updates: Partial<SetupStatus>): Promise<void> {
+    const config = await this.loadV2();
+    if (!config) {
+      throw new ConfigError(
+        'Project config not found. Run "clix login" first.',
+        ERROR_CODES.PROJECT_CONFIG_NOT_FOUND,
+        this.configFilePath,
+      );
+    }
+
+    const updatedConfig: ProjectConfigV2 = {
+      ...config,
+      setup: {
+        ...config.setup,
+        ...updates,
+      },
+    };
+
+    await this.save(updatedConfig);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import type { PreparationContext } from '@/commands/skill/preparation';
 import {
   EMBEDDED_SKILL_METADATA,
   getEmbeddedSkill,
@@ -10,6 +11,7 @@ import {
 } from './embedded-skills';
 import type { AgentExecutor, AgentMessage } from './executor';
 import { getDebugPrompt } from './services/debug-service';
+import { formatProjectType } from './services/project-detector';
 
 /**
  * Skill type - dynamically generated from embedded skills + local skills.
@@ -23,6 +25,8 @@ export interface SkillOptions {
   signal?: AbortSignal;
   /** One-shot mode: disable session persistence (for command-line execution) */
   oneShot?: boolean;
+  /** Preparation context from install preparation phase */
+  preparationContext?: PreparationContext;
 }
 
 export interface SkillInfo {
@@ -229,6 +233,66 @@ function readLocalSkillPrompt(skillName: string): string {
 }
 
 /**
+ * Build pre-configured setup section from preparation context.
+ */
+function buildPreparationSection(context: PreparationContext): string {
+  const lines: string[] = ['## Pre-configured Setup', ''];
+  lines.push(`Project: ${context.config.project.name}`);
+  lines.push(`Type: ${formatProjectType(context.projectType)}`);
+  lines.push('');
+
+  // Clix project info
+  lines.push('### Clix Project');
+  lines.push(`- Project ID: ${context.config.project.id}`);
+  if (context.config.project.publicKey) {
+    lines.push(`- Public Key: ${context.config.project.publicKey}`);
+  }
+  lines.push('');
+
+  // Firebase status
+  if (context.firebase.needed) {
+    lines.push('### Firebase');
+    lines.push(`- Project ID: ${context.firebase.projectId || 'not configured'}`);
+    lines.push(
+      `- Android (google-services.json): ${context.firebase.androidConfigured ? '✓ configured' : '✗ missing'}`,
+    );
+    lines.push(
+      `- iOS (GoogleService-Info.plist): ${context.firebase.iosConfigured ? '✓ configured' : '✗ missing'}`,
+    );
+    lines.push('');
+  }
+
+  // iOS status
+  if (context.ios.needed) {
+    lines.push('### iOS');
+    lines.push(`- Bundle ID: ${context.ios.bundleId || 'not detected'}`);
+    lines.push(`- Team ID: ${context.ios.teamId || 'not detected'}`);
+    lines.push(`- App Group: ${context.ios.appGroupId || 'not configured'}`);
+    lines.push(
+      `- Entitlements: ${context.ios.entitlementsConfigured ? '✓ configured' : '✗ not configured'}`,
+    );
+    lines.push(
+      `- NSE (Notification Service Extension): ${context.ios.nseConfigured ? '✓ configured' : '✗ not configured'}`,
+    );
+    lines.push('');
+  }
+
+  // Missing items
+  if (context.missing.length > 0) {
+    lines.push('### Missing Setup (handle during installation)');
+    for (const item of context.missing) {
+      lines.push(`- ${item}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('Use these pre-configured values when integrating the SDK.');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+/**
  * Get prompt for the install skill.
  * Uses the autonomous installation prompt optimized for one-shot execution.
  * Prompt is loaded from src/lib/skills/install/SKILL.md
@@ -236,8 +300,15 @@ function readLocalSkillPrompt(skillName: string): string {
 function getInstallPrompt(options?: SkillOptions): string {
   const projectPath = options?.projectPath ?? process.cwd();
   const platform = options?.platform ?? 'auto-detect';
+  const context = options?.preparationContext;
 
   let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n\n`;
+
+  // Add preparation context if available
+  if (context) {
+    prompt += buildPreparationSection(context);
+    prompt += '\n';
+  }
 
   // Add one-shot instruction for autonomous execution
   if (options?.oneShot) {

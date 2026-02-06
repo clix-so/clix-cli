@@ -1,205 +1,114 @@
 /**
- * Google IAM REST API client.
- *
- * Manages service accounts and keys for Firebase projects.
+ * Google IAM API client using @googleapis/iam.
  *
  * @module services/firebase/api/iam-api
  */
 
-import type {
-  CreateServiceAccountKeyRequest,
-  CreateServiceAccountRequest,
-  ListServiceAccountsResponse,
-  ServiceAccount,
-  ServiceAccountKey,
-} from './types';
+import { iam, type iam_v1 } from '@googleapis/iam';
+import { OAuth2Client } from 'google-auth-library';
+import type { ServiceAccount, ServiceAccountKey } from './types';
 
-const IAM_BASE_URL = 'https://iam.googleapis.com/v1';
+type IamApi = iam_v1.Iam;
 
-/**
- * Google IAM API client.
- *
- * Uses the IAM REST API to manage service accounts and their keys.
- */
 export class IamApiClient {
-  private getAccessToken: () => Promise<string>;
+  private api: IamApi;
 
-  /**
-   * Create a new IAM API client.
-   *
-   * @param getAccessToken - Function to get a valid access token
-   */
   constructor(getAccessToken: () => Promise<string>) {
-    this.getAccessToken = getAccessToken;
+    const auth = new OAuth2Client();
+    auth.getAccessToken = async () => ({ token: await getAccessToken() });
+
+    this.api = iam({ version: 'v1', auth });
   }
 
-  /**
-   * Make an authenticated GET request to the IAM API.
-   */
-  private async request<T>(path: string): Promise<T> {
-    const token = await this.getAccessToken();
-    const url = `${IAM_BASE_URL}${path}`;
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`IAM API error (${response.status}): ${error}`);
-    }
-
-    return response.json() as Promise<T>;
-  }
-
-  /**
-   * Make an authenticated POST request to the IAM API.
-   */
-  private async postRequest<T>(path: string, body: unknown): Promise<T> {
-    const token = await this.getAccessToken();
-    const url = `${IAM_BASE_URL}${path}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`IAM API error (${response.status}): ${error}`);
-    }
-
-    return response.json() as Promise<T>;
-  }
-
-  /**
-   * Fetch paginated results from the IAM API.
-   *
-   * @param basePath - Base path for the API endpoint
-   * @param extractor - Function to extract items from response
-   * @returns All items across all pages
-   */
-  private async fetchPaginated<T, R extends { nextPageToken?: string }>(
-    basePath: string,
-    extractor: (response: R) => T[] | undefined,
-  ): Promise<T[]> {
-    const items: T[] = [];
+  async listServiceAccounts(projectId: string): Promise<ServiceAccount[]> {
+    const accounts: ServiceAccount[] = [];
     let pageToken: string | undefined;
 
     do {
-      const params = new URLSearchParams();
-      if (pageToken) {
-        params.set('pageToken', pageToken);
+      const res = await this.api.projects.serviceAccounts.list({
+        name: `projects/${projectId}`,
+        pageToken,
+      });
+      for (const sa of res.data.accounts ?? []) {
+        accounts.push({
+          name: sa.name ?? '',
+          projectId: sa.projectId ?? projectId,
+          uniqueId: sa.uniqueId ?? '',
+          email: sa.email ?? '',
+          displayName: sa.displayName ?? undefined,
+          description: sa.description ?? undefined,
+          disabled: sa.disabled ?? false,
+        });
       }
-
-      const query = params.toString();
-      const path = query ? `${basePath}?${query}` : basePath;
-      const response = await this.request<R>(path);
-
-      const extracted = extractor(response);
-      if (extracted) {
-        items.push(...extracted);
-      }
-      pageToken = response.nextPageToken;
+      pageToken = res.data.nextPageToken ?? undefined;
     } while (pageToken);
 
-    return items;
+    return accounts;
   }
 
-  /**
-   * List service accounts in a project.
-   *
-   * @param projectId - GCP project ID
-   * @returns List of service accounts
-   */
-  async listServiceAccounts(projectId: string): Promise<ServiceAccount[]> {
-    return this.fetchPaginated<ServiceAccount, ListServiceAccountsResponse>(
-      `/projects/${projectId}/serviceAccounts`,
-      (response) => response.accounts,
-    );
-  }
-
-  /**
-   * Get a specific service account.
-   *
-   * @param projectId - GCP project ID
-   * @param serviceAccountEmail - Service account email
-   * @returns Service account details
-   */
   async getServiceAccount(projectId: string, serviceAccountEmail: string): Promise<ServiceAccount> {
-    return this.request<ServiceAccount>(
-      `/projects/${projectId}/serviceAccounts/${serviceAccountEmail}`,
-    );
+    const res = await this.api.projects.serviceAccounts.get({
+      name: `projects/${projectId}/serviceAccounts/${serviceAccountEmail}`,
+    });
+    const sa = res.data;
+    return {
+      name: sa.name ?? '',
+      projectId: sa.projectId ?? projectId,
+      uniqueId: sa.uniqueId ?? '',
+      email: sa.email ?? '',
+      displayName: sa.displayName ?? undefined,
+      description: sa.description ?? undefined,
+      disabled: sa.disabled ?? false,
+    };
   }
 
-  /**
-   * Create a new service account.
-   *
-   * @param projectId - GCP project ID
-   * @param accountId - Service account ID (part before @)
-   * @param displayName - Optional display name
-   * @param description - Optional description
-   * @returns Created service account
-   */
   async createServiceAccount(
     projectId: string,
     accountId: string,
     displayName?: string,
     description?: string,
   ): Promise<ServiceAccount> {
-    const request: CreateServiceAccountRequest = {
-      accountId,
-      serviceAccount: {
-        displayName,
-        description,
+    const res = await this.api.projects.serviceAccounts.create({
+      name: `projects/${projectId}`,
+      requestBody: {
+        accountId,
+        serviceAccount: { displayName, description },
       },
+    });
+    const sa = res.data;
+    return {
+      name: sa.name ?? '',
+      projectId: sa.projectId ?? projectId,
+      uniqueId: sa.uniqueId ?? '',
+      email: sa.email ?? '',
+      displayName: sa.displayName ?? undefined,
+      description: sa.description ?? undefined,
+      disabled: sa.disabled ?? false,
     };
-
-    return this.postRequest<ServiceAccount>(`/projects/${projectId}/serviceAccounts`, request);
   }
 
-  /**
-   * Create a new key for a service account.
-   *
-   * The key is returned in the response and cannot be retrieved again.
-   * Store it securely.
-   *
-   * @param projectId - GCP project ID
-   * @param serviceAccountEmail - Service account email
-   * @returns Service account key with private key data (base64 encoded)
-   */
   async createServiceAccountKey(
     projectId: string,
     serviceAccountEmail: string,
   ): Promise<ServiceAccountKey> {
-    const request: CreateServiceAccountKeyRequest = {
-      privateKeyType: 'TYPE_GOOGLE_CREDENTIALS_FILE',
-      keyAlgorithm: 'KEY_ALG_RSA_2048',
+    const res = await this.api.projects.serviceAccounts.keys.create({
+      name: `projects/${projectId}/serviceAccounts/${serviceAccountEmail}`,
+      requestBody: {
+        privateKeyType: 'TYPE_GOOGLE_CREDENTIALS_FILE',
+        keyAlgorithm: 'KEY_ALG_RSA_2048',
+      },
+    });
+    const key = res.data;
+    return {
+      name: key.name ?? '',
+      privateKeyType: key.privateKeyType ?? '',
+      keyAlgorithm: key.keyAlgorithm ?? '',
+      privateKeyData: key.privateKeyData ?? '',
+      validAfterTime: key.validAfterTime ?? '',
+      validBeforeTime: key.validBeforeTime ?? '',
     };
-
-    return this.postRequest<ServiceAccountKey>(
-      `/projects/${projectId}/serviceAccounts/${serviceAccountEmail}/keys`,
-      request,
-    );
   }
 
-  /**
-   * Create a service account and generate a key in one operation.
-   *
-   * This is a convenience method that combines createServiceAccount and createServiceAccountKey.
-   *
-   * @param projectId - GCP project ID
-   * @param accountId - Service account ID (part before @)
-   * @param displayName - Optional display name
-   * @returns Object containing the service account and its key
-   */
   async createServiceAccountWithKey(
     projectId: string,
     accountId: string,
@@ -211,9 +120,7 @@ export class IamApiClient {
       displayName,
       'Created by Clix CLI for Firebase Admin SDK',
     );
-
     const key = await this.createServiceAccountKey(projectId, serviceAccount.email);
-
     return { serviceAccount, key };
   }
 }

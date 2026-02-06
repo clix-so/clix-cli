@@ -1,366 +1,223 @@
 /**
- * Firebase Management REST API client.
+ * Firebase Management API client using @googleapis/firebase.
  *
  * @module services/firebase/api/firebase-api
  */
 
+import {
+  cloudresourcemanager,
+  type cloudresourcemanager_v1,
+} from '@googleapis/cloudresourcemanager';
+import { firebase, type firebase_v1beta1 } from '@googleapis/firebase';
+import { OAuth2Client } from 'google-auth-library';
 import type {
   AndroidApp,
-  AppConfigResponse,
   CreateAndroidAppRequest,
   CreateIosAppRequest,
   FirebaseProject,
   GcpProject,
   IosApp,
-  ListAndroidAppsResponse,
-  ListGcpProjectsResponse,
-  ListIosAppsResponse,
-  ListProjectsResponse,
-  Operation,
 } from './types';
 
-const BASE_URL = 'https://firebase.googleapis.com/v1beta1';
-const RESOURCE_MANAGER_URL = 'https://cloudresourcemanager.googleapis.com/v1';
+type FirebaseApi = firebase_v1beta1.Firebase;
+type ResourceManagerApi = cloudresourcemanager_v1.Cloudresourcemanager;
 
-/**
- * Firebase Management API client.
- *
- * Uses the Firebase Management REST API to list projects, apps, and download configs.
- */
 export class FirebaseApiClient {
-  private getAccessToken: () => Promise<string>;
+  private fb: FirebaseApi;
+  private rm: ResourceManagerApi;
 
-  /**
-   * Create a new Firebase API client.
-   *
-   * @param getAccessToken - Function to get a valid access token
-   */
   constructor(getAccessToken: () => Promise<string>) {
-    this.getAccessToken = getAccessToken;
+    const auth = new OAuth2Client();
+    auth.getAccessToken = async () => ({ token: await getAccessToken() });
+
+    this.fb = firebase({ version: 'v1beta1', auth });
+    this.rm = cloudresourcemanager({ version: 'v1', auth });
   }
 
-  /**
-   * Make an authenticated GET request to the Firebase API.
-   */
-  private async request<T>(path: string): Promise<T> {
-    const token = await this.getAccessToken();
-    const url = `${BASE_URL}${path}`;
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Firebase API error (${response.status}): ${error}`);
-    }
-
-    return response.json() as Promise<T>;
-  }
-
-  /**
-   * Make an authenticated POST request to the Firebase API.
-   */
-  private async postRequest<T>(path: string, body: unknown): Promise<T> {
-    const token = await this.getAccessToken();
-    const url = `${BASE_URL}${path}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Firebase API error (${response.status}): ${error}`);
-    }
-
-    return response.json() as Promise<T>;
-  }
-
-  /**
-   * Wait for a long-running operation to complete.
-   *
-   * @param operationName - Operation name from the initial response
-   * @param maxWaitMs - Maximum time to wait in milliseconds (default: 60s)
-   * @returns The completed operation result
-   */
-  private async waitForOperation<T>(operationName: string, maxWaitMs = 60000): Promise<T> {
-    const startTime = Date.now();
-    const pollIntervalMs = 1000;
-
-    while (Date.now() - startTime < maxWaitMs) {
-      const operation = await this.request<Operation<T>>(`/${operationName}`.replace(/^\/+/, '/'));
-
-      if (operation.done) {
-        if (operation.error) {
-          throw new Error(`Operation failed: ${operation.error.message}`);
-        }
-        if (!operation.response) {
-          throw new Error('Operation completed but no response returned');
-        }
-        return operation.response;
-      }
-
-      // Wait before polling again
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-    }
-
-    throw new Error(`Operation timed out after ${maxWaitMs}ms`);
-  }
-
-  /**
-   * Fetch paginated results from the Firebase API.
-   *
-   * @param basePath - Base path for the API endpoint
-   * @param extractor - Function to extract items from response
-   * @returns All items across all pages
-   */
-  private async fetchPaginated<T, R extends { nextPageToken?: string }>(
-    basePath: string,
-    extractor: (response: R) => T[] | undefined,
-  ): Promise<T[]> {
-    const items: T[] = [];
-    let pageToken: string | undefined;
-
-    do {
-      const params = new URLSearchParams();
-      if (pageToken) {
-        params.set('pageToken', pageToken);
-      }
-
-      const query = params.toString();
-      const path = query ? `${basePath}?${query}` : basePath;
-      const response = await this.request<R>(path);
-
-      const extracted = extractor(response);
-      if (extracted) {
-        items.push(...extracted);
-      }
-      pageToken = response.nextPageToken;
-    } while (pageToken);
-
-    return items;
-  }
-
-  /**
-   * Fetch config file contents from the Firebase API.
-   *
-   * @param path - API path for the config endpoint
-   * @returns Config file contents as string
-   */
-  private async fetchConfig(path: string): Promise<string> {
-    const response = await this.request<AppConfigResponse>(path);
-    return Buffer.from(response.configFileContents, 'base64').toString('utf-8');
-  }
-
-  /**
-   * Create an app and wait for the operation to complete.
-   *
-   * @param path - API path for the app creation endpoint
-   * @param request - App creation request
-   * @returns Created app
-   */
-  private async createAppWithOperation<T>(path: string, request: unknown): Promise<T> {
-    const operation = await this.postRequest<Operation<T>>(path, request);
-
-    // If operation is already done, return the result
-    if (operation.done && operation.response) {
-      return operation.response;
-    }
-
-    // Otherwise, wait for the operation to complete
-    return this.waitForOperation<T>(operation.name);
-  }
-
-  /**
-   * List all Firebase projects accessible to the user.
-   *
-   * @returns List of Firebase projects
-   */
   async listProjects(): Promise<FirebaseProject[]> {
-    return this.fetchPaginated<FirebaseProject, ListProjectsResponse>(
-      '/projects',
-      (response) => response.results,
-    );
-  }
-
-  /**
-   * List Android apps in a Firebase project.
-   *
-   * @param projectId - Firebase project ID
-   * @returns List of Android apps
-   */
-  async listAndroidApps(projectId: string): Promise<AndroidApp[]> {
-    return this.fetchPaginated<AndroidApp, ListAndroidAppsResponse>(
-      `/projects/${projectId}/androidApps`,
-      (response) => response.apps,
-    );
-  }
-
-  /**
-   * List iOS apps in a Firebase project.
-   *
-   * @param projectId - Firebase project ID
-   * @returns List of iOS apps
-   */
-  async listIosApps(projectId: string): Promise<IosApp[]> {
-    return this.fetchPaginated<IosApp, ListIosAppsResponse>(
-      `/projects/${projectId}/iosApps`,
-      (response) => response.apps,
-    );
-  }
-
-  /**
-   * Get Android app config (google-services.json).
-   *
-   * @param projectId - Firebase project ID
-   * @param appId - Android app ID
-   * @returns Config file contents as string
-   */
-  async getAndroidConfig(projectId: string, appId: string): Promise<string> {
-    return this.fetchConfig(`/projects/${projectId}/androidApps/${appId}/config`);
-  }
-
-  /**
-   * Get iOS app config (GoogleService-Info.plist).
-   *
-   * @param projectId - Firebase project ID
-   * @param appId - iOS app ID
-   * @returns Config file contents as string
-   */
-  async getIosConfig(projectId: string, appId: string): Promise<string> {
-    return this.fetchConfig(`/projects/${projectId}/iosApps/${appId}/config`);
-  }
-
-  /**
-   * Create a new Android app in a Firebase project.
-   *
-   * @param projectId - Firebase project ID
-   * @param request - App creation request with packageName and optional displayName
-   * @returns Created Android app
-   */
-  async createAndroidApp(projectId: string, request: CreateAndroidAppRequest): Promise<AndroidApp> {
-    return this.createAppWithOperation<AndroidApp>(`/projects/${projectId}/androidApps`, request);
-  }
-
-  /**
-   * Create a new iOS app in a Firebase project.
-   *
-   * @param projectId - Firebase project ID
-   * @param request - App creation request with bundleId and optional displayName
-   * @returns Created iOS app
-   */
-  async createIosApp(projectId: string, request: CreateIosAppRequest): Promise<IosApp> {
-    return this.createAppWithOperation<IosApp>(`/projects/${projectId}/iosApps`, request);
-  }
-
-  // ============================================================================
-  // GCP Project and Firebase Project Creation Methods
-  // ============================================================================
-
-  /**
-   * Make an authenticated GET request to an external URL.
-   */
-  private async requestUrl<T>(url: string): Promise<T> {
-    const token = await this.getAccessToken();
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`API error (${response.status}): ${error}`);
-    }
-
-    return response.json() as Promise<T>;
-  }
-
-  /**
-   * Fetch paginated results from an external URL.
-   */
-  private async fetchPaginatedUrl<T, R extends { nextPageToken?: string }>(
-    baseUrl: string,
-    extractor: (response: R) => T[] | undefined,
-  ): Promise<T[]> {
-    const items: T[] = [];
+    const projects: FirebaseProject[] = [];
     let pageToken: string | undefined;
 
     do {
-      const url = new URL(baseUrl);
-      if (pageToken) {
-        url.searchParams.set('pageToken', pageToken);
+      const res = await this.fb.projects.list({ pageToken });
+      for (const p of res.data.results ?? []) {
+        projects.push({
+          name: p.name ?? '',
+          projectId: p.projectId ?? '',
+          projectNumber: p.projectNumber ?? '',
+          displayName: p.displayName ?? '',
+          state: (p.state as 'ACTIVE' | 'DELETED') ?? 'ACTIVE',
+        });
       }
-
-      const response = await this.requestUrl<R>(url.toString());
-
-      const extracted = extractor(response);
-      if (extracted) {
-        items.push(...extracted);
-      }
-      pageToken = response.nextPageToken;
+      pageToken = res.data.nextPageToken ?? undefined;
     } while (pageToken);
 
-    return items;
+    return projects;
   }
 
-  /**
-   * List GCP projects that the user has access to.
-   *
-   * This can be used to find projects that don't have Firebase yet,
-   * so Firebase can be added to them.
-   *
-   * @returns List of GCP projects
-   */
+  async listAndroidApps(projectId: string): Promise<AndroidApp[]> {
+    const apps: AndroidApp[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const res = await this.fb.projects.androidApps.list({
+        parent: `projects/${projectId}`,
+        pageToken,
+      });
+      for (const a of res.data.apps ?? []) {
+        apps.push({
+          name: a.name ?? '',
+          appId: a.appId ?? '',
+          displayName: a.displayName ?? undefined,
+          packageName: a.packageName ?? '',
+          projectId: a.projectId ?? projectId,
+        });
+      }
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return apps;
+  }
+
+  async listIosApps(projectId: string): Promise<IosApp[]> {
+    const apps: IosApp[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const res = await this.fb.projects.iosApps.list({
+        parent: `projects/${projectId}`,
+        pageToken,
+      });
+      for (const a of res.data.apps ?? []) {
+        apps.push({
+          name: a.name ?? '',
+          appId: a.appId ?? '',
+          displayName: a.displayName ?? undefined,
+          bundleId: a.bundleId ?? '',
+          projectId: a.projectId ?? projectId,
+        });
+      }
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return apps;
+  }
+
+  async getAndroidConfig(projectId: string, appId: string): Promise<string> {
+    const res = await this.fb.projects.androidApps.getConfig({
+      name: `projects/${projectId}/androidApps/${appId}/config`,
+    });
+    return Buffer.from(res.data.configFileContents ?? '', 'base64').toString('utf-8');
+  }
+
+  async getIosConfig(projectId: string, appId: string): Promise<string> {
+    const res = await this.fb.projects.iosApps.getConfig({
+      name: `projects/${projectId}/iosApps/${appId}/config`,
+    });
+    return Buffer.from(res.data.configFileContents ?? '', 'base64').toString('utf-8');
+  }
+
+  async createAndroidApp(projectId: string, request: CreateAndroidAppRequest): Promise<AndroidApp> {
+    const res = await this.fb.projects.androidApps.create({
+      parent: `projects/${projectId}`,
+      requestBody: request,
+    });
+
+    if (!res.data.name) {
+      throw new Error('Failed to create Android app: no operation name returned');
+    }
+    const app = await this.waitForOperation<firebase_v1beta1.Schema$AndroidApp>(res.data.name);
+    return {
+      name: app.name ?? '',
+      appId: app.appId ?? '',
+      displayName: app.displayName ?? undefined,
+      packageName: app.packageName ?? '',
+      projectId: app.projectId ?? projectId,
+    };
+  }
+
+  async createIosApp(projectId: string, request: CreateIosAppRequest): Promise<IosApp> {
+    const res = await this.fb.projects.iosApps.create({
+      parent: `projects/${projectId}`,
+      requestBody: request,
+    });
+
+    if (!res.data.name) {
+      throw new Error('Failed to create iOS app: no operation name returned');
+    }
+    const app = await this.waitForOperation<firebase_v1beta1.Schema$IosApp>(res.data.name);
+    return {
+      name: app.name ?? '',
+      appId: app.appId ?? '',
+      displayName: app.displayName ?? undefined,
+      bundleId: app.bundleId ?? '',
+      projectId: app.projectId ?? projectId,
+    };
+  }
+
   async listGcpProjects(): Promise<GcpProject[]> {
-    return this.fetchPaginatedUrl<GcpProject, ListGcpProjectsResponse>(
-      `${RESOURCE_MANAGER_URL}/projects`,
-      (response) => response.projects,
-    );
+    const projects: GcpProject[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const res = await this.rm.projects.list({ pageToken });
+      for (const p of res.data.projects ?? []) {
+        projects.push({
+          projectId: p.projectId ?? '',
+          name: p.name ?? '',
+          projectNumber: p.projectNumber ?? '',
+          lifecycleState: (p.lifecycleState as GcpProject['lifecycleState']) ?? 'ACTIVE',
+          createTime: p.createTime ?? undefined,
+        });
+      }
+      pageToken = res.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return projects;
   }
 
-  /**
-   * List GCP projects that don't have Firebase yet.
-   *
-   * Compares GCP projects with Firebase projects to find ones
-   * that can have Firebase added.
-   *
-   * @returns List of GCP projects without Firebase
-   */
   async listAvailableGcpProjects(): Promise<GcpProject[]> {
     const [gcpProjects, firebaseProjects] = await Promise.all([
       this.listGcpProjects(),
       this.listProjects(),
     ]);
-
     const firebaseProjectIds = new Set(firebaseProjects.map((p) => p.projectId));
-
     return gcpProjects.filter(
       (gcp) => gcp.lifecycleState === 'ACTIVE' && !firebaseProjectIds.has(gcp.projectId),
     );
   }
 
-  /**
-   * Add Firebase to an existing GCP project.
-   *
-   * This creates a Firebase project linked to the GCP project.
-   * The project must not already have Firebase.
-   *
-   * @param projectId - GCP project ID
-   * @returns Created Firebase project
-   */
   async addFirebaseToProject(projectId: string): Promise<FirebaseProject> {
-    return this.createAppWithOperation<FirebaseProject>(`/projects/${projectId}:addFirebase`, {});
+    const res = await this.fb.projects.addFirebase({ project: `projects/${projectId}` });
+    if (!res.data.name) {
+      throw new Error('Failed to add Firebase: no operation name returned');
+    }
+    const project = await this.waitForOperation<firebase_v1beta1.Schema$FirebaseProject>(
+      res.data.name,
+    );
+    return {
+      name: project.name ?? '',
+      projectId: project.projectId ?? '',
+      projectNumber: project.projectNumber ?? '',
+      displayName: project.displayName ?? '',
+      state: (project.state as 'ACTIVE' | 'DELETED') ?? 'ACTIVE',
+    };
+  }
+
+  private async waitForOperation<T>(operationName: string, maxWaitMs = 60000): Promise<T> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const res = await this.fb.operations.get({ name: operationName });
+      if (res.data.done) {
+        if (res.data.error) {
+          throw new Error(`Operation failed: ${res.data.error.message}`);
+        }
+        return res.data.response as T;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    throw new Error(`Operation timed out after ${maxWaitMs}ms`);
   }
 }

@@ -7,8 +7,10 @@ import {
   type SkillType,
 } from '../../lib/skills';
 import { AgentExecutionUI } from '../../ui/AgentExecutionUI';
+import { InstallPreparationUI } from '../../ui/components/InstallPreparationUI';
 import { printFinalOutput } from '../../ui/utils/finalOutput';
 import { safeRender } from '../../ui/utils/safeRender';
+import type { PreparationContext } from './preparation';
 
 interface SkillCommandOptions {
   action?: string;
@@ -54,6 +56,27 @@ Examples:
 `;
 }
 
+/**
+ * Run install preparation UI and return the context.
+ */
+async function runInstallPreparation(projectPath: string): Promise<PreparationContext | null> {
+  return new Promise((resolve) => {
+    const { unmount } = safeRender(
+      <InstallPreparationUI
+        projectPath={projectPath}
+        onComplete={(context) => {
+          unmount();
+          resolve(context);
+        }}
+        onCancel={() => {
+          unmount();
+          resolve(null);
+        }}
+      />,
+    );
+  });
+}
+
 export async function skillCommand(options: SkillCommandOptions): Promise<void> {
   const { action, platform } = options;
 
@@ -83,13 +106,26 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
   }
 
   const skillType = action as SkillType;
+  const projectPath = process.cwd();
+
+  // For install skill, run preparation first
+  let preparationContext: PreparationContext | undefined;
+  if (skillType === 'install') {
+    const context = await runInstallPreparation(projectPath);
+    if (!context) {
+      // User cancelled or config missing
+      return;
+    }
+    preparationContext = context;
+  }
 
   // Create execute function that wraps executeSkill
   async function* executeCommand(executor: AgentExecutor): AsyncGenerator<AgentMessage> {
     yield* executeSkill(skillType, executor, {
-      projectPath: process.cwd(),
+      projectPath,
       platform,
       oneShot: true,
+      preparationContext,
     });
   }
 

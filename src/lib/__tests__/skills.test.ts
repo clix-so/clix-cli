@@ -267,6 +267,176 @@ describe('SkillOptions', () => {
   });
 });
 
+describe('preparationContext in install skill', () => {
+  /**
+   * These tests verify that preparationContext is properly integrated into the install skill prompt.
+   * This covers the functionality that was previously in standalone firebase and ios-setup commands.
+   */
+
+  test('install skill should include pre-configured setup section when preparationContext is provided', async () => {
+    const { getSkillPrompt } = await import('../skills');
+    const preparationContext = {
+      projectPath: '/test/project',
+      config: {
+        version: 2 as const,
+        member: { id: 'member-1', email: 'test@example.com', name: 'Test User' },
+        organization: { id: 'org-1', name: 'Test Org' },
+        project: { id: 'project-1', name: 'Test Project', publicKey: 'pk_test_123' },
+        linkedAt: '2024-01-01T00:00:00Z',
+      },
+      projectType: { framework: 'react-native' as const, target: 'ios-android' as const },
+      firebase: {
+        needed: true,
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        projectId: 'my-firebase-project',
+      },
+      ios: {
+        needed: true,
+        bundleId: 'com.test.app',
+        teamId: 'TEAM123',
+        appGroupId: 'group.com.test.app',
+        entitlementsConfigured: true,
+        nseConfigured: false,
+      },
+      missing: ['Notification Service Extension'],
+      ready: false,
+    };
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/test/project',
+      preparationContext,
+    });
+
+    // Verify pre-configured setup section is included
+    expect(prompt).toContain('Pre-configured Setup');
+    expect(prompt).toContain('Test Project');
+
+    // Verify Clix project info
+    expect(prompt).toContain('Clix Project');
+    expect(prompt).toContain('project-1');
+    expect(prompt).toContain('pk_test_123');
+
+    // Verify Firebase info
+    expect(prompt).toContain('Firebase');
+    expect(prompt).toContain('my-firebase-project');
+    expect(prompt).toContain('Android (google-services.json)');
+    expect(prompt).toContain('iOS (GoogleService-Info.plist)');
+
+    // Verify iOS info
+    expect(prompt).toContain('iOS');
+    expect(prompt).toContain('com.test.app');
+    expect(prompt).toContain('TEAM123');
+    expect(prompt).toContain('group.com.test.app');
+    expect(prompt).toContain('Entitlements');
+    expect(prompt).toContain('NSE');
+
+    // Verify missing items
+    expect(prompt).toContain('Missing Setup');
+    expect(prompt).toContain('Notification Service Extension');
+  });
+
+  test('install skill should not include iOS section when iOS is not needed', async () => {
+    const { getSkillPrompt } = await import('../skills');
+    const preparationContext = {
+      projectPath: '/test/project',
+      config: {
+        version: 2 as const,
+        member: { id: 'member-1', email: 'test@example.com', name: 'Test User' },
+        organization: { id: 'org-1', name: 'Test Org' },
+        project: { id: 'project-1', name: 'Android Project' },
+        linkedAt: '2024-01-01T00:00:00Z',
+      },
+      projectType: { framework: 'native' as const, target: 'android' as const },
+      firebase: {
+        needed: true,
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        projectId: 'android-project',
+      },
+      ios: {
+        needed: false,
+        bundleId: undefined,
+        teamId: undefined,
+        appGroupId: undefined,
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      missing: [],
+      ready: true,
+    };
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/test/project',
+      preparationContext,
+    });
+
+    // Should have Firebase section
+    expect(prompt).toContain('Firebase');
+    expect(prompt).toContain('android-project');
+
+    // Should NOT have iOS section (needed=false)
+    const iosHeaderMatch = prompt.match(/### iOS\n/);
+    expect(iosHeaderMatch).toBeNull();
+  });
+
+  test('install skill should not include Firebase section when Firebase is not needed', async () => {
+    const { getSkillPrompt } = await import('../skills');
+    const preparationContext = {
+      projectPath: '/test/project',
+      config: {
+        version: 2 as const,
+        member: { id: 'member-1', email: 'test@example.com', name: 'Test User' },
+        organization: { id: 'org-1', name: 'Test Org' },
+        project: { id: 'project-1', name: 'Unknown Project' },
+        linkedAt: '2024-01-01T00:00:00Z',
+      },
+      projectType: { framework: 'unknown' as const, target: 'unknown' as const },
+      firebase: {
+        needed: false,
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        projectId: undefined,
+      },
+      ios: {
+        needed: false,
+        bundleId: undefined,
+        teamId: undefined,
+        appGroupId: undefined,
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      missing: [],
+      ready: true,
+    };
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/test/project',
+      preparationContext,
+    });
+
+    // Should NOT have Firebase section (needed=false)
+    const firebaseHeaderMatch = prompt.match(/### Firebase\n/);
+    expect(firebaseHeaderMatch).toBeNull();
+  });
+
+  test('install skill without preparationContext should work normally', async () => {
+    const { getSkillPrompt } = await import('../skills');
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/test/project',
+    });
+
+    // Should have basic info but no pre-configured setup section
+    expect(prompt).toContain('Project path: /test/project');
+    // Pre-configured Setup section should not appear without context
+    expect(prompt).not.toContain('### Clix Project');
+  });
+});
+
 describe('error handling', () => {
   describe('getSkillPrompt error messages', () => {
     test('should return clear error message when skills package is missing', async () => {
