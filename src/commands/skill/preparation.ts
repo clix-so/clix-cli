@@ -9,7 +9,7 @@
 
 import {
   getProjectConfigManager,
-  type ProjectConfigV2,
+  type ProjectConfig,
   type ProjectType,
   type SetupStatus,
 } from '@/lib/config';
@@ -57,7 +57,7 @@ export interface PreparationContext {
   /** Project root path */
   projectPath: string;
   /** Loaded and migrated config */
-  config: ProjectConfigV2;
+  config: ProjectConfig;
   /** Detected or loaded project type */
   projectType: ProjectType;
   /** Firebase configuration status */
@@ -77,7 +77,7 @@ export interface ProjectLinkStatus {
   /** Whether project is linked */
   linked: boolean;
   /** Config if linked */
-  config?: ProjectConfigV2;
+  config?: ProjectConfig;
   /** Error message if not linked */
   error?: string;
 }
@@ -92,7 +92,7 @@ export async function checkProjectLinked(projectPath?: string): Promise<ProjectL
   const manager = getProjectConfigManager(projectPath);
 
   try {
-    const config = await manager.loadV2();
+    const config = await manager.load();
 
     if (!config) {
       return {
@@ -122,9 +122,9 @@ export async function checkProjectLinked(projectPath?: string): Promise<ProjectL
  * @returns Updated config with project type
  */
 export async function ensureProjectType(
-  config: ProjectConfigV2,
+  config: ProjectConfig,
   projectPath: string,
-): Promise<{ config: ProjectConfigV2; projectType: ProjectType }> {
+): Promise<{ config: ProjectConfig; projectType: ProjectType }> {
   if (config.projectType) {
     return { config, projectType: config.projectType };
   }
@@ -134,7 +134,7 @@ export async function ensureProjectType(
 
   // Save to config
   const manager = getProjectConfigManager(projectPath);
-  const updatedConfig: ProjectConfigV2 = {
+  const updatedConfig: ProjectConfig = {
     ...config,
     projectType,
   };

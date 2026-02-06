@@ -115,31 +115,12 @@ export const SetupStatusSchema = z.object({
 });
 
 /**
- * Main project configuration schema (version 1 - legacy).
+ * Main project configuration schema.
  * Stored in .clix/config.jsonc in the project root.
  */
-export const ProjectConfigV1Schema = z.object({
+export const ProjectConfigSchema = z.object({
   /** Configuration schema version */
-  version: z.literal(1),
-  /** Logged-in member information */
-  member: ProjectMemberSchema,
-  /** Selected organization */
-  organization: ProjectOrganizationSchema,
-  /** Selected project */
-  project: ProjectInfoSchema,
-  /** Detected project type (framework + target platform) */
-  projectType: ProjectTypeSchema.optional(),
-  /** ISO timestamp when this config was created/linked */
-  linkedAt: z.string().datetime(),
-});
-
-/**
- * Main project configuration schema (version 2 - current).
- * Stored in .clix/config.jsonc in the project root.
- */
-export const ProjectConfigV2Schema = z.object({
-  /** Configuration schema version */
-  version: z.literal(2),
+  version: z.number(),
   /** Logged-in member information */
   member: ProjectMemberSchema,
   /** Selected organization */
@@ -155,11 +136,6 @@ export const ProjectConfigV2Schema = z.object({
 });
 
 /**
- * Union schema that accepts both v1 and v2 configs.
- */
-export const ProjectConfigSchema = z.union([ProjectConfigV1Schema, ProjectConfigV2Schema]);
-
-/**
  * Type definitions derived from schemas.
  */
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>;
@@ -169,14 +145,12 @@ export type IosSetup = z.infer<typeof IosSetupSchema>;
 export type FirebaseSetup = z.infer<typeof FirebaseSetupSchema>;
 export type ApnsSetup = z.infer<typeof ApnsSetupSchema>;
 export type SetupStatus = z.infer<typeof SetupStatusSchema>;
-export type ProjectConfigV1 = z.infer<typeof ProjectConfigV1Schema>;
-export type ProjectConfigV2 = z.infer<typeof ProjectConfigV2Schema>;
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 
 /**
  * Current project config version.
  */
-export const CURRENT_PROJECT_CONFIG_VERSION = 2;
+export const CURRENT_PROJECT_CONFIG_VERSION = 1;
 
 /**
  * Project config file name.
@@ -212,43 +186,14 @@ export function safeValidateProjectConfig(data: unknown): ProjectConfig | null {
 }
 
 /**
- * Check if config is version 1.
- */
-export function isConfigV1(config: ProjectConfig): config is ProjectConfigV1 {
-  return config.version === 1;
-}
-
-/**
- * Check if config is version 2.
- */
-export function isConfigV2(config: ProjectConfig): config is ProjectConfigV2 {
-  return config.version === 2;
-}
-
-/**
- * Migrate v1 config to v2.
- *
- * @param config - v1 config to migrate
- * @returns Migrated v2 config
- */
-export function migrateV1ToV2(config: ProjectConfigV1): ProjectConfigV2 {
-  return {
-    ...config,
-    version: 2,
-    setup: undefined,
-  };
-}
-
-/**
- * Ensure config is at the latest version (v2).
+ * Ensure config is at the latest version.
  * Migrates older versions if necessary.
  *
  * @param config - Config of any supported version
- * @returns Config at latest version (v2)
+ * @returns Config at latest version
  */
-export function ensureLatestVersion(config: ProjectConfig): ProjectConfigV2 {
-  if (isConfigV2(config)) {
-    return config;
-  }
-  return migrateV1ToV2(config);
+export function ensureLatestVersion(config: ProjectConfig): ProjectConfig {
+  // Currently no migration needed
+  // Add migration logic here when schema changes in future versions
+  return config;
 }
