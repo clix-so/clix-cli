@@ -6,11 +6,17 @@ import { checkFirebaseStatus, checkIosStatus } from '../preparation';
 const mockFirebaseService = {
   detect: mock(() =>
     Promise.resolve({
-      platform: 'react-native',
-      android: { valid: true, content: { project_info: { project_id: 'test-project' } } },
-      ios: { valid: true, content: { PROJECT_ID: 'test-project' } },
+      platform: 'react-native' as string,
+      android: { valid: true, content: { project_info: { project_id: 'test-project' } } } as {
+        valid: boolean;
+        content: Record<string, unknown>;
+      } | null,
+      ios: { valid: true, content: { PROJECT_ID: 'test-project' } } as {
+        valid: boolean;
+        content: Record<string, unknown>;
+      } | null,
       configured: true,
-      issues: [],
+      issues: [] as unknown[],
       projectPath: '/test',
     }),
   ),
@@ -97,7 +103,7 @@ describe('preparation', () => {
       expect(status.configured).toBe(true);
     });
 
-    test('should use setup status from config if already configured', async () => {
+    test('should always detect files even if setup config exists', async () => {
       const projectType: ProjectType = { framework: 'react-native', target: 'ios-android' };
       const setup = {
         firebase: {
@@ -109,10 +115,36 @@ describe('preparation', () => {
 
       const status = await checkFirebaseStatus('/test', projectType, setup);
 
+      // Should always run file detection regardless of cached setup
+      expect(mockFirebaseService.detect).toHaveBeenCalled();
+      expect(mockFirebaseService.getStatus).toHaveBeenCalled();
       expect(status.configured).toBe(true);
+      // Project ID from detected files takes precedence over cached config
+      expect(status.projectId).toBe('test-project');
+    });
+
+    test('should fallback to cached projectId when files have no project ID', async () => {
+      const projectType: ProjectType = { framework: 'react-native', target: 'ios-android' };
+      const setup = {
+        firebase: {
+          projectId: 'my-project',
+          androidConfigured: true,
+          iosConfigured: true,
+        },
+      };
+
+      mockFirebaseService.detect.mockResolvedValueOnce({
+        platform: 'react-native',
+        android: null,
+        ios: null,
+        configured: true,
+        issues: [],
+        projectPath: '/test',
+      });
+
+      const status = await checkFirebaseStatus('/test', projectType, setup);
+
       expect(status.projectId).toBe('my-project');
-      expect(status.androidConfigured).toBe(true);
-      expect(status.iosConfigured).toBe(true);
     });
 
     test('should detect Firebase config when not in setup', async () => {

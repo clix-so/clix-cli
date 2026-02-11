@@ -6,6 +6,8 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
+import { oauthLogger } from '@/lib/debug/logger';
+import { findProjectRoot } from './path';
 
 // ============================================================================
 // Shared OAuth Callback Configuration
@@ -101,14 +103,14 @@ const DEFAULT_SUCCESS_HTML = `<!DOCTYPE html>
       align-items: center;
       min-height: 100vh;
       margin: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #000000;
     }
     .container {
       text-align: center;
       padding: 40px;
       background: white;
       border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 40px rgba(255,255,255,0.1);
     }
     .icon { font-size: 64px; margin-bottom: 20px; }
     h1 { color: #333; margin: 0 0 10px; }
@@ -138,16 +140,16 @@ function defaultErrorHtml(message: string): string {
       align-items: center;
       min-height: 100vh;
       margin: 0;
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      background: #000000;
     }
     .container {
       text-align: center;
       padding: 40px;
       background: white;
       border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 40px rgba(255,255,255,0.1);
     }
-    .icon { font-size: 64px; margin-bottom: 20px; }
+    .icon { font-size: 64px; margin-bottom: 20px; color: #f5576c; }
     h1 { color: #333; margin: 0 0 10px; }
     p { color: #666; margin: 0; }
   </style>
@@ -258,12 +260,26 @@ export class OAuthCallbackServer {
 
         // Handle OAuth error
         if (error) {
-          const errorMsg = errorDescription || error;
+          const errorMsg = errorDescription ? `${error}: ${errorDescription}` : error;
+
+          // Write debug info to .clix/debug.log
+          oauthLogger.writeToFile(
+            'OAuth callback error',
+            {
+              type: 'oauth_callback_error',
+              error,
+              error_description: errorDescription,
+              full_url: req.url,
+              all_params: Object.fromEntries(url.searchParams.entries()),
+            },
+            findProjectRoot(),
+          );
+
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml(errorMsg));
           clearTimeout(timeout);
           this.stop();
-          reject(new Error(`OAuth error: ${errorMsg}`));
+          reject(new Error(errorMsg));
           return;
         }
 

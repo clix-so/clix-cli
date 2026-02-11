@@ -46,25 +46,6 @@ export interface GcpProject {
   createTime?: string;
 }
 
-export interface ServiceAccount {
-  name: string;
-  projectId: string;
-  uniqueId: string;
-  email: string;
-  displayName?: string;
-  description?: string;
-  disabled?: boolean;
-}
-
-export interface ServiceAccountKey {
-  name: string;
-  privateKeyType: string;
-  keyAlgorithm: string;
-  privateKeyData: string;
-  validAfterTime: string;
-  validBeforeTime: string;
-}
-
 export interface ServiceAccountJson {
   type: 'service_account';
   project_id: string;

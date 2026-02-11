@@ -168,18 +168,7 @@ export async function checkFirebaseStatus(
     };
   }
 
-  // Check if already marked as configured in setup
-  if (setup?.firebase?.androidConfigured && setup?.firebase?.iosConfigured) {
-    return {
-      configured: true,
-      androidConfigured: true,
-      iosConfigured: true,
-      projectId: setup.firebase.projectId,
-      needed: true,
-    };
-  }
-
-  // Detect Firebase config files
+  // Always detect actual Firebase config files on disk
   const firebaseService = new FirebaseService(projectPath, projectType);
   const detection = await firebaseService.detect();
   const status = await firebaseService.getStatus();
@@ -191,12 +180,14 @@ export async function checkFirebaseStatus(
   const androidConfigured = !needsAndroid || status.androidConfigured;
   const iosConfigured = !needsIos || status.iosConfigured;
 
-  // Extract project ID if available
+  // Extract project ID from detected files, fallback to cached setup
   let projectId: string | undefined;
   if (detection.android?.content && 'project_info' in detection.android.content) {
     projectId = detection.android.content.project_info?.project_id;
   } else if (detection.ios?.content && 'PROJECT_ID' in detection.ios.content) {
     projectId = detection.ios.content.PROJECT_ID;
+  } else if (setup?.firebase?.projectId) {
+    projectId = setup.firebase.projectId;
   }
 
   return {

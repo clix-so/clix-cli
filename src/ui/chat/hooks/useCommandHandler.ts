@@ -47,6 +47,7 @@ interface UseCommandHandlerOptions {
     | 'showDebugPrompt'
     | 'showFirebaseWizard'
     | 'showIosSetupOverlay'
+    | 'showInstallPreparation'
     | 'showLoginOverlay'
     | 'showLogoutOverlay'
     | 'showWhoamiOverlay'
@@ -91,6 +92,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
     showDebugPrompt,
     showFirebaseWizard,
     showIosSetupOverlay,
+    showInstallPreparation,
     showLoginOverlay,
     showLogoutOverlay,
     showWhoamiOverlay,
@@ -192,8 +194,13 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
           exit();
           return;
 
+        case 'install':
+          // Install requires preparation step before agent execution
+          showInstallPreparation();
+          return;
+
         default:
-          // Handle skill commands
+          // Handle skill commands (except install which is handled above)
           if (getSkillCommands().has(command.name)) {
             executeSkill(command.name as SkillType);
             return;
@@ -218,6 +225,7 @@ export function useCommandHandler(options: UseCommandHandlerOptions) {
       showDebugPrompt,
       showFirebaseWizard,
       showIosSetupOverlay,
+      showInstallPreparation,
       showLoginOverlay,
       showLogoutOverlay,
       showWhoamiOverlay,

@@ -46,6 +46,26 @@ interface ActionItem extends SelectorItem {
   action: 'configure' | 'skip' | 'cancel';
 }
 
+export function getInitialPreparationPhase(context: PreparationContext): PreparationPhase {
+  if (!context.firebase.configured && context.firebase.needed) {
+    return 'firebase_check';
+  }
+  if (!context.ios.entitlementsConfigured && context.ios.needed) {
+    return 'ios_check';
+  }
+  if (context.ready) {
+    return 'ready';
+  }
+  return 'firebase_check';
+}
+
+export function getPostFirebasePhase(context: PreparationContext): PreparationPhase {
+  if (context.ios.needed && !context.ios.entitlementsConfigured) {
+    return 'ios_setup';
+  }
+  return 'ready';
+}
+
 function StatusLine({
   label,
   status,
@@ -230,29 +250,63 @@ function ReadyPhase({
   onContinue: () => void;
   onCancel: () => void;
 }): React.ReactElement {
-  useCancelInput(onCancel);
+  const items: ActionItem[] = [
+    { id: 'continue', label: 'Continue to installation', action: 'configure' },
+    { id: 'cancel', label: 'Cancel', action: 'cancel' },
+  ];
 
-  useEffect(() => {
-    // Auto-continue after a brief moment
-    const timer = setTimeout(onContinue, 500);
-    return () => clearTimeout(timer);
-  }, [onContinue]);
+  const handleSelect = useCallback(
+    (item: ActionItem) => {
+      if (item.action === 'cancel') {
+        onCancel();
+      } else {
+        onContinue();
+      }
+    },
+    [onCancel, onContinue],
+  );
 
   return (
     <Box flexDirection="column" marginY={1}>
       <Text color="green" bold>
-        ✓ Preparation complete
+        ✓ Preparation review complete
       </Text>
       <Box marginY={1} flexDirection="column">
         <Text>Project: {context.config.project.name}</Text>
         <Text>Type: {formatProjectType(context.projectType)}</Text>
         {context.firebase.projectId && <Text>Firebase: {context.firebase.projectId}</Text>}
       </Box>
+      {context.missing.length > 0 && (
+        <Box marginBottom={1} flexDirection="column">
+          <Text color="yellow">Will be handled during installation:</Text>
+          {context.missing.map((item) => (
+            <Text key={item} color="gray">
+              • {item}
+            </Text>
+          ))}
+        </Box>
+      )}
+      <GenericSelector items={items} title="" onSelect={handleSelect} onCancel={onCancel} />
+    </Box>
+  );
+}
+
+function IosSetupAutoPhase({ onContinue }: { onContinue: () => void }): React.ReactElement {
+  useEffect(() => {
+    onContinue();
+  }, [onContinue]);
+
+  return (
+    <Box flexDirection="column" marginY={1}>
       <Box>
+        <Text color="yellow">○</Text>
+        <Text> iOS setup will continue during installation.</Text>
+      </Box>
+      <Box marginTop={1}>
         <Text color="cyan">
           <Spinner type="dots" />
         </Text>
-        <Text> Starting SDK installation...</Text>
+        <Text> Proceeding to final confirmation...</Text>
       </Box>
     </Box>
   );
@@ -286,18 +340,7 @@ export function InstallPreparationUI({
       }
 
       setContext(ctx);
-
-      // Determine which setup phase to show
-      if (!ctx.firebase.configured && ctx.firebase.needed) {
-        setPhase('firebase_check');
-      } else if (!ctx.ios.entitlementsConfigured && ctx.ios.needed) {
-        setPhase('ios_check');
-      } else if (ctx.ready) {
-        setPhase('ready');
-      } else {
-        // Some setup missing but not critical - show status
-        setPhase('firebase_check');
-      }
+      setPhase(getInitialPreparationPhase(ctx));
     }
 
     check();
@@ -349,16 +392,12 @@ export function InstallPreparationUI({
       await saveSetupStatus(projectPath, updatedFirebase, context.ios);
 
       // Move to next phase
-      if (context.ios.needed && !context.ios.entitlementsConfigured) {
-        setPhase('ios_check');
-      } else {
-        setPhase('ready');
-      }
+      setPhase(getPostFirebasePhase(updatedContext));
     },
     [context, projectPath],
   );
 
-  const handleIosSkip = useCallback(() => {
+  const handleIosAutoContinue = useCallback(() => {
     setPhase('ready');
   }, []);
 
@@ -369,7 +408,7 @@ export function InstallPreparationUI({
       if (!context.firebase.configured && context.firebase.needed) {
         setPhase('firebase_setup');
       } else if (context.ios.needed && !context.ios.entitlementsConfigured) {
-        setPhase('ios_check');
+        setPhase('ios_setup');
       } else {
         setPhase('ready');
       }
@@ -416,11 +455,8 @@ export function InstallPreparationUI({
       return <StatusPhase context={context} onContinue={handleContinue} onCancel={handleCancel} />;
 
     case 'ios_setup':
-      // For now, skip iOS setup wizard (complex integration)
-      // The agent will handle iOS setup if needed
       if (!context) return <CheckingPhase />;
-      handleIosSkip();
-      return <CheckingPhase />;
+      return <IosSetupAutoPhase onContinue={handleIosAutoContinue} />;
 
     case 'ready':
       if (!context) return <CheckingPhase />;

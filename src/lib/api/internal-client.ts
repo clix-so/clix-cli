@@ -1,12 +1,19 @@
 import { getConsoleUrl, getCredentialsManager } from '../auth';
 import { AuthError } from '../auth/errors';
 import { NetworkError } from '../errors/types';
-import type { Member, Organization, Project } from './types';
+import type { Member, Organization, Project, SenderConfig } from './types';
 
 /**
  * Internal API proxy prefix on Console.
  */
 const API_PROXY_PREFIX = '/api/clix/internal';
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+
+interface InternalApiRequestOptions {
+  authToken?: string;
+  timeoutMs?: number;
+  maxRetries?: number;
+}
 
 /**
  * Internal API client that communicates through Console's proxy endpoint.
@@ -29,6 +36,24 @@ export class InternalApiClient {
     this.baseUrl = (consoleUrl ?? getConsoleUrl()) + API_PROXY_PREFIX;
   }
 
+  private async resolveAccessToken(authToken?: string): Promise<string> {
+    if (authToken) return authToken;
+
+    const credentialsManager = getCredentialsManager();
+    const token = await credentialsManager.getValidToken();
+    if (!token) {
+      throw AuthError.notLoggedIn();
+    }
+    return token;
+  }
+
+  private shouldRetry(error: unknown): boolean {
+    if (!(error instanceof NetworkError)) return false;
+    if (error.statusCode === 429) return true;
+    if (typeof error.statusCode === 'number' && error.statusCode >= 500) return true;
+    return error.statusCode === undefined;
+  }
+
   /**
    * Make an authenticated request to Internal API.
    *
@@ -38,47 +63,64 @@ export class InternalApiClient {
    * @throws AuthError if not authenticated
    * @throws NetworkError if request fails
    */
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const credentialsManager = getCredentialsManager();
-    const token = await credentialsManager.getValidToken();
-
-    if (!token) {
-      throw AuthError.notLoggedIn();
-    }
-
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    requestOptions: InternalApiRequestOptions = {},
+  ): Promise<T> {
+    const token = await this.resolveAccessToken(requestOptions.authToken);
+    const timeoutMs = requestOptions.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    const maxRetries = requestOptions.maxRetries ?? 0;
     const url = `${this.baseUrl}${endpoint}`;
-    const headers = new Headers(options.headers);
-    headers.set('Authorization', `Bearer ${token}`);
-    headers.set('Content-Type', 'application/json');
+    let attempt = 0;
 
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+    while (true) {
+      const headers = new Headers(options.headers);
+      headers.set('Authorization', `Bearer ${token}`);
+      headers.set('Content-Type', 'application/json');
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw AuthError.tokenExpired();
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw AuthError.tokenExpired();
+          }
+
+          const errorText = await response.text().catch(() => '');
+          throw new NetworkError(
+            `API request failed: ${response.status} ${errorText}`,
+            url,
+            response.status,
+          );
         }
 
-        const errorText = await response.text().catch(() => '');
-        throw new NetworkError(
-          `API request failed: ${response.status} ${errorText}`,
-          url,
-          response.status,
-        );
-      }
+        return response.json() as Promise<T>;
+      } catch (error) {
+        if (error instanceof AuthError) {
+          throw error;
+        }
 
-      return response.json() as Promise<T>;
-    } catch (error) {
-      if (error instanceof AuthError || error instanceof NetworkError) {
-        throw error;
+        const normalizedError =
+          error instanceof NetworkError
+            ? error
+            : new NetworkError(
+                `Failed to connect to API: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                url,
+              );
+
+        if (attempt >= maxRetries || !this.shouldRetry(normalizedError)) {
+          throw normalizedError;
+        }
+
+        attempt += 1;
+        const backoffMs = 150 * 2 ** (attempt - 1);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
-      throw new NetworkError(
-        `Failed to connect to API: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        url,
-      );
     }
   }
 
@@ -97,8 +139,12 @@ export class InternalApiClient {
    *
    * @returns List of organizations
    */
-  async listOrganizations(): Promise<Organization[]> {
-    const response = await this.request<{ organizations: Organization[] }>('/api/v1/organizations');
+  async listOrganizations(options?: InternalApiRequestOptions): Promise<Organization[]> {
+    const response = await this.request<{ organizations: Organization[] }>(
+      '/api/v1/organizations',
+      {},
+      options,
+    );
     return response.organizations;
   }
 
@@ -108,11 +154,54 @@ export class InternalApiClient {
    * @param organizationId - Organization ID
    * @returns List of projects
    */
-  async listProjects(organizationId: string): Promise<Project[]> {
+  async listProjects(
+    organizationId: string,
+    options?: InternalApiRequestOptions,
+  ): Promise<Project[]> {
     const response = await this.request<{ projects: Project[] }>(
       `/api/v1/organizations/${organizationId}/projects`,
+      {},
+      options,
     );
     return response.projects;
+  }
+
+  /**
+   * Get project details including sender configs.
+   *
+   * @param projectId - Project ID
+   * @returns Project with sender_configs
+   */
+  async getProject(projectId: string, options?: InternalApiRequestOptions): Promise<Project> {
+    const response = await this.request<{ project: Project }>(
+      `/api/v1/projects/${projectId}`,
+      {},
+      options,
+    );
+    return response.project;
+  }
+
+  /**
+   * Create or update sender config for push notifications.
+   *
+   * @param projectId - Project ID
+   * @param senderConfig - Sender configuration
+   * @returns Updated sender config
+   */
+  async createOrUpdateSenderConfig(
+    projectId: string,
+    senderConfig: SenderConfig,
+    options?: InternalApiRequestOptions,
+  ): Promise<SenderConfig> {
+    const response = await this.request<{ sender_config: SenderConfig }>(
+      `/api/v1/projects/${projectId}/sender-configs`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ sender_config: senderConfig }),
+      },
+      options,
+    );
+    return response.sender_config;
   }
 }
 

@@ -7,6 +7,7 @@ import {
   listChatSessions,
   ONE_WEEK_MS,
 } from '@/lib/services/session-store';
+import type { PreparationContext } from '../../../commands/skill/preparation';
 import type { AgentInfo } from '../../../lib/agents';
 import { detectAvailableAgents } from '../../../lib/agents';
 import {
@@ -25,6 +26,7 @@ export type OverlayType =
   | 'debug'
   | 'firebase'
   | 'ios-setup'
+  | 'install-preparation'
   | 'login'
   | 'logout'
   | 'whoami'
@@ -38,6 +40,7 @@ interface UseOverlaysOptions {
   switchAgent: ReturnType<typeof useChatActions>['switchAgent'];
   resumeSession: ReturnType<typeof useChatActions>['resumeSession'];
   executeDebugSession: ReturnType<typeof useChatActions>['executeDebugSession'];
+  executeInstallWithContext?: (context: PreparationContext) => void;
 }
 
 /**
@@ -52,6 +55,7 @@ export function useOverlays(options: UseOverlaysOptions) {
     switchAgent,
     resumeSession,
     executeDebugSession,
+    executeInstallWithContext,
   } = options;
 
   // Active overlay
@@ -117,6 +121,7 @@ export function useOverlays(options: UseOverlaysOptions) {
   const showDebugPrompt = useCallback(() => setActiveOverlay('debug'), []);
   const showFirebaseWizard = useCallback(() => setActiveOverlay('firebase'), []);
   const showIosSetupOverlay = useCallback(() => setActiveOverlay('ios-setup'), []);
+  const showInstallPreparation = useCallback(() => setActiveOverlay('install-preparation'), []);
   const showLoginOverlay = useCallback(() => setActiveOverlay('login'), []);
   const showLogoutOverlay = useCallback(() => setActiveOverlay('logout'), []);
   const showWhoamiOverlay = useCallback(() => setActiveOverlay('whoami'), []);
@@ -264,6 +269,20 @@ export function useOverlays(options: UseOverlaysOptions) {
     [addSystemMessage],
   );
 
+  // Install preparation handlers
+  const handleInstallPreparationComplete = useCallback(
+    (context: PreparationContext) => {
+      setActiveOverlay(null);
+      executeInstallWithContext?.(context);
+    },
+    [executeInstallWithContext],
+  );
+
+  const handleInstallPreparationCancel = useCallback(() => {
+    setActiveOverlay(null);
+    addSystemMessage('Install preparation cancelled');
+  }, [addSystemMessage]);
+
   // Login handlers
   const handleLoginComplete = useCallback(
     (message: string) => {
@@ -334,6 +353,11 @@ export function useOverlays(options: UseOverlaysOptions) {
     // iOS setup
     showIosSetupOverlay,
     handleIosSetupComplete,
+
+    // Install preparation
+    showInstallPreparation,
+    handleInstallPreparationComplete,
+    handleInstallPreparationCancel,
 
     // Auth overlays
     showLoginOverlay,

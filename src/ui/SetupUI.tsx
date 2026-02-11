@@ -17,6 +17,10 @@ import {
   getProjectConfigManager,
   type ProjectConfig,
 } from '@/lib/config';
+import {
+  fetchOrganizationsWithProjects,
+  type OrgWithProjects,
+} from '@/lib/services/organization-projects';
 import { detectProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
@@ -32,11 +36,6 @@ type SetupPhase =
   | 'saving_config'
   | 'complete'
   | 'error';
-
-interface OrgWithProjects {
-  org: Organization;
-  projects: Project[];
-}
 
 interface SetupUIProps {
   /** Called when setup completes successfully */
@@ -71,22 +70,6 @@ async function fetchUserName(
     }
     return '';
   }
-}
-
-/** Fetch organizations and their projects */
-async function fetchOrganizationsWithProjects(): Promise<OrgWithProjects[]> {
-  const orgsWithProjects: OrgWithProjects[] = [];
-  try {
-    const apiClient = getInternalApiClient();
-    const orgs = await apiClient.listOrganizations();
-    for (const org of orgs) {
-      const projects = await apiClient.listProjects(org.id);
-      orgsWithProjects.push({ org, projects });
-    }
-  } catch {
-    // Silently ignore org/project fetch errors
-  }
-  return orgsWithProjects;
 }
 
 export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPath }) => {
@@ -185,15 +168,15 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
         const isAuthenticated = await credentialsManager.isAuthenticated();
 
         if (isAuthenticated) {
-          // Already logged in, fetch data
+          // Already logged in, fetch data in parallel
           setPhase('fetching_data');
-          const name = await fetchUserName(pkceService);
+          const [member, orgsData] = await Promise.all([
+            fetchMember(),
+            fetchOrganizationsWithProjects(),
+          ]);
+          const name = member.name || member.email;
           setUserName(name);
-
-          const member = await fetchMember();
           memberRef.current = member;
-
-          const orgsData = await fetchOrganizationsWithProjects();
           setOrganizations(orgsData);
 
           // Check if there are projects to select from

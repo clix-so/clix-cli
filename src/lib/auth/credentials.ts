@@ -362,16 +362,13 @@ export class CredentialsManager {
 
   /**
    * Clear only Firebase tokens (keep Clix credentials).
+   * Does not delete the credentials file, only removes the firebase field.
    */
   async clearFirebaseTokens(): Promise<void> {
     const current = await this.load();
-    if (current) {
+    if (current?.firebase) {
       const { firebase: _, ...rest } = current;
-      if (rest.clix) {
-        await this.save({ ...rest, version: CREDENTIALS_VERSION });
-      } else {
-        await this.delete();
-      }
+      await this.save({ ...rest, version: CREDENTIALS_VERSION });
     }
   }
 

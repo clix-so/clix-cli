@@ -2,6 +2,7 @@
  * Message sending hook for user message submission.
  */
 import { useCallback } from 'react';
+import type { PreparationContext } from '../../../commands/skill/preparation';
 import { getDebugPrompt } from '../../../lib/services/debug-service';
 import { executeSkill as executeSkillLib, getSkillInfo, type SkillType } from '../../../lib/skills';
 import { generateMessageId, useChatContext } from '../context/ChatContext';
@@ -90,7 +91,7 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
   );
 
   const executeSkill = useCallback(
-    async (skillType: SkillType) => {
+    async (skillType: SkillType, preparationContext?: PreparationContext) => {
       if (!executorRef.current) {
         addSystemMessage('No agent configured. Please run "clix config" to select an agent.');
         return;
@@ -119,6 +120,7 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
           projectPath: process.cwd(),
           signal,
           oneShot: false, // Chat mode: enable session persistence
+          preparationContext,
         });
 
         await processStreamingMessages(messageGenerator, agentMessageId, { signal });

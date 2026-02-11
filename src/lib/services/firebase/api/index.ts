@@ -4,8 +4,7 @@
  * @module services/firebase/api
  */
 
-export { FirebaseApiClient } from './firebase-api';
-export { IamApiClient } from './iam-api';
+export { type ApiClientCredentials, FirebaseApiClient } from './firebase-api';
 export type {
   AndroidApp,
   CreateAndroidAppRequest,
@@ -13,7 +12,5 @@ export type {
   FirebaseProject,
   GcpProject,
   IosApp,
-  ServiceAccount,
   ServiceAccountJson,
-  ServiceAccountKey,
 } from './types';

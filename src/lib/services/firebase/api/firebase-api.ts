@@ -10,6 +10,8 @@ import {
 } from '@googleapis/cloudresourcemanager';
 import { firebase, type firebase_v1beta1 } from '@googleapis/firebase';
 import { OAuth2Client } from 'google-auth-library';
+import { oauthLogger } from '@/lib/debug/logger';
+import { findProjectRoot } from '@/lib/utils/path';
 import type {
   AndroidApp,
   CreateAndroidAppRequest,
@@ -22,88 +24,150 @@ import type {
 type FirebaseApi = firebase_v1beta1.Firebase;
 type ResourceManagerApi = cloudresourcemanager_v1.Cloudresourcemanager;
 
+/**
+ * Log API errors to debug.log for troubleshooting.
+ */
+function logApiError(operation: string, error: unknown): void {
+  const errorInfo = {
+    type: 'firebase_api_error',
+    operation,
+    message: error instanceof Error ? error.message : String(error),
+    name: error instanceof Error ? error.name : undefined,
+    // Extract Google API error details if available
+    code: (error as { code?: number | string })?.code,
+    errors: (error as { errors?: unknown[] })?.errors,
+    response: (error as { response?: { data?: unknown } })?.response?.data,
+  };
+  oauthLogger.writeToFile(`Firebase API error: ${operation}`, errorInfo, findProjectRoot());
+}
+
+export interface ApiClientCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
 export class FirebaseApiClient {
   private fb: FirebaseApi;
   private rm: ResourceManagerApi;
+  private auth: OAuth2Client;
+  private getAccessTokenFn: () => Promise<string>;
 
-  constructor(getAccessToken: () => Promise<string>) {
-    const auth = new OAuth2Client();
-    auth.getAccessToken = async () => ({ token: await getAccessToken() });
+  constructor(getAccessToken: () => Promise<string>, credentials?: ApiClientCredentials) {
+    this.getAccessTokenFn = getAccessToken;
 
-    this.fb = firebase({ version: 'v1beta1', auth });
-    this.rm = cloudresourcemanager({ version: 'v1', auth });
+    // Create OAuth2Client with credentials if provided
+    this.auth = credentials
+      ? new OAuth2Client({
+          clientId: credentials.clientId,
+          clientSecret: credentials.clientSecret,
+        })
+      : new OAuth2Client();
+
+    this.fb = firebase({ version: 'v1beta1', auth: this.auth });
+    this.rm = cloudresourcemanager({ version: 'v1', auth: this.auth });
+  }
+
+  /**
+   * Update OAuth2Client credentials with current access token.
+   * Must be called before each API request.
+   */
+  private async updateCredentials(): Promise<void> {
+    const token = await this.getAccessTokenFn();
+    this.auth.setCredentials({
+      access_token: token,
+      token_type: 'Bearer',
+    });
   }
 
   async listProjects(): Promise<FirebaseProject[]> {
-    const projects: FirebaseProject[] = [];
-    let pageToken: string | undefined;
+    try {
+      await this.updateCredentials();
+      const projects: FirebaseProject[] = [];
+      let pageToken: string | undefined;
 
-    do {
-      const res = await this.fb.projects.list({ pageToken });
-      for (const p of res.data.results ?? []) {
-        projects.push({
-          name: p.name ?? '',
-          projectId: p.projectId ?? '',
-          projectNumber: p.projectNumber ?? '',
-          displayName: p.displayName ?? '',
-          state: (p.state as 'ACTIVE' | 'DELETED') ?? 'ACTIVE',
-        });
-      }
-      pageToken = res.data.nextPageToken ?? undefined;
-    } while (pageToken);
+      do {
+        const res = await this.fb.projects.list({ pageToken });
+        for (const p of res.data.results ?? []) {
+          projects.push({
+            name: p.name ?? '',
+            projectId: p.projectId ?? '',
+            projectNumber: p.projectNumber ?? '',
+            displayName: p.displayName ?? '',
+            state: (p.state as 'ACTIVE' | 'DELETED') ?? 'ACTIVE',
+          });
+        }
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
 
-    return projects;
+      return projects;
+    } catch (error) {
+      logApiError('listProjects', error);
+      throw error;
+    }
   }
 
   async listAndroidApps(projectId: string): Promise<AndroidApp[]> {
-    const apps: AndroidApp[] = [];
-    let pageToken: string | undefined;
+    try {
+      await this.updateCredentials();
+      const apps: AndroidApp[] = [];
+      let pageToken: string | undefined;
 
-    do {
-      const res = await this.fb.projects.androidApps.list({
-        parent: `projects/${projectId}`,
-        pageToken,
-      });
-      for (const a of res.data.apps ?? []) {
-        apps.push({
-          name: a.name ?? '',
-          appId: a.appId ?? '',
-          displayName: a.displayName ?? undefined,
-          packageName: a.packageName ?? '',
-          projectId: a.projectId ?? projectId,
+      do {
+        const res = await this.fb.projects.androidApps.list({
+          parent: `projects/${projectId}`,
+          pageToken,
         });
-      }
-      pageToken = res.data.nextPageToken ?? undefined;
-    } while (pageToken);
+        for (const a of res.data.apps ?? []) {
+          apps.push({
+            name: a.name ?? '',
+            appId: a.appId ?? '',
+            displayName: a.displayName ?? undefined,
+            packageName: a.packageName ?? '',
+            projectId: a.projectId ?? projectId,
+          });
+        }
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
 
-    return apps;
+      return apps;
+    } catch (error) {
+      logApiError('listAndroidApps', error);
+      throw error;
+    }
   }
 
   async listIosApps(projectId: string): Promise<IosApp[]> {
-    const apps: IosApp[] = [];
-    let pageToken: string | undefined;
+    try {
+      await this.updateCredentials();
+      const apps: IosApp[] = [];
+      let pageToken: string | undefined;
 
-    do {
-      const res = await this.fb.projects.iosApps.list({
-        parent: `projects/${projectId}`,
-        pageToken,
-      });
-      for (const a of res.data.apps ?? []) {
-        apps.push({
-          name: a.name ?? '',
-          appId: a.appId ?? '',
-          displayName: a.displayName ?? undefined,
-          bundleId: a.bundleId ?? '',
-          projectId: a.projectId ?? projectId,
+      do {
+        const res = await this.fb.projects.iosApps.list({
+          parent: `projects/${projectId}`,
+          pageToken,
         });
-      }
-      pageToken = res.data.nextPageToken ?? undefined;
-    } while (pageToken);
+        for (const a of res.data.apps ?? []) {
+          apps.push({
+            name: a.name ?? '',
+            appId: a.appId ?? '',
+            displayName: a.displayName ?? undefined,
+            bundleId: a.bundleId ?? '',
+            projectId: a.projectId ?? projectId,
+          });
+        }
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
 
-    return apps;
+      return apps;
+    } catch (error) {
+      logApiError('listIosApps', error);
+      throw error;
+    }
   }
 
   async getAndroidConfig(projectId: string, appId: string): Promise<string> {
+    await this.updateCredentials();
     const res = await this.fb.projects.androidApps.getConfig({
       name: `projects/${projectId}/androidApps/${appId}/config`,
     });
@@ -111,6 +175,7 @@ export class FirebaseApiClient {
   }
 
   async getIosConfig(projectId: string, appId: string): Promise<string> {
+    await this.updateCredentials();
     const res = await this.fb.projects.iosApps.getConfig({
       name: `projects/${projectId}/iosApps/${appId}/config`,
     });
@@ -118,6 +183,7 @@ export class FirebaseApiClient {
   }
 
   async createAndroidApp(projectId: string, request: CreateAndroidAppRequest): Promise<AndroidApp> {
+    await this.updateCredentials();
     const res = await this.fb.projects.androidApps.create({
       parent: `projects/${projectId}`,
       requestBody: request,
@@ -137,6 +203,7 @@ export class FirebaseApiClient {
   }
 
   async createIosApp(projectId: string, request: CreateIosAppRequest): Promise<IosApp> {
+    await this.updateCredentials();
     const res = await this.fb.projects.iosApps.create({
       parent: `projects/${projectId}`,
       requestBody: request,
@@ -156,24 +223,30 @@ export class FirebaseApiClient {
   }
 
   async listGcpProjects(): Promise<GcpProject[]> {
-    const projects: GcpProject[] = [];
-    let pageToken: string | undefined;
+    try {
+      await this.updateCredentials();
+      const projects: GcpProject[] = [];
+      let pageToken: string | undefined;
 
-    do {
-      const res = await this.rm.projects.list({ pageToken });
-      for (const p of res.data.projects ?? []) {
-        projects.push({
-          projectId: p.projectId ?? '',
-          name: p.name ?? '',
-          projectNumber: p.projectNumber ?? '',
-          lifecycleState: (p.lifecycleState as GcpProject['lifecycleState']) ?? 'ACTIVE',
-          createTime: p.createTime ?? undefined,
-        });
-      }
-      pageToken = res.data.nextPageToken ?? undefined;
-    } while (pageToken);
+      do {
+        const res = await this.rm.projects.list({ pageToken });
+        for (const p of res.data.projects ?? []) {
+          projects.push({
+            projectId: p.projectId ?? '',
+            name: p.name ?? '',
+            projectNumber: p.projectNumber ?? '',
+            lifecycleState: (p.lifecycleState as GcpProject['lifecycleState']) ?? 'ACTIVE',
+            createTime: p.createTime ?? undefined,
+          });
+        }
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
 
-    return projects;
+      return projects;
+    } catch (error) {
+      logApiError('listGcpProjects', error);
+      throw error;
+    }
   }
 
   async listAvailableGcpProjects(): Promise<GcpProject[]> {
@@ -188,6 +261,7 @@ export class FirebaseApiClient {
   }
 
   async addFirebaseToProject(projectId: string): Promise<FirebaseProject> {
+    await this.updateCredentials();
     const res = await this.fb.projects.addFirebase({ project: `projects/${projectId}` });
     if (!res.data.name) {
       throw new Error('Failed to add Firebase: no operation name returned');
@@ -208,6 +282,7 @@ export class FirebaseApiClient {
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitMs) {
+      await this.updateCredentials();
       const res = await this.fb.operations.get({ name: operationName });
       if (res.data.done) {
         if (res.data.error) {

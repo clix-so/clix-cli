@@ -10,7 +10,6 @@
         "@expo/plist": "^0.4.8",
         "@googleapis/cloudresourcemanager": "^6.0.1",
         "@googleapis/firebase": "^12.0.1",
-        "@googleapis/iam": "^36.0.0",
         "asciify-image": "^0.1.10",
         "google-auth-library": "^10.5.0",
         "ink": "^6.6.0",
@@ -73,8 +72,6 @@
     "@googleapis/cloudresourcemanager": ["@googleapis/cloudresourcemanager@6.0.1", "", { "dependencies": { "googleapis-common": "^8.0.0" } }, "sha512-HO/1fwrqiE0msHxSXreM6ljCHuzBW+zEfKIKdzbcTsu+OBDJtWJxQ0flcD4kS2c4rVZ2W1j+RUQ1+eFquN56Mg=="],
 
     "@googleapis/firebase": ["@googleapis/firebase@12.0.1", "", { "dependencies": { "googleapis-common": "^8.0.0" } }, "sha512-ODFU7EbB2G/WFsXiNCXjRgJPRxT5JYh3ydznNdsVng/1SnWmQZK8Bgufvxq6ZWnNDqZJTtNUqAwjbMBoP6N3MA=="],
-
-    "@googleapis/iam": ["@googleapis/iam@36.0.0", "", { "dependencies": { "googleapis-common": "^8.0.0" } }, "sha512-dPrhP3zswkP3+ADoJjuMQissm/4591545N+7nQ11YsEJKTvJCYnAfXjdkJ4QyThdLNIx8TnzRAU2PGW9Sv9NrA=="],
 
     "@iarna/toml": ["@iarna/toml@2.2.5", "", {}, "sha512-trnsAYxU3xnS1gPHPyU961coFyLkh4gAD/0zQ5mymY4yOZ+CYvsPqUbOFSw0aDM4y0tV7tiFxL/1XfXPNC6IPg=="],
 

@@ -66,6 +66,32 @@ Key files:
 
 `src/ui/chat/ChatApp.tsx` - Main component with context provider. State split into focused hooks under `src/ui/chat/hooks/`.
 
+### FirebaseWizard State Machine
+
+`src/ui/components/FirebaseWizard.tsx` - Multi-phase wizard for Firebase configuration. Uses a centralized state machine pattern.
+
+**Phase transition map**: `src/ui/components/firebase-wizard-transitions.ts`
+
+- `PHASE_TRANSITIONS` - All valid phase transitions in one map
+- `transition(from, event)` - Validated transition function (throws on invalid transitions)
+- `ExtendedWizardPhase` - Union type of all 24 phases
+
+**Rules when modifying FirebaseWizard**:
+
+1. **Update `PHASE_TRANSITIONS` first** - Add/modify transition rules in the map before changing handlers
+2. **Use `transition()` for all `setPhase()` calls** - Never call `setPhase('phase')` directly; use `setPhase(transition('currentPhase', 'event'))` instead
+3. **One `setPhase` per handler** - Avoid multiple `setPhase()` calls in a single async handler. If a handler needs multiple steps, split into separate phases with `useEffect`
+4. **"Direct set" exceptions** - Only use direct `setPhase()` when the source phase is ambiguous (entry points from multiple phases). Add a `// Direct set:` comment explaining why
+
+**Flow overview**:
+```
+detecting → status → menu → (actions)
+menu/download → authenticating → select_project → select_*_app → downloading
+downloading → checking_sender_config → service_account_menu → paste → saving → complete
+```
+
+**Tests**: `src/ui/components/__tests__/firebase-wizard-transitions.test.ts` (34 tests, 100% coverage on transition file)
+
 ### Skills
 
 `src/lib/skills.ts` - Manages skill workflows.

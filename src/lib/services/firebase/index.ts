@@ -12,10 +12,8 @@ export type {
   FirebaseProject,
   GcpProject,
   IosApp,
-  ServiceAccount,
   ServiceAccountJson,
 } from './api';
-export { IamApiClient } from './api';
 
 // Detection and validation
 export { detectFirebaseConfig, getExpectedPaths } from './detector';

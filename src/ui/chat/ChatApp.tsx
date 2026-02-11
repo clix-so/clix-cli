@@ -7,6 +7,7 @@ import type { InstallationMethod, UpdateCheckResult } from '../../lib/services/u
 import { AgentSelector } from '../components/AgentSelector';
 import { DebugPrompt } from '../components/DebugPrompt';
 import { FirebaseWizard } from '../components/FirebaseWizard';
+import { InstallPreparationUI } from '../components/InstallPreparationUI';
 import { IosSetupFlow } from '../components/IosSetupFlow';
 import { MCPInstallSelector } from '../components/MCPInstallSelector';
 import { SessionSelector } from '../components/SessionSelector';
@@ -118,6 +119,14 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
     [onExit, exit],
   );
 
+  // Execute install skill with preparation context
+  const executeInstallWithContext = useCallback(
+    (context: Parameters<typeof chatActions.executeSkill>[1]) => {
+      chatActions.executeSkill('install', context);
+    },
+    [chatActions],
+  );
+
   // Overlay management
   const overlays = useOverlays({
     currentAgent,
@@ -127,6 +136,7 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
     switchAgent: chatActions.switchAgent,
     resumeSession: chatActions.resumeSession,
     executeDebugSession: chatActions.executeDebugSession,
+    executeInstallWithContext,
   });
 
   // Handle direct transfer command with agent name
@@ -231,6 +241,7 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
       {overlays.activeOverlay === 'firebase' && (
         <FirebaseWizard
           projectPath={process.cwd()}
+          clixProjectId={projectConfig?.project.id}
           onComplete={overlays.handleFirebaseComplete}
           onCancel={overlays.handleFirebaseCancel}
         />
@@ -240,6 +251,13 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
           onComplete={(result) => {
             overlays.handleIosSetupComplete(result.message);
           }}
+        />
+      )}
+      {overlays.activeOverlay === 'install-preparation' && (
+        <InstallPreparationUI
+          projectPath={process.cwd()}
+          onComplete={overlays.handleInstallPreparationComplete}
+          onCancel={overlays.handleInstallPreparationCancel}
         />
       )}
       {overlays.activeOverlay === 'login' && (

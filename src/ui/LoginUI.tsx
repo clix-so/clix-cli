@@ -18,6 +18,10 @@ import {
   getProjectConfigManager,
   type ProjectConfig,
 } from '@/lib/config';
+import {
+  fetchOrganizationsWithProjects,
+  type OrgWithProjects,
+} from '@/lib/services/organization-projects';
 import { detectProjectType, formatProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
@@ -32,11 +36,6 @@ type LoginPhase =
   | 'selecting_project'
   | 'complete'
   | 'error';
-
-interface OrgWithProjects {
-  org: Organization;
-  projects: Project[];
-}
 
 interface LoginUIProps {
   /** Called when login completes successfully */
@@ -69,22 +68,6 @@ async function fetchUserName(
     }
     return '';
   }
-}
-
-/** Fetch organizations and their projects */
-async function fetchOrganizationsWithProjects(): Promise<OrgWithProjects[]> {
-  const orgsWithProjects: OrgWithProjects[] = [];
-  try {
-    const apiClient = getInternalApiClient();
-    const orgs = await apiClient.listOrganizations();
-    for (const org of orgs) {
-      const projects = await apiClient.listProjects(org.id);
-      orgsWithProjects.push({ org, projects });
-    }
-  } catch {
-    // Silently ignore org/project fetch errors
-  }
-  return orgsWithProjects;
 }
 
 /** Check if user is already logged in with valid credentials */
@@ -241,14 +224,23 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         const credentials = createClixCredentials(tokenResponse, issuer, config.audience);
         await credentialsManager.saveClixCredentials(credentials);
 
-        // Verify login
+        // Verify login and fetch data in parallel
         setPhase('verifying');
-        const name = await fetchUserName(pkceService, tokenResponse);
-        setUserName(name);
         credentialsRef.current = credentials;
-
-        // Fetch organizations and projects
-        const orgsData = await fetchOrganizationsWithProjects();
+        const [memberResult, orgsData] = await Promise.all([
+          fetchMember().catch(() => null),
+          fetchOrganizationsWithProjects(),
+        ]);
+        let name: string;
+        if (memberResult) {
+          name = memberResult.name || memberResult.email;
+        } else if (tokenResponse?.id_token) {
+          const userInfo = pkceService.parseIdToken(tokenResponse.id_token);
+          name = userInfo?.name ?? userInfo?.email ?? '';
+        } else {
+          name = '';
+        }
+        setUserName(name);
         setOrganizations(orgsData);
 
         // Check if there are projects to select from

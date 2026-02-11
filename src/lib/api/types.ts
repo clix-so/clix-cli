@@ -29,6 +29,25 @@ export interface Project {
   name: string;
   organization_id: string;
   public_key?: string;
+  sender_configs?: SenderConfig[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * App push sender configuration for FCM.
+ */
+export interface AppPushSenderConfig {
+  ios_config?: { fcm_sa_json_base64_encoded: string };
+  android_config?: { fcm_sa_json_base64_encoded: string };
+}
+
+/**
+ * Sender configuration for push notifications.
+ */
+export interface SenderConfig {
+  channel_type: string;
+  app_push?: AppPushSenderConfig;
   created_at?: string;
   updated_at?: string;
 }

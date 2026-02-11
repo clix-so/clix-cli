@@ -21,21 +21,20 @@ import {
   parseServiceAccountJson,
   platformNeedsAndroid,
   platformNeedsIos,
-  quickValidateServiceAccountJson,
-  type ServiceAccount,
   type ServiceAccountJson,
   type ServiceAccountValidationResult,
-  type WizardPhase,
 } from '@/lib/services/firebase';
 import { detectProjectType } from '@/lib/services/project-detector';
 import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 import { useCancelInput } from '@/ui/hooks';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
+import { type ExtendedWizardPhase, transition } from './firebase-wizard-transitions';
 import { GenericSelector, type SelectorItem } from './GenericSelector';
 
 interface FirebaseWizardProps {
   projectPath: string;
   projectType?: ProjectType;
+  clixProjectId?: string;
   onComplete: (result: FirebaseSetupResult) => void;
   onCancel?: () => void;
 }
@@ -43,31 +42,6 @@ interface FirebaseWizardProps {
 interface MenuAction extends SelectorItem {
   action: CredentialAction;
 }
-
-/**
- * Extended wizard phase for download flow.
- */
-type ExtendedWizardPhase =
-  | WizardPhase
-  | 'authenticating'
-  | 'select_project'
-  | 'select_android_app'
-  | 'select_ios_app'
-  | 'downloading'
-  | 'no_apps_found'
-  | 'create_android_app'
-  | 'create_ios_app'
-  | 'creating_app'
-  // New phases for no projects and service account
-  | 'no_projects'
-  | 'select_gcp_project'
-  | 'adding_firebase'
-  | 'service_account_menu'
-  | 'select_service_account'
-  | 'create_service_account'
-  | 'creating_service_account'
-  | 'paste_service_account'
-  | 'saving_service_account';
 
 /**
  * No apps found context (which platform apps are missing).
@@ -205,8 +179,9 @@ function buildMenuItems(result: FirebaseDetectionResult): MenuAction[] {
   items.push(...buildAndroidMenuItems(result, needsAndroid));
   items.push(...buildIosMenuItems(result, needsIos));
 
-  // Service Account setup (if OAuth is configured and project is configured)
-  if (isOAuthConfigured() && result.android?.valid) {
+  // Service Account setup (if OAuth is configured and any platform config is valid)
+  const hasValidConfig = result.android?.valid || result.ios?.valid;
+  if (isOAuthConfigured() && hasValidConfig) {
     items.push({
       id: 'setup-service-account',
       label: '🔑 Setup Service Account',
@@ -748,8 +723,7 @@ function AddingFirebasePhase({ projectId }: { projectId: string }): React.ReactE
  * Service Account menu action type.
  */
 type ServiceAccountMenuAction =
-  | { type: 'select_existing' }
-  | { type: 'create_new' }
+  | { type: 'open_console' }
   | { type: 'paste_json' }
   | { type: 'skip' };
 
@@ -767,12 +741,8 @@ function ServiceAccountMenuPhase({
 }): React.ReactElement {
   const items: Array<{ label: string; value: ServiceAccountMenuAction }> = [
     {
-      label: '➕ Create new Service Account',
-      value: { type: 'create_new' },
-    },
-    {
-      label: '📋 Select existing Service Account',
-      value: { type: 'select_existing' },
+      label: '🌐 Download from Firebase Console',
+      value: { type: 'open_console' },
     },
     {
       label: '📄 Paste Service Account JSON',
@@ -796,13 +766,19 @@ function ServiceAccountMenuPhase({
       marginY={1}
     >
       <Box marginBottom={1}>
-        <Text bold>🔑 Service Account Setup</Text>
+        <Text bold>Service Account Setup</Text>
       </Box>
       <Box marginBottom={1}>
         <Text>Project: {projectId}</Text>
       </Box>
       <Box marginBottom={1}>
         <Text dimColor>Service Account is required for server-side Firebase Admin SDK.</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>
+          Download the private key JSON from Firebase Console (Project Settings → Service Accounts →
+          Generate new private key), then paste it here.
+        </Text>
       </Box>
       <SelectInput items={items} onSelect={(item) => onAction(item.value)} />
       <Box marginTop={1}>
@@ -813,168 +789,56 @@ function ServiceAccountMenuPhase({
 }
 
 /**
- * Service Account selector component.
+ * Import Service Account JSON phase component.
+ * Accepts a file path to a downloaded JSON file.
  */
-function ServiceAccountSelector({
-  accounts,
-  onSelect,
-  onCancel,
-}: {
-  accounts: ServiceAccount[];
-  onSelect: (account: ServiceAccount) => void;
-  onCancel: () => void;
-}): React.ReactElement {
-  const items = accounts.map((a) => ({
-    label: a.displayName || a.email,
-    value: a,
-  }));
-
-  useCancelInput(onCancel);
-
-  return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="blue"
-      paddingX={1}
-      marginX={1}
-      marginY={1}
-    >
-      <Box marginBottom={1}>
-        <Text bold>Select Service Account</Text>
-      </Box>
-      <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
-      <Box marginTop={1}>
-        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
-      </Box>
-    </Box>
-  );
-}
-
 /**
- * Create Service Account input phase component.
+ * Read text content from system clipboard.
+ * Uses pbpaste on macOS, xclip or xsel on Linux.
  */
-function CreateServiceAccountInputPhase({
-  projectId,
-  onSubmit,
-  onCancel,
-}: {
-  projectId: string;
-  onSubmit: (accountId: string, displayName?: string) => void;
-  onCancel: () => void;
-}): React.ReactElement {
-  const [accountId, setAccountId] = useState('clix-firebase-admin');
-  const [displayName, setDisplayName] = useState('');
-  const [stage, setStage] = useState<'accountId' | 'displayName'>('accountId');
+async function readClipboard(): Promise<string | null> {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const execFileAsync = promisify(execFile);
 
-  useCancelInput(onCancel);
-
-  const handleAccountIdSubmit = useCallback(() => {
-    if (accountId.trim()) {
-      setStage('displayName');
+  const platform = process.platform;
+  try {
+    if (platform === 'darwin') {
+      const { stdout } = await execFileAsync('pbpaste', []);
+      return stdout;
     }
-  }, [accountId]);
-
-  const handleDisplayNameSubmit = useCallback(() => {
-    onSubmit(accountId.trim(), displayName.trim() || undefined);
-  }, [accountId, displayName, onSubmit]);
-
-  return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="blue"
-      paddingX={1}
-      marginX={1}
-      marginY={1}
-    >
-      <Box marginBottom={1}>
-        <Text bold>Create Service Account</Text>
-      </Box>
-      <Box marginBottom={1}>
-        <Text dimColor>Project: {projectId}</Text>
-      </Box>
-
-      {stage === 'accountId' ? (
-        <>
-          <Box marginBottom={1}>
-            <Text>
-              Account ID: <Text dimColor>(e.g., clix-firebase-admin)</Text>
-            </Text>
-          </Box>
-          <Box>
-            <Text color="blue">{'> '}</Text>
-            <TextInput
-              value={accountId}
-              onChange={setAccountId}
-              placeholder="clix-firebase-admin"
-              onSubmit={handleAccountIdSubmit}
-            />
-          </Box>
-          <Box marginTop={1}>
-            <Text dimColor>Enter to continue · Esc/Ctrl+C cancel</Text>
-          </Box>
-        </>
-      ) : (
-        <>
-          <Box marginBottom={1}>
-            <Text dimColor>Account ID: {accountId}</Text>
-          </Box>
-          <Box marginBottom={1}>
-            <Text>
-              Display Name: <Text dimColor>(optional)</Text>
-            </Text>
-          </Box>
-          <Box>
-            <Text color="blue">{'> '}</Text>
-            <TextInput
-              value={displayName}
-              onChange={setDisplayName}
-              placeholder="Clix Firebase Admin"
-              onSubmit={handleDisplayNameSubmit}
-            />
-          </Box>
-          <Box marginTop={1}>
-            <Text dimColor>Enter to create · Esc/Ctrl+C cancel</Text>
-          </Box>
-        </>
-      )}
-    </Box>
-  );
+    if (platform === 'linux') {
+      try {
+        const { stdout } = await execFileAsync('xclip', ['-selection', 'clipboard', '-o']);
+        return stdout;
+      } catch {
+        const { stdout } = await execFileAsync('xsel', ['--clipboard', '--output']);
+        return stdout;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Creating Service Account phase component.
+ * Read file content from a file path.
+ * Supports ~ home directory and relative paths.
  */
-function CreatingServiceAccountPhase(): React.ReactElement {
-  return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="blue"
-      paddingX={1}
-      marginX={1}
-      marginY={1}
-    >
-      <Box marginBottom={1}>
-        <Text bold>Service Account Creation</Text>
-      </Box>
-      <Box>
-        <Text dimColor>
-          <Spinner type="dots" />
-        </Text>
-        <Text> Creating service account and generating key...</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>This may take a moment...</Text>
-      </Box>
-    </Box>
-  );
+async function readFileFromPath(filePath: string): Promise<string> {
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+
+  // Strip surrounding quotes (from drag & drop on some terminals)
+  const cleaned = filePath.replace(/^['"]|['"]$/g, '');
+  const resolved = cleaned.startsWith('~')
+    ? path.join(process.env.HOME || '', cleaned.slice(1))
+    : path.resolve(cleaned);
+
+  return fs.readFile(resolved, 'utf-8');
 }
 
-/**
- * Paste Service Account JSON phase component with real-time validation.
- */
 function PasteServiceAccountPhase({
   onSubmit,
   onCancel,
@@ -982,40 +846,65 @@ function PasteServiceAccountPhase({
   onSubmit: (json: ServiceAccountJson) => void;
   onCancel: () => void;
 }): React.ReactElement {
-  const [jsonInput, setJsonInput] = useState('');
+  const [input, setInput] = useState('');
   const [validation, setValidation] = useState<ServiceAccountValidationResult | null>(null);
-  const [quickValidation, setQuickValidation] = useState<ReturnType<
-    typeof quickValidateServiceAccountJson
-  > | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState('');
 
   useCancelInput(onCancel);
 
-  // Real-time validation
-  useEffect(() => {
-    if (!jsonInput.trim()) {
-      setValidation(null);
-      setQuickValidation(null);
-      return;
-    }
+  const processJson = useCallback(
+    (content: string, source: string) => {
+      const result = parseServiceAccountJson(content);
+      if (result.valid && result.data) {
+        setValidation(result);
+        onSubmit(result.data);
+      } else {
+        setValidation(result);
+        setErrorMsg(`Invalid Service Account JSON (from ${source})`);
+      }
+    },
+    [onSubmit],
+  );
 
-    // Quick validation for UI feedback
-    const quick = quickValidateServiceAccountJson(jsonInput);
-    setQuickValidation(quick);
+  const handleSubmit = useCallback(async () => {
+    const trimmed = input.trim();
 
-    // Full validation if it looks like service account JSON
-    if (quick.isJson && quick.isServiceAccount) {
-      const result = parseServiceAccountJson(jsonInput);
-      setValidation(result);
-    } else {
-      setValidation(null);
-    }
-  }, [jsonInput]);
+    setLoading(true);
+    setErrorMsg(null);
+    setValidation(null);
 
-  const handleSubmit = useCallback(() => {
-    if (validation?.valid && validation.data) {
-      onSubmit(validation.data);
+    try {
+      if (!trimmed) {
+        // Empty input → read from clipboard
+        setLoadingText('Reading from clipboard...');
+        const clipboard = await readClipboard();
+        if (!clipboard?.trim()) {
+          setErrorMsg('Clipboard is empty. Copy the JSON content first.');
+          return;
+        }
+        processJson(clipboard, 'clipboard');
+      } else if (trimmed.startsWith('{')) {
+        // JSON-like input → parse directly
+        processJson(trimmed, 'input');
+      } else {
+        // File path → read file
+        setLoadingText('Reading file...');
+        const content = await readFileFromPath(trimmed);
+        processJson(content, 'file');
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        setErrorMsg('File not found. Please check the path.');
+      } else {
+        setErrorMsg(err instanceof Error ? err.message : 'Failed to read input');
+      }
+    } finally {
+      setLoading(false);
+      setLoadingText('');
     }
-  }, [validation, onSubmit]);
+  }, [input, processJson]);
 
   return (
     <Box
@@ -1027,81 +916,56 @@ function PasteServiceAccountPhase({
       marginY={1}
     >
       <Box marginBottom={1}>
-        <Text bold>Paste Service Account JSON</Text>
+        <Text bold>Import Service Account JSON</Text>
       </Box>
       <Box marginBottom={1}>
         <Text dimColor>
           Firebase Console → Project Settings → Service accounts → Generate new private key
         </Text>
       </Box>
+      <Box flexDirection="column" marginBottom={1}>
+        <Text dimColor>1. Copy JSON to clipboard → press Enter</Text>
+        <Text dimColor>2. Drag the JSON file here → press Enter</Text>
+      </Box>
 
-      <Box marginY={1}>
+      <Box>
         <Text color="blue">{'> '}</Text>
         <TextInput
-          value={jsonInput}
-          onChange={setJsonInput}
-          placeholder='{"type": "service_account", ...}'
+          value={input}
+          onChange={setInput}
+          placeholder="Press Enter to read clipboard, or drag file here"
           onSubmit={handleSubmit}
         />
       </Box>
 
-      {/* Validation status display */}
-      {jsonInput.trim() && (
-        <Box flexDirection="column" marginY={1}>
-          {quickValidation && (
-            <>
-              <Box>
-                <Text color={quickValidation.isJson ? 'green' : 'red'}>
-                  {quickValidation.isJson ? '✓' : '✗'} JSON format
-                </Text>
-              </Box>
-              {quickValidation.isJson && (
-                <>
-                  <Box>
-                    <Text color={quickValidation.isServiceAccount ? 'green' : 'red'}>
-                      {quickValidation.isServiceAccount ? '✓' : '✗'} Service Account type
-                    </Text>
-                  </Box>
-                  <Box>
-                    <Text color={quickValidation.hasPrivateKey ? 'green' : 'red'}>
-                      {quickValidation.hasPrivateKey ? '✓' : '✗'} Private key present
-                    </Text>
-                  </Box>
-                  {quickValidation.projectId && (
-                    <Box>
-                      <Text dimColor> Project: {quickValidation.projectId}</Text>
-                    </Box>
-                  )}
-                </>
-              )}
-            </>
-          )}
+      {loading && (
+        <Box marginTop={1}>
+          <Text dimColor>
+            <Spinner type="dots" />
+          </Text>
+          <Text> {loadingText}</Text>
+        </Box>
+      )}
 
-          {/* Full validation errors */}
-          {validation && !validation.valid && (
-            <Box flexDirection="column" marginTop={1}>
-              <Text color="red">Validation errors:</Text>
-              {validation.errors.map((err) => (
-                <Box key={err}>
-                  <Text color="red"> • {err}</Text>
-                </Box>
-              ))}
-            </Box>
-          )}
+      {errorMsg && (
+        <Box marginTop={1}>
+          <Text color="red">✗ {errorMsg}</Text>
+        </Box>
+      )}
 
-          {/* Success message */}
-          {validation?.valid && (
-            <Box marginTop={1}>
-              <Text color="green" bold>
-                ✓ Valid Service Account JSON - Press Enter to save
-              </Text>
+      {validation && !validation.valid && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color="red">Validation errors:</Text>
+          {validation.errors.map((err) => (
+            <Box key={err}>
+              <Text color="red"> • {err}</Text>
             </Box>
-          )}
+          ))}
         </Box>
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>{validation?.valid ? 'Enter to save · ' : ''}Esc/Ctrl+C cancel</Text>
+        <Text dimColor>Enter to import · Esc/Ctrl+C cancel</Text>
       </Box>
     </Box>
   );
@@ -1129,6 +993,121 @@ function SavingServiceAccountPhase(): React.ReactElement {
         </Text>
         <Text> Saving service account key...</Text>
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * Checking sender config phase component.
+ */
+function CheckingSenderConfigPhase(): React.ReactElement {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="gray"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Firebase Configuration</Text>
+      </Box>
+      <Box>
+        <Text dimColor>
+          <Spinner type="dots" />
+        </Text>
+        <Text> Checking push notification configuration...</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Sender config already registered phase component.
+ */
+function SenderConfigRegisteredPhase({
+  updatedAt,
+  onContinue,
+  onCancel,
+}: {
+  updatedAt: string | null;
+  onContinue: () => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  useInput((_input, key) => {
+    if (key.return) {
+      onContinue();
+    }
+  });
+
+  useCancelInput(onCancel);
+
+  const formattedDate = updatedAt ? new Date(updatedAt).toLocaleString() : 'unknown';
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="green"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Push Notification Configuration</Text>
+      </Box>
+      <Box>
+        <Text color="green">✓ FCM sender config is already registered</Text>
+      </Box>
+      <Box>
+        <Text dimColor>Configured at: {formattedDate}</Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>Press Enter to continue, Esc/Ctrl+C to cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Registering sender config phase component.
+ */
+function RegisteringSenderConfigPhase({
+  result,
+}: {
+  result: 'success' | 'failed' | null;
+}): React.ReactElement {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={result === 'failed' ? 'yellow' : 'blue'}
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Push Notification Configuration</Text>
+      </Box>
+      {result === 'success' ? (
+        <Box>
+          <Text color="green">✓ Push notification configured successfully</Text>
+        </Box>
+      ) : result === 'failed' ? (
+        <Box>
+          <Text color="yellow">
+            ✗ Failed to register sender config (can be configured later in Console)
+          </Text>
+        </Box>
+      ) : (
+        <Box>
+          <Text dimColor>
+            <Spinner type="dots" />
+          </Text>
+          <Text> Registering push notification configuration...</Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -1288,6 +1267,20 @@ Add this to your OAuth client: ${OAUTH_CALLBACK_CONFIG.getCallbackUrlIp()}`;
     return `The authorization code has expired or already been used.
 Please try again.`;
   }
+  if (error.includes('invalid_request')) {
+    return `The OAuth request was malformed or missing required parameters.
+This can happen when:
+- OAuth client redirect URI is misconfigured
+- Required PKCE parameters are missing or invalid
+- Browser session expired before completing auth
+
+Check .clix/debug.log for detailed error information.`;
+  }
+  if (error.includes('API has not been used in project') || error.includes('it is disabled')) {
+    return `A required Google Cloud API is not enabled for this project.
+Visit the URL shown above to enable it in Google Cloud Console.
+After enabling, wait a few minutes then press Enter to retry.`;
+  }
   return null;
 }
 
@@ -1333,6 +1326,11 @@ function ErrorPhase({
       {hint && (
         <Box flexDirection="column" marginBottom={1}>
           <Text color="yellow">{hint}</Text>
+        </Box>
+      )}
+      {!hint && (
+        <Box marginBottom={1}>
+          <Text dimColor>See .clix/debug.log for details</Text>
         </Box>
       )}
       <Box>
@@ -1401,6 +1399,7 @@ function CompletePhase({
 export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   projectPath,
   projectType: propProjectType,
+  clixProjectId,
   onComplete,
   onCancel,
 }) => {
@@ -1430,8 +1429,11 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   const [selectedGcpProject, setSelectedGcpProject] = useState<GcpProject | null>(null);
 
   // Service Account flow state
-  const [serviceAccounts, setServiceAccounts] = useState<ServiceAccount[]>([]);
   const [, setServiceAccountJson] = useState<ServiceAccountJson | null>(null);
+
+  // Sender config state
+  const [senderConfigUpdatedAt, setSenderConfigUpdatedAt] = useState<string | null>(null);
+  const [senderConfigResult, setSenderConfigResult] = useState<'success' | 'failed' | null>(null);
 
   const [service, setService] = useState<FirebaseService | null>(null);
   const [projectType, setProjectType] = useState<ProjectType | null>(propProjectType ?? null);
@@ -1446,10 +1448,10 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         setService(firebaseService);
         const detectionResult = await firebaseService.detect();
         setResult(detectionResult);
-        setPhase('status');
+        setPhase(transition('detecting', 'success'));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Detection failed');
-        setPhase('error');
+        setPhase(transition('detecting', 'error'));
       }
     };
 
@@ -1458,13 +1460,47 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     }
   }, [phase, projectPath, propProjectType]);
 
+  // Sender config check effect
+  useEffect(() => {
+    if (phase !== 'checking_sender_config') return;
+
+    const checkSenderConfig = async () => {
+      // Skip API check if no Clix project linked, but still go to SA setup
+      if (!clixProjectId) {
+        setPhase(transition('checking_sender_config', 'skip'));
+        return;
+      }
+
+      try {
+        const { getInternalApiClient } = await import('@/lib/api');
+        const apiClient = getInternalApiClient();
+        const project = await apiClient.getProject(clixProjectId);
+        const pushConfig = project.sender_configs?.find(
+          (c) => c.channel_type === 'CHANNEL_TYPE_APP_PUSH',
+        );
+
+        if (pushConfig) {
+          setSenderConfigUpdatedAt(pushConfig.updated_at ?? pushConfig.created_at ?? null);
+          setPhase(transition('checking_sender_config', 'registered'));
+        } else {
+          setPhase(transition('checking_sender_config', 'not_registered'));
+        }
+      } catch {
+        // API error should not block setup, still go to SA menu
+        setPhase(transition('checking_sender_config', 'error'));
+      }
+    };
+
+    checkSenderConfig();
+  }, [phase, clixProjectId]);
+
   const handleContinue = useCallback(() => {
-    setPhase('menu');
+    setPhase(transition('status', 'continue'));
   }, []);
 
   const handleSkip = useCallback(() => {
     setSkipped(true);
-    setPhase('complete');
+    setPhase(transition('menu', 'skip'));
     onComplete({
       completed: false,
       skipped: true,
@@ -1487,7 +1523,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     async (project: FirebaseProject, androidApp: AndroidApp | null, iosApp: IosApp | null) => {
       if (!projectType) {
         setError('Project type not detected');
-        setPhase('error');
+        setPhase(transition('select_project', 'error'));
         return;
       }
 
@@ -1498,7 +1534,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       } else {
         setDownloadingPlatform('ios');
       }
-      setPhase('downloading');
+      setPhase('downloading'); // Direct set: entry point from multiple phases
 
       try {
         const paths = downloader.getExpectedSavePaths(projectPath, projectType);
@@ -1520,10 +1556,10 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
           const newResult = await service.detect();
           setResult(newResult);
         }
-        setPhase('status');
+        setPhase(transition('downloading', 'success'));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Download failed');
-        setPhase('error');
+        setPhase(transition('downloading', 'error'));
       }
     },
     [projectPath, projectType, downloader, service],
@@ -1566,7 +1602,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         } else if (apps.length === 1) {
           downloadConfigsRef.current(project, app, apps[0]);
         } else {
-          setPhase('select_ios_app');
+          setPhase(transition('select_android_app', 'select_ios_app'));
         }
       } catch {
         // Failed to get iOS apps, just download Android
@@ -1593,7 +1629,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       if (apps.length === 1) {
         androidAppSelectRef.current(apps[0], project, needsIosConfig);
       } else {
-        setPhase('select_android_app');
+        setPhase(transition('select_project', 'select_android_app'));
       }
       return true;
     },
@@ -1613,7 +1649,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       if (apps.length === 1) {
         iosAppSelectRef.current(apps[0], project);
       } else {
-        setPhase('select_ios_app');
+        setPhase(transition('select_project', 'select_ios_app'));
       }
       return true;
     },
@@ -1662,7 +1698,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
       if (!shouldFetchAndroid && !shouldFetchIos) {
         setError('No configuration files needed for this platform.');
-        setPhase('error');
+        setPhase(transition('select_project', 'error'));
         return;
       }
 
@@ -1680,11 +1716,11 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
             needsAndroid: shouldFetchAndroid,
             needsIos: shouldFetchIos,
           });
-          setPhase('no_apps_found');
+          setPhase(transition('select_project', 'no_apps_found'));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch apps');
-        setPhase('error');
+        setPhase(transition('select_project', 'error'));
       }
     },
     [getPlatformNeeds, fetchAppsForPlatforms, result],
@@ -1696,7 +1732,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
   // Handle download authentication
   const handleDownload = useCallback(async () => {
-    setPhase('authenticating');
+    setPhase('authenticating'); // Direct set: entry point from menu/download action
 
     try {
       // Check if already authenticated
@@ -1707,7 +1743,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         const authResult = await downloader.authenticate(openBrowser);
         if (!authResult.success) {
           setError(authResult.error || 'Authentication failed. Please try again.');
-          setPhase('error');
+          setPhase(transition('authenticating', 'error'));
           return;
         }
       }
@@ -1716,7 +1752,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       const fetchedProjects = await downloader.listProjects();
       if (fetchedProjects.length === 0) {
         // No Firebase projects - show options to create or add Firebase to GCP project
-        setPhase('no_projects');
+        setPhase(transition('authenticating', 'no_projects'));
         return;
       }
 
@@ -1726,16 +1762,16 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       if (fetchedProjects.length === 1) {
         projectSelectRef.current(fetchedProjects[0]);
       } else {
-        setPhase('select_project');
+        setPhase(transition('authenticating', 'select_project'));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
-      setPhase('error');
+      setPhase(transition('authenticating', 'error'));
     }
   }, [downloader]);
 
   // Handler for Service Account setup (defined before handleAction to be used in it)
-  const handleServiceAccountSetup = useCallback(async () => {
+  const handleServiceAccountSetup = useCallback(() => {
     // Get project ID from detection result
     const projectId = getProjectIdFromResult(result);
     if (!projectId) {
@@ -1744,26 +1780,8 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       return;
     }
 
-    setPhase('authenticating');
-
-    try {
-      // Ensure authenticated
-      const isAuth = await downloader.isAuthenticated();
-      if (!isAuth) {
-        const authResult = await downloader.authenticate(openBrowser);
-        if (!authResult.success) {
-          setError(authResult.error || 'Authentication failed');
-          setPhase('error');
-          return;
-        }
-      }
-
-      setPhase('service_account_menu');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
-      setPhase('error');
-    }
-  }, [downloader, result]);
+    setPhase(transition('menu', 'setup_service_account'));
+  }, [result]);
 
   const handleAction = useCallback(
     async (action: CredentialAction) => {
@@ -1773,27 +1791,27 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
           break;
 
         case 'redetect':
-          setPhase('detecting');
+          setPhase(transition('menu', 'redetect'));
           break;
 
         case 'redetect_platform':
           setValidatingPlatform(action.platform);
-          setPhase('detecting');
+          setPhase(transition('menu', 'redetect_platform'));
           break;
 
         case 'validate':
           setValidatingPlatform(action.platform);
-          setPhase('validating');
+          setPhase(transition('menu', 'validate'));
           // Re-detect to validate
           try {
             if (service) {
               const newResult = await service.detect();
               setResult(newResult);
             }
-            setPhase('status');
+            setPhase(transition('validating', 'success'));
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Validation failed');
-            setPhase('error');
+            setPhase(transition('validating', 'error'));
           }
           break;
 
@@ -1808,7 +1826,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
           break;
 
         case 'done':
-          setPhase('complete');
+          setPhase(transition('menu', 'done'));
           onComplete({
             completed: true,
             skipped: false,
@@ -1826,8 +1844,8 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   );
 
   const handleRetry = useCallback(async () => {
-    // Check if this was a scope error - if so, logout and re-authenticate
-    if (error && isScopeInsufficientError(error)) {
+    // Check if this was a scope error or invalid_grant - if so, logout and re-authenticate
+    if (error && (isScopeInsufficientError(error) || error.includes('invalid_grant'))) {
       // Clear tokens and trigger re-authentication
       await downloader.logout();
       setError(null);
@@ -1837,7 +1855,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
     }
 
     setError(null);
-    setPhase('detecting');
+    setPhase(transition('error', 'retry'));
   }, [error, downloader, handleDownload]);
 
   const handleCancel = useCallback(() => {
@@ -1858,7 +1876,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
       }
 
       setCreatingAppPlatform(platform);
-      setPhase('creating_app');
+      setPhase('creating_app'); // Direct set: entry point from create_android_app/create_ios_app
 
       try {
         if (platform === 'android') {
@@ -1877,7 +1895,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
               ...noAppsContext,
               noAndroidApps: false,
             });
-            setPhase('no_apps_found');
+            setPhase(transition('creating_app', 'no_apps_found'));
           } else if (needsIos) {
             // Fetch iOS apps
             const iosAppsList = await downloader.listIosApps(selectedProject.projectId);
@@ -1888,7 +1906,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
               downloadConfigsRef.current(selectedProject, app, iosAppsList[0]);
             } else {
               setIosApps(iosAppsList);
-              setPhase('select_ios_app');
+              setPhase(transition('creating_app', 'select_ios_app'));
             }
           } else {
             // Only needed Android, download config
@@ -1906,7 +1924,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create app');
-        setPhase('error');
+        setPhase(transition('creating_app', 'error'));
       }
     },
     [selectedProject, downloader, getPlatformNeeds, noAppsContext, selectedAndroidApp],
@@ -1915,12 +1933,12 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   // Handlers for no apps found phase
   const handleStartCreateAndroid = useCallback(() => {
     setCreatingAppPlatform('android');
-    setPhase('create_android_app');
+    setPhase(transition('no_apps_found', 'create_android'));
   }, []);
 
   const handleStartCreateIos = useCallback(() => {
     setCreatingAppPlatform('ios');
-    setPhase('create_ios_app');
+    setPhase(transition('no_apps_found', 'create_ios'));
   }, []);
 
   const handleCreateAndroidSubmit = useCallback(
@@ -1939,31 +1957,31 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
   const handleNoAppsCancel = useCallback(() => {
     // Go back to project selection
-    setPhase('select_project');
+    setPhase(transition('no_apps_found', 'cancel'));
   }, []);
 
   // Handler for opening Firebase Console
   const handleOpenFirebaseConsole = useCallback(() => {
     openBrowser('https://console.firebase.google.com/');
     // Go back to menu after opening
-    setPhase('menu');
+    setPhase(transition('no_projects', 'open_console'));
   }, []);
 
   // Handler for fetching GCP projects (to add Firebase)
   const handleFetchGcpProjects = useCallback(async () => {
-    setPhase('authenticating');
+    setPhase('authenticating'); // Direct set: entry point from no_projects
     try {
       const availableGcpProjects = await downloader.listAvailableGcpProjects();
       if (availableGcpProjects.length === 0) {
         setError('No GCP projects available to add Firebase. Create a project first.');
-        setPhase('error');
+        setPhase(transition('authenticating', 'error'));
         return;
       }
       setGcpProjects(availableGcpProjects);
-      setPhase('select_gcp_project');
+      setPhase(transition('authenticating', 'select_gcp_project'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch GCP projects');
-      setPhase('error');
+      setPhase(transition('authenticating', 'error'));
     }
   }, [downloader]);
 
@@ -1971,7 +1989,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
   const handleGcpProjectSelect = useCallback(
     async (project: GcpProject) => {
       setSelectedGcpProject(project);
-      setPhase('adding_firebase');
+      setPhase(transition('select_gcp_project', 'adding_firebase'));
 
       try {
         const firebaseProject = await downloader.addFirebaseToProject(project.projectId);
@@ -1980,7 +1998,7 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         projectSelectRef.current(firebaseProject);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to add Firebase to project');
-        setPhase('error');
+        setPhase(transition('adding_firebase', 'error'));
       }
     },
     [downloader],
@@ -1988,123 +2006,104 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
   // Handler for Service Account menu action
   const handleServiceAccountMenuAction = useCallback(
-    async (action: ServiceAccountMenuAction) => {
+    (action: ServiceAccountMenuAction) => {
       const projectId = getProjectIdFromResult(result);
       if (!projectId) {
         setError('No project ID found');
-        setPhase('error');
+        setPhase(transition('service_account_menu', 'error'));
         return;
       }
 
       switch (action.type) {
-        case 'select_existing':
-          setPhase('authenticating');
-          try {
-            const accounts = await downloader.listServiceAccounts(projectId);
-            if (accounts.length === 0) {
-              setError('No service accounts found. Create a new one instead.');
-              setPhase('service_account_menu');
-              return;
-            }
-            setServiceAccounts(accounts);
-            setPhase('select_service_account');
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch service accounts');
-            setPhase('error');
-          }
-          break;
-
-        case 'create_new':
-          setPhase('create_service_account');
+        case 'open_console':
+          openBrowser(
+            `https://console.firebase.google.com/project/${projectId}/settings/serviceaccounts/adminsdk`,
+          );
+          // Stay on menu so user can paste after downloading
+          setPhase(transition('service_account_menu', 'open_console'));
           break;
 
         case 'paste_json':
-          setPhase('paste_service_account');
+          setPhase(transition('service_account_menu', 'paste_json'));
           break;
 
         case 'skip':
-          setPhase('status');
+          setPhase(transition('service_account_menu', 'skip'));
           break;
       }
     },
-    [downloader, result],
-  );
-
-  // Handler for selecting existing service account
-  const handleSelectServiceAccount = useCallback(
-    async (account: ServiceAccount) => {
-      const projectId = getProjectIdFromResult(result);
-      if (!projectId) {
-        setError('No project ID found');
-        setPhase('error');
-        return;
-      }
-
-      setPhase('creating_service_account');
-
-      try {
-        const json = await downloader.downloadServiceAccountKey(projectId, account.email);
-        setServiceAccountJson(json);
-        await downloader.saveServiceAccountJson(projectPath, json);
-        setPhase('status');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to generate service account key');
-        setPhase('error');
-      }
-    },
-    [downloader, result, projectPath],
-  );
-
-  // Handler for creating new service account
-  const handleCreateServiceAccount = useCallback(
-    async (accountId: string, displayName?: string) => {
-      const projectId = getProjectIdFromResult(result);
-      if (!projectId) {
-        setError('No project ID found');
-        setPhase('error');
-        return;
-      }
-
-      setPhase('creating_service_account');
-
-      try {
-        const json = await downloader.createServiceAccountWithKey(
-          projectId,
-          accountId,
-          displayName,
-        );
-        setServiceAccountJson(json);
-        await downloader.saveServiceAccountJson(projectPath, json);
-        setPhase('status');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to create service account');
-        setPhase('error');
-      }
-    },
-    [downloader, result, projectPath],
+    [result],
   );
 
   // Handler for pasting service account JSON
+  // Only saves the file, then transitions to registering_sender_config or complete
   const handleSaveServiceAccountJson = useCallback(
     async (json: ServiceAccountJson) => {
-      setPhase('saving_service_account');
+      setPhase(transition('paste_service_account', 'save'));
 
       try {
         setServiceAccountJson(json);
         await downloader.saveServiceAccountJson(projectPath, json);
-        setPhase('status');
+
+        // Decide next phase: register sender config if Clix project is linked
+        if (clixProjectId) {
+          setPhase(transition('saving_service_account', 'register'));
+        } else {
+          setPhase(transition('saving_service_account', 'complete'));
+          onComplete({ completed: true, skipped: false, detection: result });
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to save service account');
-        setPhase('error');
+        setPhase(transition('saving_service_account', 'error'));
       }
     },
-    [downloader, projectPath],
+    [downloader, projectPath, clixProjectId, onComplete, result],
   );
+
+  // Sender config registration effect - triggered when entering registering_sender_config phase
+  useEffect(() => {
+    if (phase !== 'registering_sender_config' || !clixProjectId) return;
+
+    const registerSenderConfig = async () => {
+      try {
+        const { getInternalApiClient } = await import('@/lib/api');
+        const apiClient = getInternalApiClient();
+        const saJsonPath = `${projectPath}/.clix/firebase-service-account.json`;
+        const { readFile } = await import('node:fs/promises');
+        const saContent = await readFile(saJsonPath, 'utf-8');
+        const encoded = btoa(saContent);
+        await apiClient.createOrUpdateSenderConfig(clixProjectId, {
+          channel_type: 'CHANNEL_TYPE_APP_PUSH',
+          app_push: {
+            ios_config: { fcm_sa_json_base64_encoded: encoded },
+            android_config: { fcm_sa_json_base64_encoded: encoded },
+          },
+        });
+        setSenderConfigResult('success');
+      } catch {
+        setSenderConfigResult('failed');
+      }
+
+      // Auto-complete after brief display
+      setTimeout(() => {
+        setPhase(transition('registering_sender_config', 'complete'));
+        onComplete({ completed: true, skipped: false, detection: result });
+      }, 1500);
+    };
+
+    registerSenderConfig();
+  }, [phase, clixProjectId, projectPath, onComplete, result]);
 
   // Handler for going back to service account menu
   const handleServiceAccountCancel = useCallback(() => {
-    setPhase('service_account_menu');
+    setPhase(transition('paste_service_account', 'cancel'));
   }, []);
+
+  // Handler for sender config registered → complete wizard
+  const handleSenderConfigContinue = useCallback(() => {
+    setPhase(transition('sender_config_registered', 'continue'));
+    onComplete({ completed: true, skipped: false, detection: result });
+  }, [onComplete, result]);
 
   switch (phase) {
     case 'detecting':
@@ -2239,27 +2238,6 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
         />
       );
 
-    case 'select_service_account':
-      return (
-        <ServiceAccountSelector
-          accounts={serviceAccounts}
-          onSelect={handleSelectServiceAccount}
-          onCancel={handleServiceAccountCancel}
-        />
-      );
-
-    case 'create_service_account':
-      return (
-        <CreateServiceAccountInputPhase
-          projectId={getProjectIdFromResult(result) || ''}
-          onSubmit={handleCreateServiceAccount}
-          onCancel={handleServiceAccountCancel}
-        />
-      );
-
-    case 'creating_service_account':
-      return <CreatingServiceAccountPhase />;
-
     case 'paste_service_account':
       return (
         <PasteServiceAccountPhase
@@ -2270,6 +2248,21 @@ export const FirebaseWizard: React.FC<FirebaseWizardProps> = ({
 
     case 'saving_service_account':
       return <SavingServiceAccountPhase />;
+
+    case 'checking_sender_config':
+      return <CheckingSenderConfigPhase />;
+
+    case 'sender_config_registered':
+      return (
+        <SenderConfigRegisteredPhase
+          updatedAt={senderConfigUpdatedAt}
+          onContinue={handleSenderConfigContinue}
+          onCancel={handleCancel}
+        />
+      );
+
+    case 'registering_sender_config':
+      return <RegisteringSenderConfigPhase result={senderConfigResult} />;
 
     case 'error':
       return (
