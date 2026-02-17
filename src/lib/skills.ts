@@ -62,7 +62,6 @@ const LOCAL_SKILLS: SkillInfo[] = [
     description: 'Interactive debugging assistant',
     isLocal: true,
   },
-  // NOTE: ios-setup is now a LocalJSXCommand in registry.ts, not a skill
 ];
 
 /**
@@ -258,6 +257,19 @@ function buildPreparationSection(context: PreparationContext): string {
     );
     lines.push(
       `- iOS (GoogleService-Info.plist): ${context.firebase.iosConfigured ? '✓ configured' : '✗ missing'}`,
+    );
+    lines.push(
+      `- Sender Config (App Push): ${context.firebase.senderConfigConfigured ? '✓ configured' : '✗ missing'}`,
+    );
+    lines.push('');
+  }
+
+  if (context.apns.needed) {
+    lines.push('### APNS');
+    lines.push(`- Key ID: ${context.apns.keyId || 'not configured'}`);
+    lines.push(`- Team ID: ${context.apns.teamId || 'not configured'}`);
+    lines.push(
+      `- Registered with Firebase: ${context.apns.registeredWithFirebase ? '✓ configured' : '✗ missing'}`,
     );
     lines.push('');
   }

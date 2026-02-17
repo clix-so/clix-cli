@@ -137,7 +137,7 @@ For push notifications to work, Firebase must be properly configured:
 - Verify JSON/plist structure is valid
 - Confirm project IDs match between platforms (for cross-platform apps)
 
-Use `/firebase` command in interactive mode to check and configure Firebase credentials.
+Use `/install` in interactive mode to run required Firebase setup tasks.
 
 ## Automation Rules
 
@@ -195,7 +195,7 @@ For rich push notifications (images, buttons), create a Notification Service Ext
 4. Add App Groups capability to both main app and extension (same group ID: `group.clix.{BUNDLE_ID}`)
 5. For Xcode 15+: Set `ENABLE_USER_SCRIPT_SANDBOXING` to "No" in extension's Build Settings
 
-For detailed setup, run `clix ios-setup` or `/ios-setup` in interactive mode.
+For detailed setup, run `clix install` or `/install` in interactive mode.
 
 ## Output Format
 

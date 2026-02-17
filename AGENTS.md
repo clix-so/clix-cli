@@ -33,7 +33,6 @@ Debug mode: `DEBUG=1 bun run src/cli.tsx <command>`
 If you change X, do Y:
 
 - **Slash commands added/removed/renamed** → Update `README.md` and `llms.txt` per the sync table below. Run `bun test src/ui/chat/components/__tests__/slash-command-menu.test.ts` to verify registry sync.
-- **`firebase-wizard-transitions.ts` modified** → Run `bun test src/ui/components/__tests__/firebase-wizard-transitions.test.ts`
 - **New UI command added** → Use `safeRender()` (not Ink's `render()`), see [Safe Rendering](#safe-rendering)
 - **New React component added** → Include `useCancelInput` hook for ESC/Ctrl+C support, see [Cancel Input](#cancel-input-handling)
 - **Biome config (`biome.json`) changed** → Run `bun run lint:fix` to apply new rules across the codebase
@@ -79,18 +78,17 @@ Slash command suggestions in `src/ui/chat/components/SlashCommandMenu.tsx` deriv
 
 `src/ui/chat/ChatApp.tsx` - Main component with context provider. State split into focused hooks under `src/ui/chat/hooks/`.
 
-### FirebaseWizard State Machine
+### Install Preparation Tasks
 
-`src/ui/components/FirebaseWizard.tsx` - Multi-phase wizard using centralized state machine in `src/ui/components/firebase-wizard-transitions.ts`.
+`src/ui/components/InstallPreparationUI.tsx` orchestrates setup as sequential 1-depth tasks.
 
-**Rules when modifying FirebaseWizard**:
-
-1. **Update `PHASE_TRANSITIONS` first** - Add/modify transition rules in the map before changing handlers
-2. **Use `transition()` for all `setPhase()` calls** - Never call `setPhase('phase')` directly; use `setPhase(transition('currentPhase', 'event'))` instead
-3. **One `setPhase` per handler** - Avoid multiple `setPhase()` calls in a single async handler. Split into separate phases with `useEffect`
-4. **"Direct set" exceptions** - Only use direct `setPhase()` when the source phase is ambiguous (entry points from multiple phases). Add a `// Direct set:` comment
-
-Tests: `src/ui/components/__tests__/firebase-wizard-transitions.test.ts`
+- Task order and labels are defined in `src/ui/components/install-preparation-tasks.ts`
+- Firebase, APNS, iOS entitlements, and Notification Extension are implemented as reusable task components under:
+  - `src/ui/components/FirebaseConfigFilesSetup.tsx`
+  - `src/ui/components/FirebaseServiceAccountSetup.tsx`
+  - `src/ui/components/push-setup/PushSetupTasks.tsx`
+  - `src/ui/components/ios-setup/IosEntitlementsTask.tsx`
+  - `src/ui/components/notification-extension-setup/NotificationExtensionTasks.tsx`
 
 ### Skills
 
@@ -279,7 +277,6 @@ When adding new OAuth flows, use port 9005, path `/auth/callback`, and the share
 ## Common Mistakes
 
 - **Never** use `render()` from ink directly — use `safeRender()` from `@/ui/utils/safeRender`
-- **Never** call `setPhase()` directly in FirebaseWizard — use `transition()` helper
 - **Never** hardcode slash command lists — derive from registry (`getCommands()`)
 - **Never** use `as any` type assertions — use `unknown` with type narrowing
 - **Never** use non-null assertion (`!`) — add guard checks

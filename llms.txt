@@ -232,16 +232,15 @@ The interactive chat (`clix` command) is the primary way to interact with Clix C
 
 ### Slash Commands
 
-Type `/` in the chat to see the autocomplete menu. All 20 slash commands are organized into three categories:
+Type `/` in the chat to see the autocomplete menu. Slash commands are organized into three categories:
 
-#### Autonomous Commands (4 commands)
+#### Autonomous Commands (3 commands)
 
 These can be run from command-line (`clix <command>`) or chat mode:
 
 - `/install` - Autonomous SDK installation with automatic file modifications
 - `/doctor` - Analyze SDK integration status (automatic scan, JSON output)
 - `/debug` - Interactive debugging assistant (asks for problem description)
-- `/ios-setup` (aliases: `/capabilities`, `/ios-capabilities`) - Configure iOS capabilities and Notification Service Extension (NSE)
 
 #### Interactive Skills (5 commands)
 
@@ -253,7 +252,7 @@ These execute pre-built workflows from the `@clix-so/clix-agent-skills` package 
 - `/personalization` - Personalization template creation and debugging
 - `/api-triggered-campaigns` - API-triggered campaign setup
 
-#### System Commands (11 commands)
+#### System Commands
 
 These are built-in commands for chat management and tools:
 
@@ -261,7 +260,6 @@ These are built-in commands for chat management and tools:
 - `/new` (alias: `/clear`) - Start a new session (clear history)
 - `/compact` (alias: `/c`) - Compress conversation history
 - `/agent` (alias: `/a`) - List available agents or switch to specific agent
-- `/firebase` - Check and configure Firebase credentials
 - `/transfer` (alias: `/t`) - Transfer session to agent CLI
 - `/resume` - Resume a previous session
 - `/install-mcp` (alias: `/mcp`) - Install Clix MCP Server for current agent
@@ -380,94 +378,31 @@ Describe the problem: Events not appearing in Clix dashboard
 [Provides fix with exact file location]
 ```
 
-#### `/ios-setup` - iOS Setup, Capabilities, NSE & APNS Key Configuration
+#### iOS Push Preparation in `/install`
 
-**Category:** Autonomous Command
+`/install` includes required iOS push setup tasks and blocks progress until each required task is complete.
 
-**Aliases:** `/capabilities`, `/ios-capabilities`
-
-**What it does:** Configures iOS capabilities, Notification Service Extension (NSE), and optionally sets up APNS authentication key for Firebase push notifications.
-
-**Capabilities configured:**
-- **Push Notifications** - Enables APNs communication (entitlement: `aps-environment`)
-- **App Groups** - Enables data sharing between app and NSE (entitlement: `com.apple.security.application-groups`, format: `group.clix.{BUNDLE_ID}`)
-
-**Notification Service Extension (NSE) setup:**
-- **Target name:** `{AppName}NotificationServiceExtension` (consistent across all steps)
-- **NotificationService.swift:** Uses `ClixNotificationServiceExtension` base class with `register(projectId:)` call
-- **Dependency setup:** CocoaPods (`pod 'Clix'` in extension target) or SPM (add Clix package to extension)
-- **Build settings:** `ENABLE_USER_SCRIPT_SANDBOXING = No` for Xcode 15+
-- **React Native + Firebase:** Move "Embed Foundation Extensions" above "[RNFB] Core Configuration"
-
-**APNS Key Setup (Phase 3 - Optional):**
-After iOS capabilities setup completes, prompts user to configure APNS authentication key:
-- **APNS Key Creation:** Opens Apple Developer Portal to create/download .p8 key file
-- **Key Validation:** Validates P8 file format, extracts Key ID from filename
-- **Firebase Upload:** Opens Firebase Console and displays Key ID, Team ID for manual upload
-
-**Workflow (3 Phases):**
-1. **Phase 1 - Direct Setup (Automatic):**
-   - Analyzes iOS project structure (finds .xcodeproj/.xcworkspace)
-   - Detects Bundle ID and checks current capabilities status
-   - Syncs capabilities with Apple Developer Portal (if credentials provided)
-   - Creates/modifies entitlements files for main app
-2. **Phase 2 - Guided Setup (Static file generation + UI guide):**
-   - Auto-generates NSE files:
-     - `NotificationService.swift` with `ClixNotificationServiceExtension`
-     - `Info.plist` for extension
-     - Extension entitlements file
-   - Step-by-step Xcode configuration guide:
-     - Creating NSE target in Xcode
-     - Configuring build settings (`ENABLE_USER_SCRIPT_SANDBOXING` for Xcode 15+)
-     - Adding CocoaPods/SPM dependencies
-3. **Phase 3 - Push Setup (Optional):**
-   - Prompts: "Set up APNS key for Firebase push notifications? [Y/n]"
-   - If yes, opens PushSetupWizard for APNS key creation and Firebase upload
+**Required order for iOS projects:**
+1. Firebase configuration files
+2. APNS key setup in Firebase
+3. Firebase Service Account registration
+4. iOS entitlements
+5. Notification Service Extension (NSE)
 
 **What is automated:**
-- Creating/modifying entitlements files
-- Reading project configuration
-- Generating NSE source files (NotificationService.swift, Info.plist)
-- P8 file format validation
+- Firebase file detection and validation
+- Service account JSON import and sender config registration
+- Entitlements file updates
+- NSE file generation and verification checks
 
 **What requires manual action (guided by UI):**
-- Creating NSE target in Xcode (File > New > Target > Notification Service Extension)
-- Adding capabilities in Xcode UI (Signing & Capabilities)
-- Adding Clix SDK to extension target (Podfile or SPM)
-- Configuring build settings for Xcode 15+
-- Enabling capabilities in Apple Developer Portal
-- Registering App Group IDs
-- Regenerating provisioning profiles
-- Creating APNS key in Apple Developer Portal
-- Uploading P8 file to Firebase Console
+- Creating/confirming APNS key in Apple Developer
+- Uploading APNS key to Firebase Console
+- Final Xcode target/capability confirmation for NSE
 
-**Example:**
+**Entry point:**
 ```
-> /ios-setup
-Analyzing iOS project...
-✓ Found: MyApp.xcodeproj
-✓ Bundle ID: com.example.myapp
-
-Creating entitlements files...
-✓ Created MyApp.entitlements
-
-Creating Notification Service Extension files...
-✓ Created MyAppNotificationServiceExtension/NotificationService.swift
-✓ Created MyAppNotificationServiceExtension/Info.plist
-✓ Created MyAppNotificationServiceExtension/MyAppNotificationServiceExtension.entitlements
-
-Step 1: Create Notification Service Extension Target in Xcode
-[Enter to continue...]
-
-Step 2: Configure Build Settings
-[Enter to continue...]
-
-Step 3: Add Clix SDK to Extension Target
-[Enter to continue...]
-
-✓ Extension setup guide complete!
-
-Set up APNS key for Firebase push notifications? [Y/n]
+> /install
 ```
 
 ### Interactive Skills
@@ -576,7 +511,6 @@ System Commands:
   /new             - Start a new session
   /compact         - Compress conversation history
   /agent           - List or switch agents
-  /firebase        - Check and configure Firebase credentials
   /transfer        - Transfer to agent CLI
   /resume          - Resume a previous session
   /install-mcp     - Install Clix MCP Server
@@ -621,39 +555,6 @@ Context usage: 92% (730,000 / 800,000 characters)
 Compressing conversation history...
 ✓ Compacted from 45 messages to 12 messages
 Reduced size by 68%
-```
-
-#### `/firebase` - Firebase Configuration
-
-**Category:** System Command
-
-**What it does:** Opens an interactive wizard to check and configure Firebase credentials (google-services.json for Android, GoogleService-Info.plist for iOS).
-
-**Features:**
-- Auto-detects Firebase credential files in project
-- Validates JSON/plist structure against Firebase schema
-- Reports issues (missing files, invalid format, wrong location)
-- Provides recommendations with help URLs
-- Supports React Native, Flutter, iOS, and Android projects
-
-**Detection locations:**
-- Android: `app/google-services.json`, `android/app/google-services.json`
-- iOS: `ios/GoogleService-Info.plist`, `ios/Runner/GoogleService-Info.plist`
-
-**Example:**
-```
-> /firebase
-Firebase Configuration (react-native)
-
-✓ Android (google-services.json): valid
-  Location: android/app/google-services.json
-  Project ID: my-project-12345
-
-✗ iOS (GoogleService-Info.plist): not found
-  → Expected: ios/GoogleService-Info.plist
-  → Download from Firebase Console
-
-Press Enter to configure, Esc to skip
 ```
 
 #### `/agent` - Agent Management
@@ -1275,8 +1176,8 @@ When helping users with Clix CLI, keep these points in mind:
 1. **Primary command is `clix`** - This launches interactive chat, not just a welcome screen
 2. **Interactive > Commands** - The tool is primarily interactive, not command-based
 3. **6 supported agents** - Gemini, Copilot, OpenCode, Cursor, Claude, Codex (recommend starting with Gemini or Copilot for free tiers)
-4. **20 slash commands** - 4 autonomous commands + 5 interactive skills + 11 system commands
-5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`, `/ios-setup`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
+4. **Slash commands** - Autonomous commands + interactive skills + system commands
+5. **Autonomous vs Interactive** - Autonomous commands (`/install`, `/doctor`, `/debug`) can run from CLI, Interactive skills (`/integration`, `/event-tracking`, etc.) require chat mode
 6. **Skills from package** - Interactive skills from @clix-so/clix-agent-skills package, Autonomous commands are local
 7. **/install vs /integration** - `/install` makes changes autonomously, `/integration` provides guided steps
 8. **Session transfer** - Saves to `.clix/sessions/`, provides command for native CLI
@@ -1294,7 +1195,7 @@ When helping users with Clix CLI, keep these points in mind:
 - "SDK integration" → Use `/install` for autonomous installation or `/integration` skill for guided steps
 - "iOS installation" → Detect: Package.swift (SPM, preferred), Podfile (CocoaPods), or suggest SPM for bare Xcode projects. SPM is the modern, recommended approach.
 - "SPM/Swift Package Manager" → Guide through Package.swift modification or Xcode UI (File > Add Package Dependencies) for adding packages
-- "iOS capabilities" → Use `/ios-setup` to configure Push Notifications, App Groups, and Notification Service Extension (NSE)
+- "iOS capabilities" → Use `/install` to run required iOS push setup tasks (Firebase files, APNS, service account, entitlements, NSE)
 - "Event tracking" → Use `/event-tracking` skill (interactive, creates event plans)
 - "User management" → Use `/user-management` skill (setUserId, properties, logout handling)
 - "Personalization" → Use `/personalization` skill (Liquid templates for messages)

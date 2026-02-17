@@ -6,9 +6,7 @@ import { getProjectConfigManager, type ProjectConfig } from '../../lib/config';
 import type { InstallationMethod, UpdateCheckResult } from '../../lib/services/update-service';
 import { AgentSelector } from '../components/AgentSelector';
 import { DebugPrompt } from '../components/DebugPrompt';
-import { FirebaseWizard } from '../components/FirebaseWizard';
 import { InstallPreparationUI } from '../components/InstallPreparationUI';
-import { IosSetupFlow } from '../components/IosSetupFlow';
 import { MCPInstallSelector } from '../components/MCPInstallSelector';
 import { SessionSelector } from '../components/SessionSelector';
 import { TransferSelector } from '../components/TransferSelector';
@@ -194,9 +192,11 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
           />
         )}
 
-      <Box flexDirection="column" flexGrow={1}>
-        <MessageList messages={messages} agentName={currentAgent?.displayName} />
-      </Box>
+      {!isOverlayActive && (
+        <Box flexDirection="column" flexGrow={1}>
+          <MessageList messages={messages} agentName={currentAgent?.displayName} />
+        </Box>
+      )}
 
       {/* Overlays */}
       {overlays.activeOverlay === 'agent' && (
@@ -237,21 +237,6 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
       )}
       {overlays.activeOverlay === 'debug' && (
         <DebugPrompt onSubmit={overlays.handleDebugPromptSubmit} onCancel={overlays.hideOverlay} />
-      )}
-      {overlays.activeOverlay === 'firebase' && (
-        <FirebaseWizard
-          projectPath={process.cwd()}
-          clixProjectId={projectConfig?.project.id}
-          onComplete={overlays.handleFirebaseComplete}
-          onCancel={overlays.handleFirebaseCancel}
-        />
-      )}
-      {overlays.activeOverlay === 'ios-setup' && (
-        <IosSetupFlow
-          onComplete={(result) => {
-            overlays.handleIosSetupComplete(result.message);
-          }}
-        />
       )}
       {overlays.activeOverlay === 'install-preparation' && (
         <InstallPreparationUI

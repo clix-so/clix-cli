@@ -1,33 +1,14 @@
 /**
- * Guided Setup Wizard - Replaces AI Agent for Xcode configuration
- * Provides step-by-step guidance for manual Xcode tasks
+ * Notification Extension setup task components.
  */
 
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import type React from 'react';
-import { useEffect, useState } from 'react';
-import {
-  createExtensionFiles,
-  type ExtensionContext,
-  type ExtensionGeneratorResult,
-  getExtensionBundleId,
-  getExtensionName,
-  verifyExtensionFiles,
-} from '@/lib/ios/extension-generator';
+import { type ExtensionGeneratorResult, verifyExtensionFiles } from '@/lib/ios/extension-generator';
 import { generatePodfileSnippet } from '@/lib/ios/extension-templates';
-import { isCtrlCInput } from '@/ui/hooks';
-import { Header } from './Header';
-import { StatusMessage } from './StatusMessage';
+import { StatusMessage } from '../StatusMessage';
 
-export type GuidedSetupPhase =
-  | 'creating_files'
-  | 'xcode_target'
-  | 'build_settings'
-  | 'dependencies'
-  | 'verification'
-  | 'complete';
-
-export interface GuidedSetupContext {
+export interface NotificationExtensionSetupContext {
   bundleId: string;
   appGroupId: string;
   appName: string;
@@ -36,156 +17,7 @@ export interface GuidedSetupContext {
   pushEnvironment?: 'development' | 'production';
 }
 
-export interface GuidedSetupResult {
-  success: boolean;
-  extensionCreated: boolean;
-  extensionDir?: string;
-  createdFiles: string[];
-  error?: string;
-}
-
-interface GuidedSetupWizardProps {
-  context: GuidedSetupContext;
-  onComplete: (result: GuidedSetupResult) => void;
-}
-
-interface WizardState {
-  phase: GuidedSetupPhase;
-  extensionResult: ExtensionGeneratorResult | null;
-  error: string | null;
-}
-
-export const GuidedSetupWizard: React.FC<GuidedSetupWizardProps> = ({ context, onComplete }) => {
-  const [state, setState] = useState<WizardState>({
-    phase: 'creating_files',
-    extensionResult: null,
-    error: null,
-  });
-
-  const { phase, extensionResult, error } = state;
-  const extensionName = getExtensionName(context.appName);
-  const extensionBundleId = getExtensionBundleId(context.bundleId, context.appName);
-
-  // Create extension files on mount
-  useEffect(() => {
-    if (phase !== 'creating_files') return;
-
-    const create = async () => {
-      const extContext: ExtensionContext = {
-        appName: context.appName,
-        bundleId: context.bundleId,
-        iosDir: context.iosDir,
-        pushEnvironment: context.pushEnvironment,
-      };
-
-      const result = await createExtensionFiles(extContext);
-
-      if (!result.success) {
-        setState((s) => ({
-          ...s,
-          phase: 'complete',
-          extensionResult: result,
-          error: result.error || 'Failed to create extension files',
-        }));
-        return;
-      }
-
-      setState((s) => ({
-        ...s,
-        phase: 'xcode_target',
-        extensionResult: result,
-      }));
-    };
-
-    create();
-  }, [phase, context]);
-
-  // Handle keyboard input for navigation
-  useInput((input, key) => {
-    if (key.return || input === ' ') {
-      switch (phase) {
-        case 'xcode_target':
-          setState((s) => ({ ...s, phase: 'build_settings' }));
-          break;
-        case 'build_settings':
-          setState((s) => ({ ...s, phase: 'dependencies' }));
-          break;
-        case 'dependencies':
-          setState((s) => ({ ...s, phase: 'verification' }));
-          break;
-        case 'verification':
-          setState((s) => ({ ...s, phase: 'complete' }));
-          break;
-      }
-    }
-
-    const shouldCancel = key.escape || isCtrlCInput(input, key);
-    if (shouldCancel && phase !== 'creating_files' && phase !== 'complete') {
-      setState((s) => ({ ...s, phase: 'complete' }));
-    }
-  });
-
-  // Complete handler
-  useEffect(() => {
-    if (phase === 'complete') {
-      const verification = verifyExtensionFiles(context.iosDir, context.appName);
-
-      setTimeout(() => {
-        onComplete({
-          success: !error && verification.complete,
-          extensionCreated: !!extensionResult?.createdFiles.length,
-          extensionDir: extensionResult?.extensionDir,
-          createdFiles: extensionResult?.createdFiles || [],
-          error: error || undefined,
-        });
-      }, 500);
-    }
-  }, [phase, error, extensionResult, context, onComplete]);
-
-  return (
-    <Box flexDirection="column" padding={1}>
-      <Header title="iOS Setup - Extension Configuration" />
-
-      {/* Phase: Creating Files */}
-      {phase === 'creating_files' && (
-        <StatusMessage type="loading" message="Creating Notification Service Extension files..." />
-      )}
-
-      {/* Phase: Xcode Target Guide */}
-      {phase === 'xcode_target' && (
-        <XcodeTargetGuide
-          extensionName={extensionName}
-          extensionBundleId={extensionBundleId}
-          extensionResult={extensionResult}
-          appGroupId={context.appGroupId}
-        />
-      )}
-
-      {/* Phase: Build Settings Guide */}
-      {phase === 'build_settings' && (
-        <BuildSettingsGuide
-          extensionName={extensionName}
-          entitlementsPath={context.entitlementsPath}
-        />
-      )}
-
-      {/* Phase: Dependencies Guide */}
-      {phase === 'dependencies' && <DependenciesGuide extensionName={extensionName} />}
-
-      {/* Phase: Verification */}
-      {phase === 'verification' && (
-        <VerificationPhase context={context} extensionResult={extensionResult} />
-      )}
-
-      {/* Phase: Complete */}
-      {phase === 'complete' && <CompletePhase error={error} extensionResult={extensionResult} />}
-    </Box>
-  );
-};
-
-// Sub-components for each phase
-
-const XcodeTargetGuide: React.FC<{
+export const NotificationExtensionXcodeTask: React.FC<{
   extensionName: string;
   extensionBundleId: string;
   extensionResult: ExtensionGeneratorResult | null;
@@ -195,9 +27,9 @@ const XcodeTargetGuide: React.FC<{
     {extensionResult && extensionResult.createdFiles.length > 0 && (
       <Box flexDirection="column" marginBottom={1}>
         <StatusMessage type="success" message="Extension files created" />
-        {extensionResult.createdFiles.map((file) => (
-          <Box key={file} marginLeft={2}>
-            <Text dimColor>• {file}</Text>
+        {extensionResult.createdFiles.map((filePath) => (
+          <Box key={filePath} marginLeft={2}>
+            <Text dimColor>• {filePath}</Text>
           </Box>
         ))}
       </Box>
@@ -237,7 +69,7 @@ const XcodeTargetGuide: React.FC<{
   </Box>
 );
 
-const BuildSettingsGuide: React.FC<{
+export const NotificationExtensionBuildSettingsTask: React.FC<{
   extensionName: string;
   entitlementsPath: string;
 }> = ({ extensionName, entitlementsPath }) => (
@@ -284,7 +116,7 @@ const BuildSettingsGuide: React.FC<{
   </Box>
 );
 
-const DependenciesGuide: React.FC<{
+export const NotificationExtensionDependenciesTask: React.FC<{
   extensionName: string;
 }> = ({ extensionName }) => {
   const podfileSnippet = generatePodfileSnippet(extensionName);
@@ -324,8 +156,8 @@ const DependenciesGuide: React.FC<{
   );
 };
 
-const VerificationPhase: React.FC<{
-  context: GuidedSetupContext;
+export const NotificationExtensionVerificationTask: React.FC<{
+  context: NotificationExtensionSetupContext;
   extensionResult: ExtensionGeneratorResult | null;
 }> = ({ context, extensionResult }) => {
   const verification = verifyExtensionFiles(context.iosDir, context.appName);
@@ -347,9 +179,9 @@ const VerificationPhase: React.FC<{
         ) : (
           <Box flexDirection="column">
             <StatusMessage type="warning" message="Missing files:" />
-            {verification.missingFiles.map((file) => (
-              <Box key={file} marginLeft={2}>
-                <Text color="red">• {file}</Text>
+            {verification.missingFiles.map((filePath) => (
+              <Box key={filePath} marginLeft={2}>
+                <Text color="red">• {filePath}</Text>
               </Box>
             ))}
           </Box>
@@ -377,7 +209,7 @@ const VerificationPhase: React.FC<{
   );
 };
 
-const CompletePhase: React.FC<{
+export const NotificationExtensionCompleteTask: React.FC<{
   error: string | null;
   extensionResult: ExtensionGeneratorResult | null;
 }> = ({ error, extensionResult }) => (
@@ -394,9 +226,9 @@ const CompletePhase: React.FC<{
         {extensionResult && extensionResult.createdFiles.length > 0 && (
           <Box flexDirection="column" marginLeft={2}>
             <Text>Created files:</Text>
-            {extensionResult.createdFiles.map((file) => (
-              <Text key={file} dimColor>
-                • {file}
+            {extensionResult.createdFiles.map((filePath) => (
+              <Text key={filePath} dimColor>
+                • {filePath}
               </Text>
             ))}
           </Box>

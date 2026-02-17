@@ -290,6 +290,7 @@ describe('preparationContext in install skill', () => {
         configured: true,
         androidConfigured: true,
         iosConfigured: true,
+        senderConfigConfigured: true,
         projectId: 'my-firebase-project',
       },
       ios: {
@@ -299,6 +300,12 @@ describe('preparationContext in install skill', () => {
         appGroupId: 'group.com.test.app',
         entitlementsConfigured: true,
         nseConfigured: false,
+      },
+      apns: {
+        needed: true,
+        keyId: 'ABC1234567',
+        teamId: 'TEAM123',
+        registeredWithFirebase: true,
       },
       missing: ['Notification Service Extension'],
       ready: false,
@@ -354,6 +361,7 @@ describe('preparationContext in install skill', () => {
         configured: true,
         androidConfigured: true,
         iosConfigured: true,
+        senderConfigConfigured: true,
         projectId: 'android-project',
       },
       ios: {
@@ -363,6 +371,10 @@ describe('preparationContext in install skill', () => {
         appGroupId: undefined,
         entitlementsConfigured: true,
         nseConfigured: true,
+      },
+      apns: {
+        needed: false,
+        registeredWithFirebase: true,
       },
       missing: [],
       ready: true,
@@ -399,6 +411,7 @@ describe('preparationContext in install skill', () => {
         configured: true,
         androidConfigured: true,
         iosConfigured: true,
+        senderConfigConfigured: true,
         projectId: undefined,
       },
       ios: {
@@ -408,6 +421,10 @@ describe('preparationContext in install skill', () => {
         appGroupId: undefined,
         entitlementsConfigured: true,
         nseConfigured: true,
+      },
+      apns: {
+        needed: false,
+        registeredWithFirebase: true,
       },
       missing: [],
       ready: true,

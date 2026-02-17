@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ProjectType } from '@/lib/config';
-import { checkFirebaseStatus, checkIosStatus } from '../preparation';
+import { checkApnsStatus, checkFirebaseStatus, checkIosStatus } from '../preparation';
 
 // Mock the dependencies
 const mockFirebaseService = {
@@ -32,6 +32,67 @@ const mockFirebaseService = {
   ),
 };
 
+const mockInternalApiClient = {
+  getProject: mock(() =>
+    Promise.resolve({
+      id: 'clix-project',
+      name: 'Project',
+      organization_id: 'org-1',
+      sender_configs: [{ channel_type: 'CHANNEL_TYPE_APP_PUSH' }],
+    }),
+  ),
+};
+
+interface MockIosProject {
+  projectPath: string;
+  workspacePath?: string;
+  bundleId: string;
+  appName: string;
+  targets: string[];
+  entitlementsFiles: string[];
+  teamId?: string;
+}
+
+interface MockIosProjectAnalysisResult {
+  success: boolean;
+  project?: MockIosProject;
+  error?: string;
+}
+
+interface MockEntitlementsData {
+  'aps-environment'?: string;
+  'com.apple.security.application-groups'?: string[];
+  [key: string]: unknown;
+}
+
+const mockIos = {
+  analyzeIosProject: mock<(cwd: string) => Promise<MockIosProjectAnalysisResult>>(() =>
+    Promise.resolve({
+      success: false,
+      error: 'No iOS project',
+    }),
+  ),
+  generateAppGroupId: mock<(bundleId: string) => string>(
+    (bundleId: string) => `group.clix.${bundleId}`,
+  ),
+  getIosProjectDir: mock<(projectPath: string) => string>(() => '/test/ios'),
+  hasClixConfiguration: mock<
+    (
+      entitlements: MockEntitlementsData | null,
+      bundleId: string,
+    ) => { hasPush: boolean; hasAppGroup: boolean }
+  >(() => ({ hasPush: false, hasAppGroup: false })),
+  readEntitlements: mock<(entitlementsPath: string) => Promise<MockEntitlementsData | null>>(() =>
+    Promise.resolve(null),
+  ),
+  verifyExtensionFiles: mock<
+    (iosDir: string, appName: string) => { complete: boolean; missingFiles: string[] }
+  >(() => ({
+    complete: false,
+    missingFiles: ['NotificationService.swift'],
+  })),
+};
+
 mock.module('@/lib/services/firebase/firebase-service', () => ({
   FirebaseService: class {
     detect = mockFirebaseService.detect;
@@ -39,10 +100,54 @@ mock.module('@/lib/services/firebase/firebase-service', () => ({
   },
 }));
 
+mock.module('@/lib/api', () => ({
+  getInternalApiClient: () => mockInternalApiClient,
+}));
+
+mock.module('@/lib/ios', () => ({
+  analyzeIosProject: mockIos.analyzeIosProject,
+  generateAppGroupId: mockIos.generateAppGroupId,
+  getIosProjectDir: mockIos.getIosProjectDir,
+  hasClixConfiguration: mockIos.hasClixConfiguration,
+  readEntitlements: mockIos.readEntitlements,
+  verifyExtensionFiles: mockIos.verifyExtensionFiles,
+}));
+
 describe('preparation', () => {
   beforeEach(() => {
     mockFirebaseService.detect.mockClear();
     mockFirebaseService.getStatus.mockClear();
+    mockInternalApiClient.getProject.mockClear();
+    mockInternalApiClient.getProject.mockImplementation(() =>
+      Promise.resolve({
+        id: 'clix-project',
+        name: 'Project',
+        organization_id: 'org-1',
+        sender_configs: [{ channel_type: 'CHANNEL_TYPE_APP_PUSH' }],
+      }),
+    );
+
+    mockIos.analyzeIosProject.mockClear();
+    mockIos.generateAppGroupId.mockClear();
+    mockIos.getIosProjectDir.mockClear();
+    mockIos.hasClixConfiguration.mockClear();
+    mockIos.readEntitlements.mockClear();
+    mockIos.verifyExtensionFiles.mockClear();
+
+    mockIos.analyzeIosProject.mockImplementation(() =>
+      Promise.resolve({
+        success: false,
+        error: 'No iOS project',
+      }),
+    );
+    mockIos.generateAppGroupId.mockImplementation((bundleId: string) => `group.clix.${bundleId}`);
+    mockIos.getIosProjectDir.mockImplementation(() => '/test/ios');
+    mockIos.hasClixConfiguration.mockImplementation(() => ({ hasPush: false, hasAppGroup: false }));
+    mockIos.readEntitlements.mockImplementation(() => Promise.resolve(null));
+    mockIos.verifyExtensionFiles.mockImplementation(() => ({
+      complete: false,
+      missingFiles: ['NotificationService.swift'],
+    }));
   });
 
   describe('checkIosStatus', () => {
@@ -71,7 +176,7 @@ describe('preparation', () => {
       expect(status.needed).toBe(true);
     });
 
-    test('should use existing setup status from config', async () => {
+    test('should ignore cached completion flags and fallback to file evidence', async () => {
       const projectType: ProjectType = { framework: 'native', target: 'ios' };
       const setup = {
         ios: {
@@ -89,8 +194,109 @@ describe('preparation', () => {
       expect(status.bundleId).toBe('com.test.app');
       expect(status.teamId).toBe('ABC123');
       expect(status.appGroupId).toBe('group.com.test.app');
+      expect(status.entitlementsConfigured).toBe(false);
+      expect(status.nseConfigured).toBe(false);
+    });
+
+    test('should mark iOS setup complete only when required files are verified', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+
+      mockIos.analyzeIosProject.mockResolvedValueOnce({
+        success: true,
+        project: {
+          projectPath: '/test/ios/MyApp.xcodeproj',
+          workspacePath: '/test/ios/MyApp.xcworkspace',
+          bundleId: 'com.test.app',
+          appName: 'MyApp',
+          targets: ['MyApp'],
+          entitlementsFiles: ['/test/ios/MyApp/MyApp.entitlements'],
+          teamId: 'TEAM123456',
+        },
+      });
+      mockIos.readEntitlements.mockResolvedValueOnce({
+        'aps-environment': 'development',
+        'com.apple.security.application-groups': ['group.clix.com.test.app'],
+      });
+      mockIos.hasClixConfiguration.mockReturnValueOnce({ hasPush: true, hasAppGroup: true });
+      mockIos.verifyExtensionFiles.mockReturnValueOnce({ complete: true, missingFiles: [] });
+
+      const status = await checkIosStatus('/test', projectType);
+
+      expect(status.needed).toBe(true);
+      expect(status.bundleId).toBe('com.test.app');
+      expect(status.teamId).toBe('TEAM123456');
+      expect(status.appGroupId).toBe('group.clix.com.test.app');
       expect(status.entitlementsConfigured).toBe(true);
       expect(status.nseConfigured).toBe(true);
+    });
+
+    test('should continue scanning entitlements files when one file is malformed', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+
+      mockIos.analyzeIosProject.mockResolvedValueOnce({
+        success: true,
+        project: {
+          projectPath: '/test/ios/MyApp.xcodeproj',
+          workspacePath: '/test/ios/MyApp.xcworkspace',
+          bundleId: 'com.test.app',
+          appName: 'MyApp',
+          targets: ['MyApp'],
+          entitlementsFiles: [
+            '/test/ios/MyApp/bad.entitlements',
+            '/test/ios/MyApp/MyApp.entitlements',
+          ],
+          teamId: 'TEAM123456',
+        },
+      });
+      mockIos.readEntitlements
+        .mockRejectedValueOnce(new Error('invalid plist'))
+        .mockResolvedValueOnce({
+          'aps-environment': 'development',
+          'com.apple.security.application-groups': ['group.clix.com.test.app'],
+        });
+      mockIos.hasClixConfiguration.mockReturnValueOnce({ hasPush: true, hasAppGroup: true });
+      mockIos.verifyExtensionFiles.mockReturnValueOnce({ complete: true, missingFiles: [] });
+
+      const status = await checkIosStatus('/test', projectType);
+
+      expect(status.entitlementsConfigured).toBe(true);
+      expect(status.nseConfigured).toBe(true);
+    });
+  });
+
+  describe('checkApnsStatus', () => {
+    test('should return needed=false for Android-only projects', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'android' };
+      const status = await checkApnsStatus('/test', projectType);
+
+      expect(status.needed).toBe(false);
+      expect(status.registeredWithFirebase).toBe(true);
+    });
+
+    test('should return needed=true and not configured for iOS projects without setup', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+      const status = await checkApnsStatus('/test', projectType);
+
+      expect(status.needed).toBe(true);
+      expect(status.registeredWithFirebase).toBe(false);
+    });
+
+    test('should use existing APNS setup status from config', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+      const setup = {
+        apns: {
+          keyId: 'ABC1234567',
+          teamId: 'TEAMID1234',
+          registeredWithFirebase: true,
+        },
+      };
+
+      const status = await checkApnsStatus('/test', projectType, setup);
+
+      expect(status.needed).toBe(true);
+      expect(status.keyId).toBe('ABC1234567');
+      expect(status.teamId).toBe('TEAMID1234');
+      expect(status.registeredWithFirebase).toBe(true);
     });
   });
 
@@ -101,6 +307,7 @@ describe('preparation', () => {
 
       expect(status.needed).toBe(false);
       expect(status.configured).toBe(true);
+      expect(status.senderConfigConfigured).toBe(true);
     });
 
     test('should always detect files even if setup config exists', async () => {
@@ -113,14 +320,16 @@ describe('preparation', () => {
         },
       };
 
-      const status = await checkFirebaseStatus('/test', projectType, setup);
+      const status = await checkFirebaseStatus('/test', projectType, setup, 'clix-project');
 
       // Should always run file detection regardless of cached setup
       expect(mockFirebaseService.detect).toHaveBeenCalled();
       expect(mockFirebaseService.getStatus).toHaveBeenCalled();
+      expect(mockInternalApiClient.getProject).toHaveBeenCalledWith('clix-project');
       expect(status.configured).toBe(true);
       // Project ID from detected files takes precedence over cached config
       expect(status.projectId).toBe('test-project');
+      expect(status.senderConfigConfigured).toBe(true);
     });
 
     test('should fallback to cached projectId when files have no project ID', async () => {
@@ -142,7 +351,7 @@ describe('preparation', () => {
         projectPath: '/test',
       });
 
-      const status = await checkFirebaseStatus('/test', projectType, setup);
+      const status = await checkFirebaseStatus('/test', projectType, setup, 'clix-project');
 
       expect(status.projectId).toBe('my-project');
     });
@@ -150,11 +359,12 @@ describe('preparation', () => {
     test('should detect Firebase config when not in setup', async () => {
       const projectType: ProjectType = { framework: 'react-native', target: 'ios-android' };
 
-      const status = await checkFirebaseStatus('/test', projectType);
+      const status = await checkFirebaseStatus('/test', projectType, undefined, 'clix-project');
 
       expect(status.needed).toBe(true);
       expect(mockFirebaseService.detect).toHaveBeenCalled();
       expect(mockFirebaseService.getStatus).toHaveBeenCalled();
+      expect(mockInternalApiClient.getProject).toHaveBeenCalledWith('clix-project');
     });
 
     test('should check only Android for Android-only projects', async () => {
@@ -169,7 +379,7 @@ describe('preparation', () => {
         warningCount: 0,
       });
 
-      const status = await checkFirebaseStatus('/test', projectType);
+      const status = await checkFirebaseStatus('/test', projectType, undefined, 'clix-project');
 
       expect(status.configured).toBe(true);
       expect(status.androidConfigured).toBe(true);
@@ -189,12 +399,39 @@ describe('preparation', () => {
         warningCount: 0,
       });
 
-      const status = await checkFirebaseStatus('/test', projectType);
+      const status = await checkFirebaseStatus('/test', projectType, undefined, 'clix-project');
 
       expect(status.configured).toBe(true);
       // Android not needed, so configured is true
       expect(status.androidConfigured).toBe(true);
       expect(status.iosConfigured).toBe(true);
+    });
+
+    test('should return configured=false when sender config is missing', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+      mockInternalApiClient.getProject.mockResolvedValueOnce({
+        id: 'clix-project',
+        name: 'Project',
+        organization_id: 'org-1',
+        sender_configs: [],
+      });
+
+      const status = await checkFirebaseStatus('/test', projectType, undefined, 'clix-project');
+
+      expect(status.iosConfigured).toBe(true);
+      expect(status.senderConfigConfigured).toBe(false);
+      expect(status.configured).toBe(false);
+    });
+
+    test('should return configured=false when sender config check fails', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+      mockInternalApiClient.getProject.mockRejectedValueOnce(new Error('API failure'));
+
+      const status = await checkFirebaseStatus('/test', projectType, undefined, 'clix-project');
+
+      expect(status.iosConfigured).toBe(true);
+      expect(status.senderConfigConfigured).toBe(false);
+      expect(status.configured).toBe(false);
     });
   });
 });

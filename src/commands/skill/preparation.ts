@@ -7,12 +7,21 @@
  * @module commands/skill/preparation
  */
 
+import { getInternalApiClient } from '@/lib/api';
 import {
   getProjectConfigManager,
   type ProjectConfig,
   type ProjectType,
   type SetupStatus,
 } from '@/lib/config';
+import {
+  analyzeIosProject,
+  generateAppGroupId,
+  getIosProjectDir,
+  hasClixConfiguration,
+  readEntitlements,
+  verifyExtensionFiles,
+} from '@/lib/ios';
 import { FirebaseService } from '@/lib/services/firebase/firebase-service';
 import { detectProjectType } from '@/lib/services/project-detector';
 
@@ -26,6 +35,8 @@ export interface FirebaseStatus {
   androidConfigured: boolean;
   /** Whether iOS config (GoogleService-Info.plist) exists and is valid */
   iosConfigured: boolean;
+  /** Whether app push sender config is registered in Clix project */
+  senderConfigConfigured: boolean;
   /** Firebase project ID if detected */
   projectId?: string;
   /** Whether Firebase setup is needed based on project type */
@@ -51,6 +62,20 @@ export interface IosStatus {
 }
 
 /**
+ * Status of APNS key setup for Firebase iOS push.
+ */
+export interface ApnsStatus {
+  /** Whether APNS setup is needed based on project type */
+  needed: boolean;
+  /** APNS Key ID if configured */
+  keyId?: string;
+  /** Apple Team ID if configured */
+  teamId?: string;
+  /** Whether APNS key is registered with Firebase */
+  registeredWithFirebase: boolean;
+}
+
+/**
  * Context passed to the install skill after preparation.
  */
 export interface PreparationContext {
@@ -64,6 +89,8 @@ export interface PreparationContext {
   firebase: FirebaseStatus;
   /** iOS configuration status */
   ios: IosStatus;
+  /** APNS configuration status */
+  apns: ApnsStatus;
   /** Whether all required preparations are complete */
   ready: boolean;
   /** List of missing preparations */
@@ -144,17 +171,41 @@ export async function ensureProjectType(
 }
 
 /**
+ * Check whether app push sender config is registered for the Clix project.
+ *
+ * API/network errors are treated as not configured to avoid false positives.
+ */
+async function hasAppPushSenderConfig(clixProjectId?: string): Promise<boolean> {
+  if (!clixProjectId) {
+    return false;
+  }
+
+  try {
+    const apiClient = getInternalApiClient();
+    const project = await apiClient.getProject(clixProjectId);
+    return (
+      project.sender_configs?.some((config) => config.channel_type === 'CHANNEL_TYPE_APP_PUSH') ??
+      false
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check Firebase configuration status.
  *
  * @param projectPath - Path to the project root
  * @param projectType - Detected project type
  * @param setup - Current setup status from config
+ * @param clixProjectId - Clix project ID for sender config verification
  * @returns Firebase status
  */
 export async function checkFirebaseStatus(
   projectPath: string,
   projectType: ProjectType,
   setup?: SetupStatus,
+  clixProjectId?: string,
 ): Promise<FirebaseStatus> {
   // Determine if Firebase is needed based on project type
   const needed = projectType.target !== 'unknown';
@@ -164,6 +215,7 @@ export async function checkFirebaseStatus(
       configured: true,
       androidConfigured: true,
       iosConfigured: true,
+      senderConfigConfigured: true,
       needed: false,
     };
   }
@@ -179,6 +231,10 @@ export async function checkFirebaseStatus(
 
   const androidConfigured = !needsAndroid || status.androidConfigured;
   const iosConfigured = !needsIos || status.iosConfigured;
+  const credentialFilesConfigured = androidConfigured && iosConfigured;
+  const senderConfigConfigured = credentialFilesConfigured
+    ? await hasAppPushSenderConfig(clixProjectId)
+    : false;
 
   // Extract project ID from detected files, fallback to cached setup
   let projectId: string | undefined;
@@ -191,11 +247,80 @@ export async function checkFirebaseStatus(
   }
 
   return {
-    configured: androidConfigured && iosConfigured,
+    configured: credentialFilesConfigured && senderConfigConfigured,
     androidConfigured,
     iosConfigured,
+    senderConfigConfigured,
     projectId,
     needed: true,
+  };
+}
+
+interface IosFileStatus {
+  bundleId?: string;
+  teamId?: string;
+  appGroupId?: string;
+  entitlementsConfigured: boolean;
+  nseConfigured: boolean;
+}
+
+/**
+ * Detect iOS setup status from actual project files.
+ */
+async function detectIosStatusFromFiles(
+  projectPath: string,
+  setup?: SetupStatus['ios'],
+): Promise<IosFileStatus> {
+  const analysis = await analyzeIosProject(projectPath).catch(() => ({
+    success: false as const,
+  }));
+
+  if (!analysis.success || !analysis.project) {
+    return {
+      bundleId: setup?.bundleId,
+      teamId: setup?.teamId,
+      appGroupId: setup?.appGroupId,
+      entitlementsConfigured: false,
+      nseConfigured: false,
+    };
+  }
+
+  const project = analysis.project;
+  const expectedAppGroupId = generateAppGroupId(project.bundleId);
+  let hasEntitlements = false;
+  let detectedAppGroupId: string | undefined;
+
+  for (const entitlementsPath of project.entitlementsFiles) {
+    try {
+      const entitlements = await readEntitlements(entitlementsPath);
+      const clixConfig = hasClixConfiguration(entitlements, project.bundleId);
+      if (!clixConfig.hasPush || !clixConfig.hasAppGroup) {
+        continue;
+      }
+
+      hasEntitlements = true;
+      const appGroups = entitlements?.['com.apple.security.application-groups'];
+      if (Array.isArray(appGroups)) {
+        detectedAppGroupId =
+          appGroups.find((group) => group === expectedAppGroupId) ??
+          appGroups[0] ??
+          detectedAppGroupId;
+      }
+      break;
+    } catch {
+      // Ignore malformed entitlements files and continue scanning.
+    }
+  }
+
+  const iosDir = getIosProjectDir(projectPath);
+  const hasNseFiles = iosDir ? verifyExtensionFiles(iosDir, project.appName).complete : false;
+
+  return {
+    bundleId: project.bundleId,
+    teamId: project.teamId,
+    appGroupId: detectedAppGroupId ?? setup?.appGroupId,
+    entitlementsConfigured: hasEntitlements,
+    nseConfigured: hasNseFiles,
   };
 }
 
@@ -208,7 +333,7 @@ export async function checkFirebaseStatus(
  * @returns iOS status
  */
 export async function checkIosStatus(
-  _projectPath: string,
+  projectPath: string,
   projectType: ProjectType,
   setup?: SetupStatus,
 ): Promise<IosStatus> {
@@ -222,24 +347,44 @@ export async function checkIosStatus(
       nseConfigured: true,
     };
   }
+  const fileStatus = await detectIosStatusFromFiles(projectPath, setup?.ios);
+  return {
+    needed: true,
+    ...fileStatus,
+  };
+}
 
-  // Check setup status from config
-  if (setup?.ios) {
+/**
+ * Check APNS setup status.
+ *
+ * APNS key setup is required only for iOS targets.
+ */
+export async function checkApnsStatus(
+  _projectPath: string,
+  projectType: ProjectType,
+  setup?: SetupStatus,
+): Promise<ApnsStatus> {
+  const needed = projectType.target === 'ios' || projectType.target === 'ios-android';
+
+  if (!needed) {
     return {
-      needed: true,
-      bundleId: setup.ios.bundleId,
-      teamId: setup.ios.teamId,
-      appGroupId: setup.ios.appGroupId,
-      entitlementsConfigured: setup.ios.entitlementsConfigured,
-      nseConfigured: setup.ios.nseConfigured,
+      needed: false,
+      registeredWithFirebase: true,
     };
   }
 
-  // No iOS setup recorded
+  if (setup?.apns) {
+    return {
+      needed: true,
+      keyId: setup.apns.keyId,
+      teamId: setup.apns.teamId,
+      registeredWithFirebase: setup.apns.registeredWithFirebase,
+    };
+  }
+
   return {
     needed: true,
-    entitlementsConfigured: false,
-    nseConfigured: false,
+    registeredWithFirebase: false,
   };
 }
 
@@ -265,13 +410,25 @@ export async function gatherPreparationContext(
   const { config: updatedConfig, projectType } = await ensureProjectType(config, projectPath);
 
   // Step 3: Check Firebase status
-  const firebase = await checkFirebaseStatus(projectPath, projectType, updatedConfig.setup);
+  const firebase = await checkFirebaseStatus(
+    projectPath,
+    projectType,
+    updatedConfig.setup,
+    updatedConfig.project.id,
+  );
 
   // Step 4: Check iOS status
   const ios = await checkIosStatus(projectPath, projectType, updatedConfig.setup);
 
-  // Step 5: Determine what's missing
+  // Step 5: Check APNS status
+  const apns = await checkApnsStatus(projectPath, projectType, updatedConfig.setup);
+
+  // Step 6: Determine what's missing
   const missing: string[] = [];
+
+  if (apns.needed && firebase.iosConfigured && !apns.registeredWithFirebase) {
+    missing.push('APNS Key for Firebase');
+  }
 
   if (firebase.needed && !firebase.configured) {
     if (!firebase.androidConfigured) {
@@ -279,6 +436,13 @@ export async function gatherPreparationContext(
     }
     if (!firebase.iosConfigured) {
       missing.push('Firebase iOS config (GoogleService-Info.plist)');
+    }
+    const senderConfigPrerequisitesMet =
+      firebase.androidConfigured &&
+      firebase.iosConfigured &&
+      (!apns.needed || apns.registeredWithFirebase);
+    if (senderConfigPrerequisitesMet && !firebase.senderConfigConfigured) {
+      missing.push('Firebase Service Account');
     }
   }
 
@@ -299,6 +463,7 @@ export async function gatherPreparationContext(
     projectType,
     firebase,
     ios,
+    apns,
     ready,
     missing,
   };
@@ -315,6 +480,7 @@ export async function saveSetupStatus(
   projectPath: string,
   firebase: FirebaseStatus,
   ios: IosStatus,
+  apns?: ApnsStatus,
 ): Promise<void> {
   const manager = getProjectConfigManager(projectPath);
   const now = new Date().toISOString();
@@ -338,6 +504,15 @@ export async function saveSetupStatus(
       entitlementsConfigured: ios.entitlementsConfigured,
       nseConfigured: ios.nseConfigured,
       completedAt: ios.entitlementsConfigured && ios.nseConfigured ? now : undefined,
+    };
+  }
+
+  if (apns?.needed) {
+    setupUpdate.apns = {
+      keyId: apns.keyId,
+      teamId: apns.teamId,
+      registeredWithFirebase: apns.registeredWithFirebase,
+      completedAt: apns.registeredWithFirebase ? now : undefined,
     };
   }
 

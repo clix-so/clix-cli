@@ -98,4 +98,4 @@ Analyze the project and output a diagnostic JSON report:
 
 Output the JSON diagnostic, then provide a brief summary with actionable recommendations.
 
-Use `/firebase` command to interactively check and configure Firebase credentials.
+Use `/install` to run interactive setup for missing Firebase credentials.

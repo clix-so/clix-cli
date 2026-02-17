@@ -14,6 +14,12 @@ export interface FlattenedProject {
 }
 
 const PROJECT_SORTER: Intl.Collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+const FALLBACK_TERMINAL_ROWS = 24;
+const COMPACT_TERMINAL_ROWS = 34;
+const MEDIUM_TERMINAL_ROWS = 42;
+const COMPACT_MAX_VISIBLE_ITEMS = 5;
+const MEDIUM_MAX_VISIBLE_ITEMS = 7;
+const LARGE_MAX_VISIBLE_ITEMS = 10;
 
 export interface ProjectSelectorProps {
   organizations: OrgWithProjects[];
@@ -61,6 +67,19 @@ export function filterProjectsByQuery(
   return projects.filter((item) => item.project.name.toLowerCase().includes(normalizedQuery));
 }
 
+export function getProjectSelectorMaxVisible(rows = process.stdout.rows): number {
+  const terminalRows =
+    typeof rows === 'number' && Number.isFinite(rows) && rows > 0 ? rows : FALLBACK_TERMINAL_ROWS;
+
+  if (terminalRows <= COMPACT_TERMINAL_ROWS) {
+    return COMPACT_MAX_VISIBLE_ITEMS;
+  }
+  if (terminalRows <= MEDIUM_TERMINAL_ROWS) {
+    return MEDIUM_MAX_VISIBLE_ITEMS;
+  }
+  return LARGE_MAX_VISIBLE_ITEMS;
+}
+
 function applySearchInput(
   input: string,
   key: { backspace?: boolean; delete?: boolean; space?: boolean },
@@ -96,8 +115,8 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   );
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Calculate visible window for scrolling (show max 10 items)
-  const maxVisible = 10;
+  // Calculate visible window for scrolling based on terminal height.
+  const maxVisible = getProjectSelectorMaxVisible();
   const totalItems = filteredProjects.length;
   const halfWindow = Math.floor(maxVisible / 2);
 

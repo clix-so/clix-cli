@@ -79,6 +79,6 @@ android/app/google-services.json
 # Clix CLI local config
 .clix/
 
-
+.omc
 .ralph-tui
 llm-council

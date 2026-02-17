@@ -221,25 +221,7 @@ export const FIREBASE_HELP_URLS = {
 } as const;
 
 /**
- * Credential action types for the wizard menu.
- */
-export type CredentialAction =
-  | { type: 'redetect' }
-  | { type: 'redetect_platform'; platform: 'android' | 'ios' }
-  | { type: 'validate'; platform: 'android' | 'ios' }
-  | { type: 'help'; topic: keyof typeof FIREBASE_HELP_URLS }
-  | { type: 'download' }
-  | { type: 'skip' }
-  | { type: 'done' }
-  | { type: 'setup_service_account' };
-
-/**
- * Wizard phase states.
- */
-export type WizardPhase = 'detecting' | 'status' | 'menu' | 'validating' | 'error' | 'complete';
-
-/**
- * Result from Firebase setup wizard.
+ * Result from Firebase setup flow.
  */
 export interface FirebaseSetupResult {
   /** Whether setup was completed */

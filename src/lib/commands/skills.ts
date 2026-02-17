@@ -81,7 +81,6 @@ function generateSkillCommands(): Command[] {
     ),
   );
   commands.push(createLocalSkillCommand('doctor', 'Check SDK integration status', 'doctor'));
-  // NOTE: ios-setup is now a LocalJSXCommand in registry.ts, not a skill
 
   return commands;
 }

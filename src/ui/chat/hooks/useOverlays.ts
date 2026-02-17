@@ -24,8 +24,6 @@ export type OverlayType =
   | 'resume'
   | 'mcp'
   | 'debug'
-  | 'firebase'
-  | 'ios-setup'
   | 'install-preparation'
   | 'login'
   | 'logout'
@@ -119,8 +117,6 @@ export function useOverlays(options: UseOverlaysOptions) {
   }, []);
 
   const showDebugPrompt = useCallback(() => setActiveOverlay('debug'), []);
-  const showFirebaseWizard = useCallback(() => setActiveOverlay('firebase'), []);
-  const showIosSetupOverlay = useCallback(() => setActiveOverlay('ios-setup'), []);
   const showInstallPreparation = useCallback(() => setActiveOverlay('install-preparation'), []);
   const showLoginOverlay = useCallback(() => setActiveOverlay('login'), []);
   const showLogoutOverlay = useCallback(() => setActiveOverlay('logout'), []);
@@ -242,33 +238,6 @@ export function useOverlays(options: UseOverlaysOptions) {
     [executeDebugSession],
   );
 
-  // Firebase wizard handlers
-  const handleFirebaseComplete = useCallback(
-    (result: { completed?: boolean; skipped?: boolean }) => {
-      setActiveOverlay(null);
-      if (result.skipped) {
-        addSystemMessage('Firebase setup skipped');
-      } else if (result.completed) {
-        addSystemMessage('Firebase configuration complete');
-      }
-    },
-    [addSystemMessage],
-  );
-
-  const handleFirebaseCancel = useCallback(() => {
-    setActiveOverlay(null);
-    addSystemMessage('Firebase setup cancelled');
-  }, [addSystemMessage]);
-
-  // iOS setup handlers
-  const handleIosSetupComplete = useCallback(
-    (message: string) => {
-      setActiveOverlay(null);
-      addSystemMessage(message);
-    },
-    [addSystemMessage],
-  );
-
   // Install preparation handlers
   const handleInstallPreparationComplete = useCallback(
     (context: PreparationContext) => {
@@ -344,15 +313,6 @@ export function useOverlays(options: UseOverlaysOptions) {
     // Debug prompt
     showDebugPrompt,
     handleDebugPromptSubmit,
-
-    // Firebase wizard
-    showFirebaseWizard,
-    handleFirebaseComplete,
-    handleFirebaseCancel,
-
-    // iOS setup
-    showIosSetupOverlay,
-    handleIosSetupComplete,
 
     // Install preparation
     showInstallPreparation,

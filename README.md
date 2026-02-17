@@ -160,35 +160,16 @@ Analyze SDK integration status in your project.
 clix doctor
 ```
 
-### `clix ios-setup`
+### iOS Push Preparation in `clix install`
 
-Configure iOS capabilities, Notification Service Extension (NSE), and APNS key for the Clix SDK.
+`clix install` runs required iOS push preparation tasks in order:
+1. Firebase configuration files
+2. APNS key setup in Firebase
+3. Firebase Service Account registration
+4. iOS entitlements
+5. Notification Service Extension (NSE)
 
-```bash
-clix ios-setup
-```
-
-**What it does:**
-1. **Phase 1 - Capabilities & Entitlements (Automatic):**
-   - Analyzes your iOS project structure
-   - Syncs capabilities with Apple Developer Portal (Push Notifications, App Groups)
-   - Creates/modifies entitlements files
-
-2. **Phase 2 - Extension Setup (Guided):**
-   - Auto-generates NSE files:
-     - `NotificationService.swift` with `ClixNotificationServiceExtension`
-     - `Info.plist` for extension
-     - Extension entitlements file
-   - Step-by-step guide for Xcode configuration:
-     - Creating extension target in Xcode
-     - Configuring build settings (`ENABLE_USER_SCRIPT_SANDBOXING` for Xcode 15+)
-     - Adding CocoaPods/SPM dependencies
-
-3. **Phase 3 - APNS Key Setup (Optional):**
-   - APNS authentication key (.p8 file) creation guide
-   - Firebase Console upload for push notification delivery
-
-**Note:** Phase 2 & 3 require manual action in Xcode, Apple Developer Portal, and Firebase Console.
+The flow blocks installation until required setup steps are complete.
 
 ### `clix update`
 
@@ -291,7 +272,6 @@ Use these commands within the interactive chat (`clix`):
 | `/install` | | Autonomous SDK installation |
 | `/doctor` | | Check SDK integration status |
 | `/debug` | | Interactive debugging assistant |
-| `/ios-setup` | `/capabilities`, `/ios-capabilities` | Configure iOS capabilities and NSE |
 
 ### Interactive Skills
 
@@ -311,7 +291,6 @@ Use these commands within the interactive chat (`clix`):
 | `/new` | /clear | Start a new session |
 | `/compact` | /c | Compress conversation history |
 | `/agent` | /a | List or switch agents |
-| `/firebase` | | Check and configure Firebase credentials |
 | `/transfer` | /t | Transfer to agent CLI |
 | `/resume` | | Resume a previous session |
 | `/install-mcp` | /mcp | Install Clix MCP Server |
