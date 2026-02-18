@@ -15,6 +15,15 @@ Clix CLI is an interactive AI-powered assistant for Clix SDK integration. Built 
 - When fixing lint/test failures, fix ALL issues in one pass, not incrementally.
 - Do not create helper functions that are referenced only once.
 
+## Execution Discipline
+
+Guidelines merged from `andrej-karpathy-skills/CLAUDE.md` and adapted for this repository:
+
+- **Think before coding**: State assumptions explicitly. If requirements are ambiguous, clarify before implementation.
+- **Keep it simple**: Implement only what was requested. Avoid speculative abstraction, configurability, or impossible-case handling.
+- **Make surgical changes**: Touch only code directly related to the request. Do not clean up unrelated code.
+- **Define verifiable goals**: Convert tasks into concrete checks (targeted tests, repro case, lint/typecheck/build) and verify completion.
+
 ## Commands
 
 ```bash
