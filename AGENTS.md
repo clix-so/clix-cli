@@ -11,18 +11,14 @@ Clix CLI is an interactive AI-powered assistant for Clix SDK integration. Built 
 - After any code change, run `bun run check && bun test` automatically. Do not ask permission to run tests.
 - Before introducing a new pattern, search the codebase for existing implementations first.
 - Prefer automation over confirmation — run tests, fix lint issues, and verify results yourself.
+- State assumptions explicitly before implementation. If requirements are ambiguous or conflicting, ask first.
+- If multiple valid interpretations exist, present the options and tradeoffs instead of choosing silently.
+- Prefer the simplest implementation that satisfies the request. Do not add speculative features or abstractions.
+- Do not add configurability/flexibility unless requested, and avoid handling impossible scenarios.
 - Only modify files directly related to the task. Do not refactor or "improve" surrounding code.
+- Do not clean up unrelated code. Remove only unused imports/variables/functions introduced by your own changes.
 - When fixing lint/test failures, fix ALL issues in one pass, not incrementally.
 - Do not create helper functions that are referenced only once.
-
-## Execution Discipline
-
-Guidelines merged from `andrej-karpathy-skills/CLAUDE.md` and adapted for this repository:
-
-- **Think before coding**: State assumptions explicitly. If requirements are ambiguous, clarify before implementation.
-- **Keep it simple**: Implement only what was requested. Avoid speculative abstraction, configurability, or impossible-case handling.
-- **Make surgical changes**: Touch only code directly related to the request. Do not clean up unrelated code.
-- **Define verifiable goals**: Convert tasks into concrete checks (targeted tests, repro case, lint/typecheck/build) and verify completion.
 
 ## Commands
 
@@ -236,6 +232,10 @@ Tests use `bun:test` (`describe`, `test`, `expect`, `mock`).
 - Test utilities: `src/lib/__tests__/test-utils/`
 
 **Test hierarchy**: First run the specific file test (`bun test path/to/file.test.ts`). If shared code changed, run full suite (`bun test`).
+
+- Use goal-driven verification: define concrete success checks before coding and loop until each check passes.
+- For bug fixes, add or run a test that reproduces the issue, then verify it passes after the fix.
+- For refactors, verify behavior is unchanged with before/after test results.
 
 **Mocking**: Use `mock.module()` for module mocks. Keep tests deterministic — avoid network calls.
 
