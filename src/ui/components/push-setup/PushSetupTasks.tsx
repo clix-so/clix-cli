@@ -13,6 +13,7 @@ import TextInput from 'ink-text-input';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { openBrowser } from '@/lib/auth/browser';
+import { PROJECT_CONFIG_DIR } from '@/lib/config/project-config-schema';
 import { analyzeIosProject } from '@/lib/ios';
 import {
   APNS_KEY_CREATION_STEPS,
@@ -27,6 +28,7 @@ import { FirebaseDownloader, type FirebaseProject, FirebaseService } from '@/lib
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
 import { detectProjectType } from '@/lib/services/project-detector';
 import { isCtrlCInput, useCancelInput } from '@/ui/hooks';
+import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 import { AppleLoginUI } from '../AppleLoginUI';
 import { normalizeInputFilePath } from '../file-input-utils';
 
@@ -442,7 +444,9 @@ function AppleGuidePhase({
         ))}
       </Box>
       <Box marginTop={1}>
-        <Text color="yellow">Press Enter when you have copied the .p8 file to this directory</Text>
+        <Text color="yellow">
+          Press Enter when you have copied the .p8 file to ./{PROJECT_CONFIG_DIR}
+        </Text>
       </Box>
       <Box marginTop={1}>
         <Text dimColor>Esc/Ctrl+C to cancel</Text>
@@ -454,12 +458,27 @@ function AppleGuidePhase({
 function findP8Files(): string[] {
   try {
     const cwd = process.cwd();
-    const files = fs.readdirSync(cwd);
+    const searchDirs = [cwd, path.join(cwd, PROJECT_CONFIG_DIR)];
+    const files = new Set<string>();
 
-    return files
-      .filter((fileName) => fileName.endsWith('.p8'))
-      .map((fileName) => `./${fileName}`)
-      .sort();
+    for (const dir of searchDirs) {
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+        continue;
+      }
+
+      const directoryFiles = fs.readdirSync(dir);
+      for (const fileName of directoryFiles) {
+        if (!fileName.endsWith('.p8')) {
+          continue;
+        }
+
+        const fullPath = path.join(dir, fileName);
+        const relativePath = path.relative(cwd, fullPath);
+        files.add(relativePath.startsWith('.') ? relativePath : `./${relativePath}`);
+      }
+    }
+
+    return [...files].sort();
   } catch {
     return [];
   }
@@ -496,11 +515,6 @@ function P8InputPhase({
   useInput((input, key) => {
     if (key.escape || isCtrlCInput(input, key)) {
       onCancel();
-      return;
-    }
-
-    if (stage === 'team_id' && input === 't') {
-      openBrowser(PUSH_SETUP_URLS.appleTeamId);
     }
   });
 
@@ -601,7 +615,8 @@ function P8InputPhase({
         <>
           <Box marginBottom={1}>
             <Text>
-              Found <Text color="green">{foundFiles.length}</Text> P8 file(s) in current directory:
+              Found <Text color="green">{foundFiles.length}</Text> P8 file(s) in ./ or ./
+              {PROJECT_CONFIG_DIR}:
             </Text>
           </Box>
           <SelectInput items={fileItems} onSelect={handleFileSelect} />
@@ -696,11 +711,6 @@ function P8InputPhase({
               onSubmit={handleTeamIdSubmit}
             />
           </Box>
-          {!prefilledTeamId && (
-            <Box marginTop={1}>
-              <Text dimColor>Press 't' to open Team ID page in browser</Text>
-            </Box>
-          )}
         </>
       )}
 
@@ -731,10 +741,11 @@ export const ApnsKeyAcquisitionTask: React.FC<{
       pushKey: { apnsKeyId: string; apnsKeyP8: string; teamId: string; teamName?: string };
     }) => {
       const p8FileName = `AuthKey_${result.pushKey.apnsKeyId}.p8`;
-      const projectP8Path = path.join(projectPath, p8FileName);
+      const projectP8Path = path.join(projectPath, PROJECT_CONFIG_DIR, p8FileName);
 
       let savedPath: string | null = null;
       try {
+        fs.mkdirSync(path.dirname(projectP8Path), { recursive: true });
         fs.writeFileSync(projectP8Path, result.pushKey.apnsKeyP8, {
           encoding: 'utf-8',
           mode: 0o600,
@@ -742,14 +753,17 @@ export const ApnsKeyAcquisitionTask: React.FC<{
         savedPath = projectP8Path;
       } catch {
         try {
-          const fallbackPath = path.join(process.cwd(), p8FileName);
+          const fallbackPath = path.join(process.cwd(), PROJECT_CONFIG_DIR, p8FileName);
+          fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
           fs.writeFileSync(fallbackPath, result.pushKey.apnsKeyP8, {
             encoding: 'utf-8',
             mode: 0o600,
           });
           savedPath = fallbackPath;
         } catch {
-          setError('Failed to write APNS key file. Check directory permissions and try again.');
+          setError(
+            `Failed to write APNS key file under ${PROJECT_CONFIG_DIR}. Check directory permissions and try again.`,
+          );
           setPhase('error');
           return;
         }
@@ -835,33 +849,54 @@ export const ApnsKeyAcquisitionTask: React.FC<{
   );
 };
 
-function FirebaseAuthPhase({ onCancel }: { onCancel: () => void }): React.ReactElement {
+function FirebaseAuthPhase({
+  onCancel,
+  authUrl,
+}: {
+  onCancel: () => void;
+  authUrl?: string | null;
+}): React.ReactElement {
   useCancelInput(onCancel);
+  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, 'Open authentication URL') : null;
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="blue"
-      paddingX={1}
-      marginX={1}
-      marginY={1}
-    >
-      <Box marginBottom={1}>
-        <Text bold>Firebase Authentication</Text>
+    <Box flexDirection="column">
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor="blue"
+        paddingX={1}
+        marginX={1}
+        marginY={1}
+      >
+        <Box marginBottom={1}>
+          <Text bold>Firebase Authentication</Text>
+        </Box>
+        <Box>
+          <Text dimColor>
+            <Spinner type="dots" />
+          </Text>
+          <Text> Authenticating with Firebase...</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>A browser window will open for authentication</Text>
+        </Box>
+        {reopenLink ? (
+          <Box marginTop={1} flexDirection="column">
+            <Text dimColor>If browser was closed, reopen this URL:</Text>
+            <Text color="cyan">{reopenLink}</Text>
+          </Box>
+        ) : null}
+        <Box marginTop={1}>
+          <Text dimColor>Esc/Ctrl+C to cancel</Text>
+        </Box>
       </Box>
-      <Box>
-        <Text dimColor>
-          <Spinner type="dots" />
-        </Text>
-        <Text> Authenticating with Firebase...</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>A browser window will open for authentication</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>Esc/Ctrl+C to cancel</Text>
-      </Box>
+      {authUrl ? (
+        <Box marginLeft={2} marginTop={1} flexDirection="column">
+          <Text dimColor>Direct URL:</Text>
+          <Text>{authUrl}</Text>
+        </Box>
+      ) : null}
     </Box>
   );
 }
@@ -952,7 +987,12 @@ export const FirebaseProjectSelectionTask: React.FC<{
   const [phase, setPhase] = useState<FirebaseProjectTaskPhase>('authenticating');
   const [projects, setProjects] = useState<FirebaseProject[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
   const downloaderRef = useRef<FirebaseDownloader | null>(null);
+  const cancelAuthentication = useCallback(() => {
+    downloaderRef.current?.cancelAuthentication('Firebase project selection cancelled');
+    onCancel();
+  }, [onCancel]);
 
   useEffect(() => {
     if (phase !== 'authenticating') {
@@ -963,9 +1003,16 @@ export const FirebaseProjectSelectionTask: React.FC<{
 
     const authenticateAndSelect = async () => {
       try {
+        setAuthUrl(null);
         downloaderRef.current = downloaderRef.current ?? new FirebaseDownloader();
         const downloader = downloaderRef.current;
-        const authResult = await downloader.authenticate(openBrowser);
+        const authResult = await downloader.authenticate((url) => {
+          if (cancelled) {
+            return;
+          }
+          setAuthUrl(url);
+          void openBrowser(url);
+        });
         if (!authResult.success) {
           throw new Error(authResult.error || 'Firebase authentication failed');
         }
@@ -1001,11 +1048,12 @@ export const FirebaseProjectSelectionTask: React.FC<{
 
     return () => {
       cancelled = true;
+      downloaderRef.current?.cancelAuthentication('Firebase project selection cancelled');
     };
   }, [onComplete, phase, preferredProjectId]);
 
   if (phase === 'authenticating') {
-    return <FirebaseAuthPhase onCancel={onCancel} />;
+    return <FirebaseAuthPhase authUrl={authUrl} onCancel={cancelAuthentication} />;
   }
 
   if (phase === 'select_project') {
@@ -1013,7 +1061,7 @@ export const FirebaseProjectSelectionTask: React.FC<{
       <FirebaseProjectsPhase
         projects={projects}
         onSelect={(project) => onComplete(project)}
-        onCancel={onCancel}
+        onCancel={cancelAuthentication}
       />
     );
   }
@@ -1023,9 +1071,10 @@ export const FirebaseProjectSelectionTask: React.FC<{
       error={error || 'Unknown Firebase project selection error'}
       onRetry={() => {
         setError(null);
+        setAuthUrl(null);
         setPhase('authenticating');
       }}
-      onCancel={onCancel}
+      onCancel={cancelAuthentication}
     />
   );
 };
@@ -1119,9 +1168,9 @@ function FirebaseUploadPhase({
 
       <Box flexDirection="column" marginBottom={1}>
         <Text bold>Steps:</Text>
-        {FIREBASE_UPLOAD_STEPS.map((step) => (
-          <Text key={step} dimColor>
-            {FIREBASE_UPLOAD_STEPS.indexOf(step) + 1}. {step}
+        {FIREBASE_UPLOAD_STEPS.map((step, index) => (
+          <Text key={`${index + 1}-${step}`} dimColor>
+            {index + 1}. {step}
           </Text>
         ))}
       </Box>

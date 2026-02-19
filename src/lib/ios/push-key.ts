@@ -45,6 +45,26 @@ Revoke the old ones or reuse existing from your other apps.
 Remember that Apple Keys are not application specific!
 `;
 
+/**
+ * Detect Apple APNS key limit errors from raw portal messages.
+ */
+export function isAppleKeysTooManyErrorMessage(message: string): boolean {
+  const compact = message.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return false;
+  }
+
+  const hasMaxAllowed = compact.includes('maximum allowed number of');
+  const hasKeyWord = compact.includes(' key') || compact.includes(' keys');
+
+  return (
+    compact.includes('you can have only two apple keys') ||
+    compact.includes('team scoped keys for this service') ||
+    compact.includes('maxkeyscreatederror') ||
+    (hasMaxAllowed && hasKeyWord)
+  );
+}
+
 const { MaxKeysCreatedError } = Keys;
 
 /**
@@ -123,12 +143,14 @@ export async function createPushKeyAsync(
   } catch (err: unknown) {
     const error = err as { rawDump?: { resultString?: string } };
     const resultString = error.rawDump?.resultString;
+    const errorMessage = err instanceof Error ? err.message : '';
 
     if (
       err instanceof MaxKeysCreatedError ||
-      (typeof resultString === 'string' && resultString.includes('maximum allowed number of Keys'))
+      (typeof resultString === 'string' && isAppleKeysTooManyErrorMessage(resultString)) ||
+      isAppleKeysTooManyErrorMessage(errorMessage)
     ) {
-      throw new Error(APPLE_KEYS_TOO_MANY_ERROR);
+      throw new Error(APPLE_KEYS_TOO_MANY_ERROR.trim());
     }
     throw err;
   }

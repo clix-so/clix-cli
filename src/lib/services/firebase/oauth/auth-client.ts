@@ -126,11 +126,10 @@ export class GoogleAuthClient {
 
     try {
       const result = await this.callbackServer.waitForCallback();
-      this.oauthState = null;
       return result;
-    } catch (error) {
+    } finally {
       this.oauthState = null;
-      throw error;
+      this.callbackServer = null;
     }
   }
 
@@ -405,6 +404,16 @@ export class GoogleAuthClient {
         error: errorMessage,
       };
     }
+  }
+
+  /**
+   * Cancel in-flight OAuth authentication.
+   */
+  cancelAuthentication(reason = 'OAuth authentication cancelled'): void {
+    this.callbackServer?.cancel(reason);
+    this.callbackServer = null;
+    this.oauthState = null;
+    this.codeVerifier = null;
   }
 
   /**

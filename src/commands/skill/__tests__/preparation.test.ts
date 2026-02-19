@@ -76,6 +76,50 @@ const mockIos = {
     (bundleId: string) => `group.clix.${bundleId}`,
   ),
   getIosProjectDir: mock<(projectPath: string) => string>(() => '/test/ios'),
+  getExtensionName: mock<(appName: string) => string>(
+    (appName: string) => `${appName}NotificationServiceExtension`,
+  ),
+  getExtensionBundleId: mock<(bundleId: string, appName: string) => string>(
+    (bundleId: string, appName: string) => `${bundleId}.${appName}NotificationServiceExtension`,
+  ),
+  hasNotificationServiceExtension: mock<(projectPath: string, extensionName: string) => boolean>(
+    () => false,
+  ),
+  getNotificationServiceExtensionStatus: mock(() => ({
+    targetExists: false,
+    buildSettings: {
+      enableUserScriptSandboxingNo: false,
+      infoPlistConfigured: false,
+      codeSignEntitlementsConfigured: false,
+    },
+  })),
+  hasPodfile: mock<(iosDir: string) => boolean>(() => false),
+  hasExtensionTarget: mock<(iosDir: string, extensionName: string) => boolean>(() => false),
+  hasClixPodInExtensionTarget: mock<(iosDir: string, extensionName: string) => boolean>(
+    () => false,
+  ),
+  inspectNotificationServiceSwift: mock<
+    (
+      iosDir: string,
+      appName: string,
+    ) => {
+      exists: boolean;
+      path: string;
+      importsClix: boolean;
+      inheritsClixNse: boolean;
+      hasRegisterCall: boolean;
+      hasSuperDidReceive: boolean;
+      registeredProjectId: string | null;
+    }
+  >(() => ({
+    exists: false,
+    path: '/test/ios/MyAppNotificationServiceExtension/NotificationService.swift',
+    importsClix: false,
+    inheritsClixNse: false,
+    hasRegisterCall: false,
+    hasSuperDidReceive: false,
+    registeredProjectId: null,
+  })),
   hasClixConfiguration: mock<
     (
       entitlements: MockEntitlementsData | null,
@@ -106,9 +150,17 @@ mock.module('@/lib/api', () => ({
 
 mock.module('@/lib/ios', () => ({
   analyzeIosProject: mockIos.analyzeIosProject,
+  getExtensionName: mockIos.getExtensionName,
+  getExtensionBundleId: mockIos.getExtensionBundleId,
+  getNotificationServiceExtensionStatus: mockIos.getNotificationServiceExtensionStatus,
+  hasNotificationServiceExtension: mockIos.hasNotificationServiceExtension,
+  hasPodfile: mockIos.hasPodfile,
+  hasExtensionTarget: mockIos.hasExtensionTarget,
+  hasClixPodInExtensionTarget: mockIos.hasClixPodInExtensionTarget,
   generateAppGroupId: mockIos.generateAppGroupId,
   getIosProjectDir: mockIos.getIosProjectDir,
   hasClixConfiguration: mockIos.hasClixConfiguration,
+  inspectNotificationServiceSwift: mockIos.inspectNotificationServiceSwift,
   readEntitlements: mockIos.readEntitlements,
   verifyExtensionFiles: mockIos.verifyExtensionFiles,
 }));
@@ -130,7 +182,15 @@ describe('preparation', () => {
     mockIos.analyzeIosProject.mockClear();
     mockIos.generateAppGroupId.mockClear();
     mockIos.getIosProjectDir.mockClear();
+    mockIos.getExtensionName.mockClear();
+    mockIos.getExtensionBundleId.mockClear();
+    mockIos.getNotificationServiceExtensionStatus.mockClear();
+    mockIos.hasNotificationServiceExtension.mockClear();
+    mockIos.hasPodfile.mockClear();
+    mockIos.hasExtensionTarget.mockClear();
+    mockIos.hasClixPodInExtensionTarget.mockClear();
     mockIos.hasClixConfiguration.mockClear();
+    mockIos.inspectNotificationServiceSwift.mockClear();
     mockIos.readEntitlements.mockClear();
     mockIos.verifyExtensionFiles.mockClear();
 
@@ -142,7 +202,34 @@ describe('preparation', () => {
     );
     mockIos.generateAppGroupId.mockImplementation((bundleId: string) => `group.clix.${bundleId}`);
     mockIos.getIosProjectDir.mockImplementation(() => '/test/ios');
+    mockIos.getExtensionName.mockImplementation(
+      (appName: string) => `${appName}NotificationServiceExtension`,
+    );
+    mockIos.getExtensionBundleId.mockImplementation(
+      (bundleId: string, appName: string) => `${bundleId}.${appName}NotificationServiceExtension`,
+    );
+    mockIos.getNotificationServiceExtensionStatus.mockImplementation(() => ({
+      targetExists: false,
+      buildSettings: {
+        enableUserScriptSandboxingNo: false,
+        infoPlistConfigured: false,
+        codeSignEntitlementsConfigured: false,
+      },
+    }));
+    mockIos.hasNotificationServiceExtension.mockImplementation(() => false);
+    mockIos.hasPodfile.mockImplementation(() => false);
+    mockIos.hasExtensionTarget.mockImplementation(() => false);
+    mockIos.hasClixPodInExtensionTarget.mockImplementation(() => false);
     mockIos.hasClixConfiguration.mockImplementation(() => ({ hasPush: false, hasAppGroup: false }));
+    mockIos.inspectNotificationServiceSwift.mockImplementation(() => ({
+      exists: false,
+      path: '/test/ios/MyAppNotificationServiceExtension/NotificationService.swift',
+      importsClix: false,
+      inheritsClixNse: false,
+      hasRegisterCall: false,
+      hasSuperDidReceive: false,
+      registeredProjectId: null,
+    }));
     mockIos.readEntitlements.mockImplementation(() => Promise.resolve(null));
     mockIos.verifyExtensionFiles.mockImplementation(() => ({
       complete: false,
@@ -219,6 +306,25 @@ describe('preparation', () => {
       });
       mockIos.hasClixConfiguration.mockReturnValueOnce({ hasPush: true, hasAppGroup: true });
       mockIos.verifyExtensionFiles.mockReturnValueOnce({ complete: true, missingFiles: [] });
+      mockIos.hasNotificationServiceExtension.mockReturnValueOnce(true);
+      mockIos.getNotificationServiceExtensionStatus.mockReturnValueOnce({
+        targetExists: true,
+        buildSettings: {
+          enableUserScriptSandboxingNo: true,
+          infoPlistConfigured: true,
+          codeSignEntitlementsConfigured: true,
+        },
+      });
+      mockIos.hasPodfile.mockReturnValueOnce(false);
+      mockIos.inspectNotificationServiceSwift.mockReturnValueOnce({
+        exists: true,
+        path: '/test/ios/MyAppNotificationServiceExtension/NotificationService.swift',
+        importsClix: true,
+        inheritsClixNse: true,
+        hasRegisterCall: true,
+        hasSuperDidReceive: true,
+        registeredProjectId: 'project-id',
+      });
 
       const status = await checkIosStatus('/test', projectType);
 
@@ -256,6 +362,25 @@ describe('preparation', () => {
         });
       mockIos.hasClixConfiguration.mockReturnValueOnce({ hasPush: true, hasAppGroup: true });
       mockIos.verifyExtensionFiles.mockReturnValueOnce({ complete: true, missingFiles: [] });
+      mockIos.hasNotificationServiceExtension.mockReturnValueOnce(true);
+      mockIos.getNotificationServiceExtensionStatus.mockReturnValueOnce({
+        targetExists: true,
+        buildSettings: {
+          enableUserScriptSandboxingNo: true,
+          infoPlistConfigured: true,
+          codeSignEntitlementsConfigured: true,
+        },
+      });
+      mockIos.hasPodfile.mockReturnValueOnce(false);
+      mockIos.inspectNotificationServiceSwift.mockReturnValueOnce({
+        exists: true,
+        path: '/test/ios/MyAppNotificationServiceExtension/NotificationService.swift',
+        importsClix: true,
+        inheritsClixNse: true,
+        hasRegisterCall: true,
+        hasSuperDidReceive: true,
+        registeredProjectId: 'project-id',
+      });
 
       const status = await checkIosStatus('/test', projectType);
 

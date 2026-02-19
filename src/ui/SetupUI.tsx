@@ -25,6 +25,7 @@ import { detectProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
+import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 
 type SetupPhase =
   | 'checking_auth'
@@ -84,6 +85,7 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
   const [workspacePath] = useState(() => projectPath ?? process.cwd());
   const pkceServiceRef = useRef<PKCEFlowService | null>(null);
   const memberRef = useRef<Member | null>(null);
+  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, 'Open authentication URL') : null;
 
   const handleProjectSelect = useCallback(
     async (project: Project, org: Organization) => {
@@ -276,14 +278,18 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
             <Box flexDirection="column">
               <Text color="yellow">⚠</Text>
               <Text> Could not open browser automatically.</Text>
-              <Box marginTop={1}>
-                <Text dimColor>Open this URL in your browser:</Text>
-              </Box>
-              <Box marginTop={1}>
-                <Text color="cyan">{authUrl}</Text>
-              </Box>
             </Box>
           )}
+          {authUrl ? (
+            <Box marginTop={1} flexDirection="column">
+              <Text dimColor>If browser was closed, reopen this URL:</Text>
+              <Text color="cyan">{reopenLink}</Text>
+              <Box marginTop={1} flexDirection="column">
+                <Text dimColor>Direct URL:</Text>
+                <Text>{authUrl}</Text>
+              </Box>
+            </Box>
+          ) : null}
           <Box marginTop={2}>
             <Text dimColor>
               <Spinner type="dots" />

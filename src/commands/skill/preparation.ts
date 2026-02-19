@@ -17,8 +17,16 @@ import {
 import {
   analyzeIosProject,
   generateAppGroupId,
+  getExtensionBundleId,
+  getExtensionName,
   getIosProjectDir,
+  getNotificationServiceExtensionStatus,
   hasClixConfiguration,
+  hasClixPodInExtensionTarget,
+  hasExtensionTarget,
+  hasNotificationServiceExtension,
+  hasPodfile,
+  inspectNotificationServiceSwift,
   readEntitlements,
   verifyExtensionFiles,
 } from '@/lib/ios';
@@ -59,6 +67,18 @@ export interface IosStatus {
   entitlementsConfigured: boolean;
   /** Whether NSE is configured */
   nseConfigured: boolean;
+  /** Detailed evidence for NSE setup verification */
+  nseDetails?: NseVerificationStatus;
+}
+
+export interface NseVerificationStatus {
+  extensionName?: string;
+  extensionBundleId?: string;
+  filesComplete: boolean;
+  xcodeTargetConfigured: boolean;
+  buildSettingsConfigured: boolean;
+  podDependencyConfigured: boolean;
+  notificationServiceConfigured: boolean;
 }
 
 /**
@@ -262,6 +282,7 @@ interface IosFileStatus {
   appGroupId?: string;
   entitlementsConfigured: boolean;
   nseConfigured: boolean;
+  nseDetails?: NseVerificationStatus;
 }
 
 /**
@@ -313,14 +334,59 @@ async function detectIosStatusFromFiles(
   }
 
   const iosDir = getIosProjectDir(projectPath);
-  const hasNseFiles = iosDir ? verifyExtensionFiles(iosDir, project.appName).complete : false;
+  const extensionName = getExtensionName(project.appName);
+  const extensionBundleId = getExtensionBundleId(project.bundleId, project.appName);
+
+  const filesComplete = iosDir ? verifyExtensionFiles(iosDir, project.appName).complete : false;
+  const xcodeTargetConfigured = hasNotificationServiceExtension(project.projectPath, extensionName);
+
+  const extensionStatus = getNotificationServiceExtensionStatus(project.projectPath, extensionName);
+  const buildSettingsConfigured =
+    extensionStatus.buildSettings.enableUserScriptSandboxingNo &&
+    extensionStatus.buildSettings.infoPlistConfigured &&
+    extensionStatus.buildSettings.codeSignEntitlementsConfigured;
+
+  const podfileExists = iosDir ? hasPodfile(iosDir) : false;
+  const podDependencyConfigured =
+    !podfileExists ||
+    (iosDir
+      ? hasExtensionTarget(iosDir, extensionName) &&
+        hasClixPodInExtensionTarget(iosDir, extensionName)
+      : false);
+
+  const swiftStatus = iosDir ? inspectNotificationServiceSwift(iosDir, project.appName) : null;
+  const notificationServiceConfigured =
+    Boolean(swiftStatus?.exists) &&
+    Boolean(swiftStatus?.importsClix) &&
+    Boolean(swiftStatus?.inheritsClixNse) &&
+    Boolean(swiftStatus?.hasRegisterCall) &&
+    Boolean(swiftStatus?.hasSuperDidReceive) &&
+    Boolean(swiftStatus?.registeredProjectId) &&
+    swiftStatus?.registeredProjectId !== 'YOUR_PROJECT_ID';
+
+  const hasNse = Boolean(
+    filesComplete &&
+      xcodeTargetConfigured &&
+      buildSettingsConfigured &&
+      podDependencyConfigured &&
+      notificationServiceConfigured,
+  );
 
   return {
     bundleId: project.bundleId,
     teamId: project.teamId,
     appGroupId: detectedAppGroupId ?? setup?.appGroupId,
     entitlementsConfigured: hasEntitlements,
-    nseConfigured: hasNseFiles,
+    nseConfigured: hasNse,
+    nseDetails: {
+      extensionName,
+      extensionBundleId,
+      filesComplete,
+      xcodeTargetConfigured,
+      buildSettingsConfigured,
+      podDependencyConfigured,
+      notificationServiceConfigured,
+    },
   };
 }
 

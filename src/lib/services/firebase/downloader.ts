@@ -97,6 +97,10 @@ export class FirebaseDownloader {
   async authenticate(
     openBrowser: (url: string) => void,
   ): Promise<{ success: boolean; error?: string }> {
+    if (await this.authClient.isAuthenticated()) {
+      return { success: true };
+    }
+
     const result = await this.authClient.authenticate(openBrowser);
     if (result.success) {
       // Fetch and store credentials for API clients
@@ -110,6 +114,13 @@ export class FirebaseDownloader {
       );
     }
     return result;
+  }
+
+  /**
+   * Cancel in-flight Firebase OAuth authentication.
+   */
+  cancelAuthentication(reason = 'Firebase authentication cancelled'): void {
+    this.authClient.cancelAuthentication(reason);
   }
 
   /**

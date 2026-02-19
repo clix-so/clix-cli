@@ -7,24 +7,36 @@
  * @module ui/components/InstallPreparationUI
  */
 
-import { Box, Text, useInput } from 'ink';
+import * as path from 'node:path';
+import { Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApnsStatus, IosStatus, PreparationContext } from '@/commands/skill/preparation';
 import { gatherPreparationContext, saveSetupStatus } from '@/commands/skill/preparation';
 import { openBrowser } from '@/lib/auth/browser';
 import type { ProjectType } from '@/lib/config';
 import {
+  addClixToExtensionTarget,
+  addNotificationServiceExtension,
   analyzeIosProject,
   createExtensionFiles,
   type ExtensionContext,
   type ExtensionGeneratorResult,
+  ensureNotificationServiceSwiftProjectId,
   generateAppGroupId,
   getEntitlementsPath,
   getExtensionBundleId,
   getExtensionName,
   getIosProjectDir,
+  getNotificationServiceExtensionStatus,
+  hasClixPodInExtensionTarget,
+  hasExtensionTarget,
+  hasNotificationServiceExtension,
+  hasPodfile,
+  inspectNotificationServiceSwift,
+  type PbxprojModificationResult,
+  type PodfileModificationResult,
   verifyExtensionFiles,
 } from '@/lib/ios';
 import type { PushSetupContext } from '@/lib/push';
@@ -41,7 +53,7 @@ import {
   type ServiceAccountJson,
 } from '@/lib/services/firebase';
 import { detectProjectType, formatProjectType } from '@/lib/services/project-detector';
-import { isCtrlCInput, useCancelInput } from '@/ui/hooks';
+import { useCancelInput } from '@/ui/hooks';
 import {
   FirebaseConfigAddingFirebaseTask,
   FirebaseConfigAppSelectorTask,
@@ -90,6 +102,7 @@ import {
   NotificationExtensionCompleteTask,
   NotificationExtensionDependenciesTask,
   type NotificationExtensionSetupContext,
+  type NotificationExtensionVerificationChecks,
   NotificationExtensionVerificationTask,
   NotificationExtensionXcodeTask,
 } from './notification-extension-setup/NotificationExtensionTasks';
@@ -154,9 +167,13 @@ interface StatusLayoutPolicy {
 const FALLBACK_TERMINAL_ROWS = 24;
 const COMPACT_ROWS_THRESHOLD = 33;
 const MINIMAL_ROWS_THRESHOLD = 28;
+const TASK_OVERRIDE_ENV_NAME = 'CLIX_DEV_ENABLE_TASK_OVERRIDE';
+const START_TASK_ENV_NAME = 'CLIX_INSTALL_START_TASK';
+const INSTALL_TASK_IDS = Object.keys(INSTALL_TASK_LABELS) as InstallTaskId[];
 
 interface InstallPreparationUIProps {
   projectPath?: string;
+  startTaskId?: InstallTaskId;
   onComplete: (context: PreparationContext) => void;
   onCancel: () => void;
 }
@@ -178,6 +195,8 @@ interface IosGuidedContextCache {
   appGroupId: string;
   appName: string;
   iosDir: string;
+  xcodeprojPath: string;
+  projectId: string;
   entitlementsPath: string;
 }
 
@@ -190,6 +209,7 @@ interface FirebaseConfigState {
   detection: FirebaseDetectionResult | null;
   projectType: ProjectType | null;
   service: FirebaseService | null;
+  authUrl: string | null;
   projects: FirebaseProject[];
   selectedProject: FirebaseProject | null;
   androidApps: AndroidApp[];
@@ -222,16 +242,33 @@ interface ApnsState {
 interface NotificationExtensionState {
   context: NotificationExtensionSetupContext | null;
   extensionResult: ExtensionGeneratorResult | null;
+  xcodeResult: PbxprojModificationResult | null;
+  podfileResult: PodfileModificationResult | null;
+  verificationChecks: NotificationExtensionVerificationChecks | null;
+  warnings: string[];
   error: string | null;
+}
+
+interface StartTaskOverrideValidationInput {
+  context: PreparationContext;
+  effectiveStartTaskId: InstallTaskId | null;
+  invalidEnvStartTask: string | null;
+  taskOverrideEnabled: boolean;
+}
+
+interface StartTaskOverrideValidationResult {
+  taskId: InstallTaskId | null;
+  note: string | null;
 }
 
 async function buildNotificationExtensionContext(
   projectPath: string,
   iosBundleId: string | undefined,
   iosAppGroupId: string | undefined,
+  firebaseProjectId: string | undefined,
   cachedContext: IosGuidedContextCache | null,
 ): Promise<NotificationExtensionSetupContext> {
-  if (cachedContext) {
+  if (cachedContext?.projectId) {
     return cachedContext;
   }
 
@@ -250,12 +287,18 @@ async function buildNotificationExtensionContext(
   const entitlementsPath =
     analysis.project.entitlementsFiles[0] || getEntitlementsPath(iosDir, targetName);
   const appGroupId = iosAppGroupId || generateAppGroupId(bundleId);
+  const projectId = firebaseProjectId || '';
+  if (!projectId) {
+    throw new Error('Firebase project ID is required for Notification Service Extension setup.');
+  }
 
   return {
     bundleId,
     appGroupId,
     appName: analysis.project.appName,
     iosDir,
+    xcodeprojPath: analysis.project.projectPath,
+    projectId,
     entitlementsPath,
   };
 }
@@ -508,29 +551,6 @@ function TaskHeader({ title, subtitle }: { title: string; subtitle: string }): R
   );
 }
 
-function GuidedStepContainer({
-  onNext,
-  onCancel,
-  children,
-}: {
-  onNext: () => void;
-  onCancel: () => void;
-  children: React.ReactNode;
-}): React.ReactElement {
-  useInput((input, key) => {
-    if (key.return || input === ' ') {
-      onNext();
-      return;
-    }
-
-    if (key.escape || isCtrlCInput(input, key)) {
-      onCancel();
-    }
-  });
-
-  return <Box flexDirection="column">{children}</Box>;
-}
-
 function getInitialLeafTaskId(taskId: InstallTaskId): InstallLeafTaskId {
   switch (taskId) {
     case 'firebase_config_files':
@@ -553,6 +573,7 @@ function createInitialFirebaseConfigState(): FirebaseConfigState {
     detection: null,
     projectType: null,
     service: null,
+    authUrl: null,
     projects: [],
     selectedProject: null,
     androidApps: [],
@@ -595,7 +616,71 @@ function createInitialNotificationExtensionState(): NotificationExtensionState {
   return {
     context: null,
     extensionResult: null,
+    xcodeResult: null,
+    podfileResult: null,
+    verificationChecks: null,
+    warnings: [],
     error: null,
+  };
+}
+
+function collectNseVerificationChecks(
+  nseContext: NotificationExtensionSetupContext,
+): NotificationExtensionVerificationChecks {
+  const extensionName = getExtensionName(nseContext.appName);
+  const fileVerification = verifyExtensionFiles(nseContext.iosDir, nseContext.appName);
+  const xcodeTargetConfigured = hasNotificationServiceExtension(
+    nseContext.xcodeprojPath,
+    extensionName,
+  );
+  const xcodeStatus = getNotificationServiceExtensionStatus(
+    nseContext.xcodeprojPath,
+    extensionName,
+  );
+  const buildSettingsConfigured =
+    xcodeStatus.buildSettings.enableUserScriptSandboxingNo &&
+    xcodeStatus.buildSettings.infoPlistConfigured &&
+    xcodeStatus.buildSettings.codeSignEntitlementsConfigured;
+
+  const podfileExists = hasPodfile(nseContext.iosDir);
+  const podDependencyConfigured =
+    !podfileExists ||
+    (hasExtensionTarget(nseContext.iosDir, extensionName) &&
+      hasClixPodInExtensionTarget(nseContext.iosDir, extensionName));
+
+  const swiftStatus = inspectNotificationServiceSwift(nseContext.iosDir, nseContext.appName);
+  const notificationServiceConfigured =
+    swiftStatus.exists &&
+    swiftStatus.importsClix &&
+    swiftStatus.inheritsClixNse &&
+    swiftStatus.hasRegisterCall &&
+    swiftStatus.hasSuperDidReceive &&
+    swiftStatus.registeredProjectId === nseContext.projectId;
+
+  const missingReasons: string[] = [];
+  if (!fileVerification.complete) {
+    missingReasons.push(`Missing NSE files: ${fileVerification.missingFiles.join(', ')}`);
+  }
+  if (!xcodeTargetConfigured) {
+    missingReasons.push('Xcode Notification Service Extension target is missing');
+  }
+  if (!buildSettingsConfigured) {
+    missingReasons.push('NSE build settings are incomplete');
+  }
+  if (!podDependencyConfigured) {
+    missingReasons.push('Clix dependency is not configured in Podfile extension target');
+  }
+  if (!notificationServiceConfigured) {
+    missingReasons.push('NotificationService.swift is not fully configured for Clix');
+  }
+
+  return {
+    filesComplete: fileVerification.complete,
+    xcodeTargetConfigured,
+    buildSettingsConfigured,
+    podDependencyConfigured,
+    notificationServiceConfigured,
+    missingReasons,
   };
 }
 
@@ -608,15 +693,75 @@ function isFirebaseScopeError(error: string): boolean {
   );
 }
 
+function validateStartTaskOverride({
+  context,
+  effectiveStartTaskId,
+  invalidEnvStartTask,
+  taskOverrideEnabled,
+}: StartTaskOverrideValidationInput): StartTaskOverrideValidationResult {
+  if (!effectiveStartTaskId) {
+    if (invalidEnvStartTask) {
+      return {
+        taskId: null,
+        note: `Ignoring ${START_TASK_ENV_NAME}="${invalidEnvStartTask}" because it is not a valid install task id.`,
+      };
+    }
+    return { taskId: null, note: null };
+  }
+
+  if (!taskOverrideEnabled) {
+    return {
+      taskId: null,
+      note: `Task override was requested but disabled. Set ${TASK_OVERRIDE_ENV_NAME}=1 to enable it.`,
+    };
+  }
+
+  const applicableTasks = getApplicableInstallTasks(context);
+  if (!applicableTasks.includes(effectiveStartTaskId)) {
+    return {
+      taskId: null,
+      note: `Task override "${effectiveStartTaskId}" is not applicable for this project (${formatProjectType(context.projectType)}).`,
+    };
+  }
+
+  if (effectiveStartTaskId === 'notification_service_extension' && !context.firebase.projectId) {
+    return {
+      taskId: null,
+      note: 'Task override requires a detected Firebase project ID. Configure Firebase Configuration Files first.',
+    };
+  }
+
+  if (effectiveStartTaskId === 'notification_service_extension' && !context.ios.bundleId) {
+    return {
+      taskId: null,
+      note: 'Task override requires a detected iOS bundle ID.',
+    };
+  }
+
+  return { taskId: effectiveStartTaskId, note: null };
+}
+
 /**
  * Install preparation UI component.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Central orchestration for install preparation leaf tasks.
 export function InstallPreparationUI({
   projectPath = process.cwd(),
+  startTaskId,
   onComplete,
   onCancel,
 }: InstallPreparationUIProps): React.ReactElement {
+  const taskOverrideEnabled = process.env[TASK_OVERRIDE_ENV_NAME] === '1';
+  const envStartTaskRaw = process.env[START_TASK_ENV_NAME];
+  const envStartTaskId =
+    envStartTaskRaw && INSTALL_TASK_IDS.includes(envStartTaskRaw as InstallTaskId)
+      ? (envStartTaskRaw as InstallTaskId)
+      : null;
+  const invalidEnvStartTask = envStartTaskRaw && !envStartTaskId ? envStartTaskRaw : null;
+  const effectiveStartTaskId = startTaskId ?? envStartTaskId;
+  const startTaskOverrideHandledRef = useRef(false);
+  const nseCompletionHandledRef = useRef(false);
+
   const [phase, setPhase] = useState<PreparationPhase>('checking');
   const [context, setContext] = useState<PreparationContext | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<InstallTaskId | null>(null);
@@ -635,6 +780,20 @@ export function InstallPreparationUI({
   const [firebaseConfigDownloader] = useState(() => new FirebaseDownloader());
   const [serviceAccountDownloader] = useState(() => new FirebaseDownloader());
 
+  const cancelFirebaseAuthentication = useCallback(
+    (reason = 'Install preparation cancelled') => {
+      firebaseConfigDownloader.cancelAuthentication(reason);
+      serviceAccountDownloader.cancelAuthentication(reason);
+    },
+    [firebaseConfigDownloader, serviceAccountDownloader],
+  );
+
+  useEffect(() => {
+    return () => {
+      cancelFirebaseAuthentication('Install preparation closed');
+    };
+  }, [cancelFirebaseAuthentication]);
+
   const resetTaskRuntimeState = useCallback((preparationContext?: PreparationContext) => {
     setActiveLeafTaskId(null);
     setFirebaseConfigState(createInitialFirebaseConfigState());
@@ -642,6 +801,18 @@ export function InstallPreparationUI({
     setNotificationExtensionState(createInitialNotificationExtensionState());
     setApnsState(preparationContext ? createInitialApnsState(preparationContext) : null);
   }, []);
+
+  const beginTask = useCallback(
+    (taskId: InstallTaskId, preparationContext: PreparationContext) => {
+      setNote(null);
+      nseCompletionHandledRef.current = false;
+      setActiveTaskId(taskId);
+      resetTaskRuntimeState(preparationContext);
+      setActiveLeafTaskId(getInitialLeafTaskId(taskId));
+      setPhase('task');
+    },
+    [resetTaskRuntimeState],
+  );
 
   const loadPreparationContext = useCallback(async (): Promise<PreparationContext | null> => {
     const nextContext = await gatherPreparationContext(projectPath);
@@ -670,7 +841,27 @@ export function InstallPreparationUI({
       }
 
       setContext(nextContext);
-      setPhase('status');
+      if (startTaskOverrideHandledRef.current) {
+        setPhase('status');
+        return;
+      }
+      startTaskOverrideHandledRef.current = true;
+
+      const overrideDecision = validateStartTaskOverride({
+        context: nextContext,
+        effectiveStartTaskId,
+        invalidEnvStartTask,
+        taskOverrideEnabled,
+      });
+      if (!overrideDecision.taskId) {
+        if (overrideDecision.note) {
+          setNote(overrideDecision.note);
+        }
+        setPhase('status');
+        return;
+      }
+
+      beginTask(overrideDecision.taskId, nextContext);
     };
 
     void check();
@@ -678,7 +869,7 @@ export function InstallPreparationUI({
     return () => {
       mounted = false;
     };
-  }, [projectPath]);
+  }, [beginTask, effectiveStartTaskId, invalidEnvStartTask, projectPath, taskOverrideEnabled]);
 
   const applyTaskCompletion = useCallback(
     async (patch?: TaskCompletionPatch) => {
@@ -711,12 +902,13 @@ export function InstallPreparationUI({
 
   const handleTaskBackToStatus = useCallback(
     (nextNote?: string) => {
+      cancelFirebaseAuthentication('Setup step cancelled');
       setActiveTaskId(null);
       resetTaskRuntimeState(context ?? undefined);
       setNote(nextNote ?? 'Setup step was not completed. Continue required setup to proceed.');
       setPhase('status');
     },
-    [context, resetTaskRuntimeState],
+    [cancelFirebaseAuthentication, context, resetTaskRuntimeState],
   );
 
   const handleContinue = useCallback(() => {
@@ -736,19 +928,13 @@ export function InstallPreparationUI({
     }
 
     setNote(null);
-    setActiveTaskId(nextTaskId);
-    setActiveLeafTaskId(getInitialLeafTaskId(nextTaskId));
-    setFirebaseConfigState(createInitialFirebaseConfigState());
-    setFirebaseServiceAccountState(createInitialFirebaseServiceAccountState());
-    setNotificationExtensionState(createInitialNotificationExtensionState());
-    setApnsState(createInitialApnsState(context));
-    setPhase('task');
-  }, [context, onComplete]);
+    beginTask(nextTaskId, context);
+  }, [beginTask, context, onComplete]);
 
   const handleCancelPreparation = useCallback(() => {
-    setPhase('cancelled');
+    cancelFirebaseAuthentication('Install preparation cancelled');
     onCancel();
-  }, [onCancel]);
+  }, [cancelFirebaseAuthentication, onCancel]);
 
   const getFirebaseConfigNeeds = useCallback((detection: FirebaseDetectionResult | null) => {
     const platform = detection?.platform ?? 'unknown';
@@ -1129,13 +1315,21 @@ export function InstallPreparationUI({
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Step branching mirrors Firebase setup decision tree.
     const authenticate = async () => {
       try {
+        setFirebaseConfigState((prev) => ({ ...prev, authUrl: null }));
+
         if (!isOAuthConfigured()) {
           throw new Error('Google OAuth is not configured. Set Firebase OAuth credentials first.');
         }
 
         const isAuthenticated = await firebaseConfigDownloader.isAuthenticated();
         if (!isAuthenticated) {
-          const authResult = await firebaseConfigDownloader.authenticate(openBrowser);
+          const authResult = await firebaseConfigDownloader.authenticate((url) => {
+            if (cancelled) {
+              return;
+            }
+            setFirebaseConfigState((prev) => ({ ...prev, authUrl: url }));
+            void openBrowser(url);
+          });
           if (!authResult.success) {
             throw new Error(authResult.error || 'Firebase authentication failed.');
           }
@@ -1175,6 +1369,9 @@ export function InstallPreparationUI({
 
     return () => {
       cancelled = true;
+      firebaseConfigDownloader.cancelAuthentication(
+        'Firebase configuration authentication cancelled',
+      );
     };
   }, [
     activeLeafTaskId,
@@ -1589,6 +1786,7 @@ export function InstallPreparationUI({
           projectPath,
           context?.ios.bundleId,
           context?.ios.appGroupId,
+          context?.firebase.projectId,
           guidedContextCache,
         );
 
@@ -1618,6 +1816,7 @@ export function InstallPreparationUI({
     activeTaskId,
     context?.ios.appGroupId,
     context?.ios.bundleId,
+    context?.firebase.projectId,
     guidedContextCache,
     handleTaskBackToStatus,
     phase,
@@ -1646,6 +1845,7 @@ export function InstallPreparationUI({
         appName: nseContext.appName,
         bundleId: nseContext.bundleId,
         iosDir: nseContext.iosDir,
+        projectId: nseContext.projectId,
       };
 
       const result = await createExtensionFiles(extensionContext);
@@ -1653,7 +1853,11 @@ export function InstallPreparationUI({
         return;
       }
 
-      setNotificationExtensionState((prev) => ({ ...prev, extensionResult: result }));
+      setNotificationExtensionState((prev) => ({
+        ...prev,
+        extensionResult: result,
+        warnings: result.warnings,
+      }));
       if (!result.success) {
         setNotificationExtensionState((prev) => ({
           ...prev,
@@ -1676,6 +1880,231 @@ export function InstallPreparationUI({
     activeTaskId,
     handleTaskBackToStatus,
     notificationExtensionState.context,
+    phase,
+  ]);
+
+  useEffect(() => {
+    if (
+      phase !== 'task' ||
+      activeTaskId !== 'notification_service_extension' ||
+      activeLeafTaskId !== 'nse_xcode_target'
+    ) {
+      return;
+    }
+
+    const nseContext = notificationExtensionState.context;
+    if (!nseContext || notificationExtensionState.xcodeResult) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const applyXcodeSetup = async () => {
+      try {
+        const extensionName = getExtensionName(nseContext.appName);
+        const extensionBundleId = getExtensionBundleId(nseContext.bundleId, nseContext.appName);
+        const extensionDir = path.join(nseContext.iosDir, extensionName);
+
+        const swiftPatch = ensureNotificationServiceSwiftProjectId(
+          nseContext.iosDir,
+          nseContext.appName,
+          nseContext.projectId,
+        );
+
+        const xcodeResult = await addNotificationServiceExtension({
+          projectPath: nseContext.xcodeprojPath,
+          extensionName,
+          extensionBundleId,
+          extensionDir,
+          appGroupId: nseContext.appGroupId,
+          teamId: context?.ios.teamId,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setNotificationExtensionState((prev) => ({
+          ...prev,
+          xcodeResult,
+          warnings: [...prev.warnings, ...swiftPatch.warnings, ...xcodeResult.warnings],
+        }));
+
+        if (!xcodeResult.success) {
+          setNotificationExtensionState((prev) => ({
+            ...prev,
+            error: xcodeResult.error || 'Failed to apply NSE Xcode target setup',
+          }));
+          setActiveLeafTaskId('nse_complete');
+          return;
+        }
+
+        setActiveLeafTaskId('nse_build_settings');
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+        setNotificationExtensionState((prev) => ({
+          ...prev,
+          error: err instanceof Error ? err.message : 'Failed to configure NSE target',
+        }));
+        setActiveLeafTaskId('nse_complete');
+      }
+    };
+
+    void applyXcodeSetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeLeafTaskId,
+    activeTaskId,
+    context?.ios.teamId,
+    notificationExtensionState.context,
+    notificationExtensionState.xcodeResult,
+    phase,
+  ]);
+
+  useEffect(() => {
+    if (
+      phase !== 'task' ||
+      activeTaskId !== 'notification_service_extension' ||
+      activeLeafTaskId !== 'nse_build_settings'
+    ) {
+      return;
+    }
+
+    setActiveLeafTaskId('nse_dependencies');
+  }, [activeLeafTaskId, activeTaskId, phase]);
+
+  useEffect(() => {
+    if (
+      phase !== 'task' ||
+      activeTaskId !== 'notification_service_extension' ||
+      activeLeafTaskId !== 'nse_dependencies'
+    ) {
+      return;
+    }
+
+    const nseContext = notificationExtensionState.context;
+    if (!nseContext || notificationExtensionState.podfileResult) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const applyDependencySetup = async () => {
+      const extensionName = getExtensionName(nseContext.appName);
+      const podfileResult = await addClixToExtensionTarget({
+        iosDir: nseContext.iosDir,
+        extensionName,
+      });
+
+      if (cancelled) {
+        return;
+      }
+
+      setNotificationExtensionState((prev) => ({
+        ...prev,
+        podfileResult,
+        warnings: [
+          ...prev.warnings,
+          ...(podfileResult.podfileExists
+            ? []
+            : [
+                'Podfile not found. Configure Clix dependency manually (SPM or custom build setup).',
+              ]),
+        ],
+      }));
+      setActiveLeafTaskId('nse_verification');
+    };
+
+    void applyDependencySetup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeLeafTaskId,
+    activeTaskId,
+    notificationExtensionState.context,
+    notificationExtensionState.podfileResult,
+    phase,
+  ]);
+
+  useEffect(() => {
+    if (
+      phase !== 'task' ||
+      activeTaskId !== 'notification_service_extension' ||
+      activeLeafTaskId !== 'nse_verification'
+    ) {
+      return;
+    }
+
+    const nseContext = notificationExtensionState.context;
+    if (!nseContext) {
+      return;
+    }
+
+    const checks = collectNseVerificationChecks(nseContext);
+    setNotificationExtensionState((prev) => ({ ...prev, verificationChecks: checks }));
+    setActiveLeafTaskId('nse_complete');
+  }, [activeLeafTaskId, activeTaskId, notificationExtensionState.context, phase]);
+
+  useEffect(() => {
+    if (
+      phase !== 'task' ||
+      activeTaskId !== 'notification_service_extension' ||
+      activeLeafTaskId !== 'nse_complete'
+    ) {
+      return;
+    }
+
+    if (nseCompletionHandledRef.current) {
+      return;
+    }
+    nseCompletionHandledRef.current = true;
+
+    if (notificationExtensionState.error) {
+      handleTaskBackToStatus(notificationExtensionState.error);
+      return;
+    }
+
+    const nseContext = notificationExtensionState.context;
+    if (!nseContext) {
+      handleTaskBackToStatus('Notification extension context is missing.');
+      return;
+    }
+    if (!context) {
+      handleTaskBackToStatus('Install preparation context is missing.');
+      return;
+    }
+
+    const checks =
+      notificationExtensionState.verificationChecks ?? collectNseVerificationChecks(nseContext);
+    if (checks.missingReasons.length > 0) {
+      handleTaskBackToStatus(
+        `Notification Service Extension setup is incomplete: ${checks.missingReasons[0]}`,
+      );
+      return;
+    }
+
+    void applyTaskCompletion({
+      ios: {
+        needed: context.ios.needed,
+        nseConfigured: true,
+      },
+    });
+  }, [
+    activeLeafTaskId,
+    activeTaskId,
+    applyTaskCompletion,
+    context,
+    handleTaskBackToStatus,
+    notificationExtensionState.context,
+    notificationExtensionState.error,
+    notificationExtensionState.verificationChecks,
     phase,
   ]);
 
@@ -1733,7 +2162,10 @@ export function InstallPreparationUI({
           )}
 
           {activeLeafTaskId === 'firebase_config_authenticating' && (
-            <FirebaseConfigAuthenticatingTask onCancel={() => handleTaskBackToStatus()} />
+            <FirebaseConfigAuthenticatingTask
+              authUrl={firebaseConfigState.authUrl}
+              onCancel={() => handleTaskBackToStatus()}
+            />
           )}
 
           {activeLeafTaskId === 'firebase_config_select_project' && (
@@ -2062,6 +2494,8 @@ export function InstallPreparationUI({
                   appGroupId: result.agentContext.appGroupId,
                   appName: result.agentContext.appName,
                   iosDir: result.agentContext.iosDir,
+                  xcodeprojPath: result.agentContext.projectPath,
+                  projectId: context.firebase.projectId || '',
                   entitlementsPath: result.agentContext.entitlementsPath,
                 });
               }
@@ -2118,80 +2552,43 @@ export function InstallPreparationUI({
           )}
 
           {activeLeafTaskId === 'nse_xcode_target' && nseContext && (
-            <GuidedStepContainer
-              onNext={() => setActiveLeafTaskId('nse_build_settings')}
-              onCancel={() => handleTaskBackToStatus()}
-            >
-              <NotificationExtensionXcodeTask
-                extensionName={extensionName}
-                extensionBundleId={extensionBundleId}
-                extensionResult={extensionResult}
-                appGroupId={nseContext.appGroupId}
-              />
-            </GuidedStepContainer>
+            <NotificationExtensionXcodeTask
+              extensionName={extensionName}
+              extensionBundleId={extensionBundleId}
+              extensionResult={extensionResult}
+              appGroupId={nseContext.appGroupId}
+              xcodeResult={notificationExtensionState.xcodeResult}
+            />
           )}
 
           {activeLeafTaskId === 'nse_build_settings' && nseContext && (
-            <GuidedStepContainer
-              onNext={() => setActiveLeafTaskId('nse_dependencies')}
-              onCancel={() => handleTaskBackToStatus()}
-            >
-              <NotificationExtensionBuildSettingsTask
-                extensionName={extensionName}
-                entitlementsPath={nseContext.entitlementsPath}
-              />
-            </GuidedStepContainer>
+            <NotificationExtensionBuildSettingsTask
+              extensionName={extensionName}
+              entitlementsPath={nseContext.entitlementsPath}
+            />
           )}
 
           {activeLeafTaskId === 'nse_dependencies' && (
-            <GuidedStepContainer
-              onNext={() => setActiveLeafTaskId('nse_verification')}
-              onCancel={() => handleTaskBackToStatus()}
-            >
-              <NotificationExtensionDependenciesTask extensionName={extensionName} />
-            </GuidedStepContainer>
+            <NotificationExtensionDependenciesTask
+              extensionName={extensionName}
+              podfileResult={notificationExtensionState.podfileResult}
+            />
           )}
 
           {activeLeafTaskId === 'nse_verification' && nseContext && (
-            <GuidedStepContainer
-              onNext={() => {
-                const verification = verifyExtensionFiles(nseContext.iosDir, nseContext.appName);
-                if (!verification.complete) {
-                  handleTaskBackToStatus('Notification Service Extension files are still missing.');
-                  return;
-                }
-                setActiveLeafTaskId('nse_complete');
-              }}
-              onCancel={() => handleTaskBackToStatus()}
-            >
-              <NotificationExtensionVerificationTask
-                context={nseContext}
-                extensionResult={extensionResult}
-              />
-            </GuidedStepContainer>
+            <NotificationExtensionVerificationTask
+              context={nseContext}
+              extensionResult={extensionResult}
+              checks={notificationExtensionState.verificationChecks}
+            />
           )}
 
           {activeLeafTaskId === 'nse_complete' && (
-            <GuidedStepContainer
-              onNext={() => {
-                if (notificationExtensionState.error) {
-                  handleTaskBackToStatus(notificationExtensionState.error);
-                  return;
-                }
-                void applyTaskCompletion({
-                  ios: {
-                    needed: context.ios.needed,
-                    nseConfigured: true,
-                  },
-                });
-              }}
-              onCancel={() => handleTaskBackToStatus()}
-            >
-              <NotificationExtensionCompleteTask
-                error={notificationExtensionState.error}
-                extensionResult={extensionResult}
-              />
-            </GuidedStepContainer>
+            <NotificationExtensionCompleteTask
+              error={notificationExtensionState.error}
+              extensionResult={extensionResult}
+              warnings={notificationExtensionState.warnings}
+            />
           )}
         </Box>
       );

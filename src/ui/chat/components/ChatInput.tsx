@@ -129,48 +129,56 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     [filteredCommands, selectedCommandIndex, onHistoryNavigate],
   );
 
-  useInput((input, key) => {
-    if (disabled) return;
+  const clearInput = useCallback((resetInputComponent: boolean) => {
+    setValue('');
+    setSelectedCommandIndex(0);
+    if (resetInputComponent) {
+      setInputKey((prev) => prev + 1);
+    }
+  }, []);
 
-    // Handle Ctrl+C: clear input or exit on double press
-    if (isCtrlCInput(input, key)) {
-      const now = Date.now();
-      if (now - lastCtrlCTime.current < DOUBLE_CTRL_C_THRESHOLD) {
-        // Double Ctrl+C - exit
-        onExit?.();
+  useInput(
+    (input, key) => {
+      if (disabled) return;
+
+      // Handle Ctrl+C: clear input or exit on double press
+      if (isCtrlCInput(input, key)) {
+        const now = Date.now();
+        const isDoubleCtrlC = now - lastCtrlCTime.current < DOUBLE_CTRL_C_THRESHOLD;
+        lastCtrlCTime.current = now;
+
+        if (isDoubleCtrlC) {
+          // Double Ctrl+C - exit
+          onExit?.();
+          process.exit(130);
+          return;
+        }
+
+        // Single Ctrl+C - clear input
+        if (value) {
+          clearInput(true);
+        }
         return;
       }
-      lastCtrlCTime.current = now;
 
-      // Single Ctrl+C - clear input
-      if (value) {
-        setValue('');
-        setSelectedCommandIndex(0);
-        setInputKey((prev) => prev + 1);
+      // Handle escape: clear input (always, regardless of menu state)
+      if (key.escape) {
+        if (value) {
+          clearInput(true);
+        }
+        return;
       }
-      return;
-    }
 
-    // Handle escape: clear input (always, regardless of menu state)
-    if (key.escape) {
-      if (value) {
-        setValue('');
-        setSelectedCommandIndex(0);
-        setInputKey((prev) => prev + 1);
+      // Handle menu navigation when menu is visible
+      if (showMenu && filteredCommands.length > 0 && handleMenuNavigation(key)) return;
+
+      // Handle history navigation (only when not in slash mode)
+      if (!showMenu) {
+        handleHistoryNavigation(key);
       }
-      return;
-    }
-
-    // Handle menu navigation when menu is visible
-    if (showMenu && filteredCommands.length > 0) {
-      if (handleMenuNavigation(key)) return;
-    }
-
-    // Handle history navigation (only when not in slash mode)
-    if (!showMenu) {
-      handleHistoryNavigation(key);
-    }
-  });
+    },
+    { isActive: true },
+  );
 
   const handleChange = useCallback(
     (newValue: string) => {
@@ -193,17 +201,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         const selectedCmd = filteredCommands[selectedCommandIndex];
         if (selectedCmd) {
           onSubmit(`/${selectedCmd.command}`);
-          setValue('');
-          setSelectedCommandIndex(0);
+          clearInput(false);
           return;
         }
       }
 
       onSubmit(submittedValue.trim());
-      setValue('');
-      setSelectedCommandIndex(0);
+      clearInput(false);
     },
-    [disabled, onSubmit, showMenu, filteredCommands, selectedCommandIndex],
+    [clearInput, disabled, onSubmit, showMenu, filteredCommands, selectedCommandIndex],
   );
 
   return (

@@ -5,7 +5,7 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { oauthLogger } from '@/lib/debug/logger';
 import { findProjectRoot } from './path';
 
@@ -190,6 +190,12 @@ export class OAuthCallbackServer {
   private server: Server | null = null;
   private options: Required<CallbackServerOptions>;
   private actualPort: number = 0;
+  private pendingCallback: {
+    resolve: (result: OAuthCallbackResult) => void;
+    reject: (error: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+    requestHandler: (req: IncomingMessage, res: ServerResponse) => void;
+  } | null = null;
 
   constructor(options: CallbackServerOptions = {}) {
     this.options = {
@@ -239,12 +245,17 @@ export class OAuthCallbackServer {
         return;
       }
 
+      if (this.pendingCallback) {
+        reject(new Error('OAuth callback already in progress'));
+        return;
+      }
+
       const timeout = setTimeout(() => {
+        this.rejectPendingCallback(new Error('OAuth callback timeout'));
         this.stop();
-        reject(new Error('OAuth callback timeout'));
       }, this.options.timeoutMs);
 
-      this.server.on('request', (req, res) => {
+      const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         const url = new URL(req.url || '/', `http://localhost:${this.actualPort}`);
 
         if (url.pathname !== this.options.callbackPath) {
@@ -277,9 +288,8 @@ export class OAuthCallbackServer {
 
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml(errorMsg));
-          clearTimeout(timeout);
+          this.rejectPendingCallback(new Error(errorMsg));
           this.stop();
-          reject(new Error(errorMsg));
           return;
         }
 
@@ -287,9 +297,8 @@ export class OAuthCallbackServer {
         if (this.options.expectedState && state !== this.options.expectedState) {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml('Invalid OAuth state'));
-          clearTimeout(timeout);
+          this.rejectPendingCallback(new Error('OAuth state mismatch'));
           this.stop();
-          reject(new Error('OAuth state mismatch'));
           return;
         }
 
@@ -297,26 +306,42 @@ export class OAuthCallbackServer {
         if (!code) {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml('No authorization code received'));
-          clearTimeout(timeout);
+          this.rejectPendingCallback(new Error('No authorization code received'));
           this.stop();
-          reject(new Error('No authorization code received'));
           return;
         }
 
         // Success
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(this.options.successHtml);
-        clearTimeout(timeout);
+        this.resolvePendingCallback({ code, state });
         this.stop();
-        resolve({ code, state });
-      });
+      };
+
+      this.pendingCallback = {
+        resolve,
+        reject: (error: Error) => reject(error),
+        timeout,
+        requestHandler,
+      };
+
+      this.server.on('request', requestHandler);
     });
+  }
+
+  /**
+   * Cancel waiting for OAuth callback.
+   */
+  cancel(reason = 'OAuth authentication cancelled'): void {
+    this.rejectPendingCallback(new Error(reason));
+    this.stop();
   }
 
   /**
    * Stop the callback server.
    */
   stop(): void {
+    this.clearPendingCallback();
     if (this.server) {
       this.server.close();
       this.server = null;
@@ -328,5 +353,35 @@ export class OAuthCallbackServer {
    */
   getPort(): number {
     return this.actualPort;
+  }
+
+  private clearPendingCallback(): void {
+    if (!this.pendingCallback) {
+      return;
+    }
+
+    clearTimeout(this.pendingCallback.timeout);
+    this.server?.off('request', this.pendingCallback.requestHandler);
+    this.pendingCallback = null;
+  }
+
+  private rejectPendingCallback(error: Error): void {
+    if (!this.pendingCallback) {
+      return;
+    }
+
+    const { reject } = this.pendingCallback;
+    this.clearPendingCallback();
+    reject(error);
+  }
+
+  private resolvePendingCallback(result: OAuthCallbackResult): void {
+    if (!this.pendingCallback) {
+      return;
+    }
+
+    const { resolve } = this.pendingCallback;
+    this.clearPendingCallback();
+    resolve(result);
   }
 }

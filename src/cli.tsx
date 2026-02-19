@@ -79,6 +79,9 @@ const cli = meow(generateHelpText(), {
     platform: {
       type: 'string',
     },
+    startTask: {
+      type: 'string',
+    },
     interactive: {
       type: 'boolean',
       default: false,
@@ -198,7 +201,8 @@ async function main() {
             | 'react-native'
             | 'flutter'
             | undefined;
-          await skillCommand({ action: command, platform });
+          const startTask = cli.flags.startTask;
+          await skillCommand({ action: command, platform, startTask });
         } else if (command) {
           // Unknown command - show error message
           console.error(`Unknown command: ${command}`);

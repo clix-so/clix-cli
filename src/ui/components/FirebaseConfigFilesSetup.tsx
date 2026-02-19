@@ -15,6 +15,7 @@ import {
 } from '@/lib/services/firebase';
 import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 import { useCancelInput } from '@/ui/hooks';
+import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
 
 export interface NoAppsContext {
@@ -101,33 +102,54 @@ function StatusPhase({
   );
 }
 
-function AuthenticatingPhase({ onCancel }: { onCancel: () => void }): React.ReactElement {
+function AuthenticatingPhase({
+  onCancel,
+  authUrl,
+}: {
+  onCancel: () => void;
+  authUrl?: string | null;
+}): React.ReactElement {
   useCancelInput(onCancel);
+  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, 'Open authentication URL') : null;
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="blue"
-      paddingX={1}
-      marginX={1}
-      marginY={1}
-    >
-      <Box marginBottom={1}>
-        <Text bold>Firebase Authentication</Text>
+    <Box flexDirection="column">
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor="blue"
+        paddingX={1}
+        marginX={1}
+        marginY={1}
+      >
+        <Box marginBottom={1}>
+          <Text bold>Firebase Authentication</Text>
+        </Box>
+        <Box>
+          <Text dimColor>
+            <Spinner type="dots" />
+          </Text>
+          <Text> Opening browser for Google authentication...</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>Complete authentication in your browser.</Text>
+        </Box>
+        {reopenLink ? (
+          <Box marginTop={1} flexDirection="column">
+            <Text dimColor>If browser was closed, reopen this URL:</Text>
+            <Text color="cyan">{reopenLink}</Text>
+          </Box>
+        ) : null}
+        <Box marginTop={1}>
+          <Text dimColor>Press Esc/Ctrl+C to cancel</Text>
+        </Box>
       </Box>
-      <Box>
-        <Text dimColor>
-          <Spinner type="dots" />
-        </Text>
-        <Text> Opening browser for Google authentication...</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>Complete authentication in your browser.</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>Press Esc/Ctrl+C to cancel</Text>
-      </Box>
+      {authUrl ? (
+        <Box marginLeft={2} marginTop={1} flexDirection="column">
+          <Text dimColor>Direct URL:</Text>
+          <Text>{authUrl}</Text>
+        </Box>
+      ) : null}
     </Box>
   );
 }

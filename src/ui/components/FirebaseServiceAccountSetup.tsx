@@ -2,7 +2,8 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { openBrowser } from '@/lib/auth/browser';
 import {
   type FirebaseDetectionResult,
   parseServiceAccountJson,
@@ -185,8 +186,19 @@ function PasteServiceAccountPhase({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingText, setLoadingText] = useState('');
+  const [browserOpened, setBrowserOpened] = useState(false);
+  const serviceAccountConsoleUrl = `https://console.firebase.google.com/project/${projectId}/settings/serviceaccounts/adminsdk`;
 
   useCancelInput(onCancel);
+
+  useEffect(() => {
+    if (browserOpened) {
+      return;
+    }
+
+    void openBrowser(serviceAccountConsoleUrl);
+    setBrowserOpened(true);
+  }, [browserOpened, serviceAccountConsoleUrl]);
 
   const processJson = useCallback(
     (content: string, source: string) => {
@@ -258,9 +270,7 @@ function PasteServiceAccountPhase({
       <Text>Project: {projectId}</Text>
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>1. Open Firebase Console and generate a new private key JSON:</Text>
-        <Text color="blue">
-          https://console.firebase.google.com/project/{projectId}/settings/serviceaccounts/adminsdk
-        </Text>
+        <Text color="blue">{serviceAccountConsoleUrl}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>2. Copy JSON to clipboard and press Enter, or drag the JSON file here.</Text>

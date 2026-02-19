@@ -7,12 +7,14 @@ import {
   buildAgentContext,
   type CapabilitySyncResult,
   createAuthContext,
+  ensureMainTargetEntitlementsLink,
   generateAppGroupId,
   getAppleApiErrorMessage,
   getEntitlementsPath,
   getIosProjectDir,
   type IosProjectInfo,
   loadApiKeyFromFile,
+  type MainTargetEntitlementsLinkResult,
   readEntitlements,
   syncCapabilities,
   updateEntitlementsForClix,
@@ -60,6 +62,14 @@ export interface IosSetupResult {
   firebaseProjectId?: string | null;
   /** Apple Team ID for push setup integration (from GoogleService-Info.plist) */
   teamId?: string | null;
+  /** Structured summary for idempotent install flow */
+  changeSummary?: {
+    changedFiles: string[];
+    skippedChecks: string[];
+    warnings: string[];
+  };
+  /** Main app target CODE_SIGN_ENTITLEMENTS linkage result */
+  mainTargetEntitlementsLink?: MainTargetEntitlementsLinkResult;
 }
 
 interface IosSetupUIProps {
@@ -71,6 +81,7 @@ interface SetupState {
   phase: SetupPhase;
   projectInfo: IosProjectInfo | null;
   portalResult: CapabilitySyncResult | null;
+  mainTargetEntitlementsLink: MainTargetEntitlementsLinkResult | null;
   updatedFiles: string[];
   errorMessage: string;
 }
@@ -164,6 +175,11 @@ async function runSetup(
   const result: IosSetupResult = {
     success: false,
     entitlementsUpdated: [],
+    changeSummary: {
+      changedFiles: [],
+      skippedChecks: [],
+      warnings: [],
+    },
   };
 
   // Phase 1: Analyze iOS project
@@ -189,6 +205,9 @@ async function runSetup(
     setState((s) => ({ ...s, portalResult: syncResult }));
     result.portalSync = syncResult;
   }
+  if (options.skipPortal) {
+    result.changeSummary?.skippedChecks.push('Apple Developer Portal sync');
+  }
 
   // Phase 3: Update local entitlements files
   setState((s) => ({ ...s, phase: 'updating_entitlements' }));
@@ -203,6 +222,27 @@ async function runSetup(
   const files = entitlementsResult.files;
   setState((s) => ({ ...s, updatedFiles: files }));
   result.entitlementsUpdated = files;
+  result.changeSummary?.changedFiles.push(...files);
+
+  // Phase 4: Ensure main app target links the entitlements file in build settings.
+  const mainTargetLinkResult = await ensureMainTargetEntitlementsLink({
+    projectPath: project.projectPath,
+    entitlementsPath: entitlementsResult.entitlementsPath,
+  });
+  setState((s) => ({ ...s, mainTargetEntitlementsLink: mainTargetLinkResult }));
+  result.mainTargetEntitlementsLink = mainTargetLinkResult;
+
+  if (mainTargetLinkResult.success && !mainTargetLinkResult.alreadyConfigured) {
+    const pbxprojPath = mainTargetLinkResult.projectFilePath;
+    if (!result.changeSummary?.changedFiles.includes(pbxprojPath)) {
+      result.changeSummary?.changedFiles.push(pbxprojPath);
+    }
+  }
+
+  if (!mainTargetLinkResult.success) {
+    const reason = mainTargetLinkResult.error || 'unknown reason';
+    result.changeSummary?.warnings.push(`Failed to update Xcode entitlements linkage: ${reason}`);
+  }
 
   // Build agent context for remaining tasks
   result.agentContext = buildAgentContext(
@@ -246,12 +286,20 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     phase: 'analyzing',
     projectInfo: null,
     portalResult: null,
+    mainTargetEntitlementsLink: null,
     updatedFiles: [],
     errorMessage: '',
   });
   const [result, setResult] = useState<IosSetupResult | null>(null);
 
-  const { phase, projectInfo, portalResult, updatedFiles, errorMessage } = state;
+  const {
+    phase,
+    projectInfo,
+    portalResult,
+    mainTargetEntitlementsLink,
+    updatedFiles,
+    errorMessage,
+  } = state;
 
   // Handle user input for complete/error phases
   const handleContinue = useCallback(() => {
@@ -322,6 +370,7 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
         <CompletePhase
           projectInfo={projectInfo}
           portalResult={portalResult}
+          mainTargetEntitlementsLink={mainTargetEntitlementsLink}
           updatedFiles={updatedFiles}
           skipPortal={options.skipPortal}
         />
@@ -381,58 +430,120 @@ const PortalSyncStatus: React.FC<{
 const CompletePhase: React.FC<{
   projectInfo: IosProjectInfo | null;
   portalResult: CapabilitySyncResult | null;
+  mainTargetEntitlementsLink: MainTargetEntitlementsLinkResult | null;
   updatedFiles: string[];
   skipPortal?: boolean;
-}> = ({ projectInfo, portalResult, updatedFiles, skipPortal }) => (
-  <Box flexDirection="column">
-    <ProjectInfoStatus projectInfo={projectInfo} />
+}> = ({ projectInfo, portalResult, mainTargetEntitlementsLink, updatedFiles, skipPortal }) => {
+  const nextSteps: string[] = [];
 
-    {portalResult && (
-      <Box flexDirection="column">
-        <StatusMessage type="success" message="Apple Developer Portal sync complete" />
-        {portalResult.enabled.length > 0 && (
-          <Box marginLeft={2}>
-            <Text dimColor>Enabled: {portalResult.enabled.join(', ')}</Text>
-          </Box>
-        )}
-        {portalResult.appGroupCreated && portalResult.appGroupId && (
-          <Box marginLeft={2}>
-            <Text dimColor>Created App Group: {portalResult.appGroupId}</Text>
-          </Box>
-        )}
+  if (mainTargetEntitlementsLink?.success) {
+    nextSteps.push(
+      'Xcode: Open ios/*.xcworkspace, select the main app target, and verify Push Notifications/App Groups in Signing & Capabilities.',
+    );
+    nextSteps.push('Xcode: Product -> Clean Build Folder, then Product -> Build.');
+  } else {
+    nextSteps.push('Xcode: Open ios/*.xcworkspace and select the main app target.');
+    nextSteps.push(
+      'Xcode: Build Settings -> set Code Signing Entitlements to the main app .entitlements file.',
+    );
+    nextSteps.push(
+      'Xcode: Signing & Capabilities -> + Capability -> enable Push Notifications and App Groups.',
+    );
+    nextSteps.push(
+      'Xcode: Product -> Clean Build Folder, then Product -> Build and resolve remaining signing/profile errors.',
+    );
+  }
+
+  if (skipPortal) {
+    nextSteps.push(
+      'If Xcode cannot enable capabilities (team/permission issue), use Apple Developer Portal: https://developer.apple.com/account/resources/identifiers/list -> Identifiers -> your App ID -> enable Push Notifications/App Groups -> Save.',
+    );
+    nextSteps.push(
+      'If signing/profile errors remain, open https://developer.apple.com/account/resources/profiles/list and regenerate profiles. With Automatic Signing, Xcode may refresh them automatically.',
+    );
+  } else {
+    nextSteps.push(
+      'If signing/profile errors remain, open https://developer.apple.com/account/resources/profiles/list and regenerate profiles for this App ID (or let Automatic Signing refresh them).',
+    );
+  }
+
+  return (
+    <Box flexDirection="column">
+      <ProjectInfoStatus projectInfo={projectInfo} />
+
+      {portalResult && (
+        <Box flexDirection="column">
+          <StatusMessage type="success" message="Apple Developer Portal sync complete" />
+          {portalResult.enabled.length > 0 && (
+            <Box marginLeft={2}>
+              <Text dimColor>Enabled: {portalResult.enabled.join(', ')}</Text>
+            </Box>
+          )}
+          {portalResult.appGroupCreated && portalResult.appGroupId && (
+            <Box marginLeft={2}>
+              <Text dimColor>Created App Group: {portalResult.appGroupId}</Text>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {skipPortal && (
+        <StatusMessage type="info" message="Portal sync skipped (use --api-key to enable)" />
+      )}
+
+      <StatusMessage type="success" message="Entitlements files updated" />
+      {updatedFiles.map((file) => (
+        <Box key={file} marginLeft={2}>
+          <Text dimColor>• {file}</Text>
+        </Box>
+      ))}
+
+      {mainTargetEntitlementsLink?.success ? (
+        <Box flexDirection="column">
+          <StatusMessage
+            type="success"
+            message={
+              mainTargetEntitlementsLink.alreadyConfigured
+                ? 'Xcode entitlements linkage already configured'
+                : 'Xcode entitlements linkage updated'
+            }
+          />
+        </Box>
+      ) : (
+        <Box flexDirection="column">
+          <StatusMessage
+            type="warning"
+            message="Could not automatically link entitlements in Xcode build settings"
+          />
+          {mainTargetEntitlementsLink?.error && (
+            <Box marginLeft={2}>
+              <Text color="yellow">Reason: {mainTargetEntitlementsLink.error}</Text>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      <Box marginTop={1}>
+        <Text bold color="green">
+          ✓ iOS setup completed successfully!
+        </Text>
       </Box>
-    )}
 
-    {skipPortal && (
-      <StatusMessage type="info" message="Portal sync skipped (use --api-key to enable)" />
-    )}
-
-    <StatusMessage type="success" message="Entitlements files updated" />
-    {updatedFiles.map((file) => (
-      <Box key={file} marginLeft={2}>
-        <Text dimColor>• {file}</Text>
+      {/* Next steps */}
+      <Box flexDirection="column" marginTop={1}>
+        <Text bold>Next steps:</Text>
+        <Box marginLeft={2} flexDirection="column">
+          {nextSteps.map((step, index) => (
+            <Text key={step}>
+              {index + 1}. {step}
+            </Text>
+          ))}
+        </Box>
       </Box>
-    ))}
 
-    <Box marginTop={1}>
-      <Text bold color="green">
-        ✓ iOS setup completed successfully!
-      </Text>
-    </Box>
-
-    {/* Next steps */}
-    <Box flexDirection="column" marginTop={1}>
-      <Text bold>Next steps:</Text>
-      <Box marginLeft={2} flexDirection="column">
-        <Text>1. Open your project in Xcode</Text>
-        <Text>2. Go to Signing &amp; Capabilities tab</Text>
-        <Text>3. Verify the capabilities are enabled</Text>
-        {!skipPortal && <Text>4. Regenerate provisioning profiles if needed</Text>}
+      <Box marginTop={1}>
+        <Text color="cyan">Press Enter to continue</Text>
       </Box>
     </Box>
-
-    <Box marginTop={1}>
-      <Text color="cyan">Press Enter to continue</Text>
-    </Box>
-  </Box>
-);
+  );
+};

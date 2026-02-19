@@ -8,6 +8,10 @@ import {
 } from '../../lib/skills';
 import { AgentExecutionUI } from '../../ui/AgentExecutionUI';
 import { InstallPreparationUI } from '../../ui/components/InstallPreparationUI';
+import {
+  INSTALL_TASK_LABELS,
+  type InstallTaskId,
+} from '../../ui/components/install-preparation-tasks';
 import { printFinalOutput } from '../../ui/utils/finalOutput';
 import { safeRender } from '../../ui/utils/safeRender';
 import type { PreparationContext } from './preparation';
@@ -15,6 +19,7 @@ import type { PreparationContext } from './preparation';
 interface SkillCommandOptions {
   action?: string;
   platform?: 'ios' | 'android' | 'react-native' | 'flutter';
+  startTask?: string;
 }
 
 /**
@@ -59,11 +64,15 @@ Examples:
 /**
  * Run install preparation UI and return the context.
  */
-async function runInstallPreparation(projectPath: string): Promise<PreparationContext | null> {
+async function runInstallPreparation(
+  projectPath: string,
+  startTaskId?: InstallTaskId,
+): Promise<PreparationContext | null> {
   return new Promise((resolve) => {
     const { unmount } = safeRender(
       <InstallPreparationUI
         projectPath={projectPath}
+        startTaskId={startTaskId}
         onComplete={(context) => {
           unmount();
           resolve(context);
@@ -78,7 +87,7 @@ async function runInstallPreparation(projectPath: string): Promise<PreparationCo
 }
 
 export async function skillCommand(options: SkillCommandOptions): Promise<void> {
-  const { action, platform } = options;
+  const { action, platform, startTask } = options;
 
   if (!action || !isValidSkillType(action)) {
     console.log(generateHelpText());
@@ -107,11 +116,34 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
 
   const skillType = action as SkillType;
   const projectPath = process.cwd();
+  let startTaskId: InstallTaskId | undefined;
+
+  if (startTask) {
+    const installTaskIds = Object.keys(INSTALL_TASK_LABELS) as InstallTaskId[];
+    if (!installTaskIds.includes(startTask as InstallTaskId)) {
+      console.error(`Invalid --start-task value: ${startTask}`);
+      console.error(`Allowed values: ${installTaskIds.join(', ')}`);
+      process.exit(1);
+    }
+
+    if (skillType !== 'install') {
+      console.error('--start-task is only supported with the install command.');
+      process.exit(1);
+    }
+
+    if (process.env.CLIX_DEV_ENABLE_TASK_OVERRIDE !== '1') {
+      console.error('--start-task is a development-only option.');
+      console.error('Set CLIX_DEV_ENABLE_TASK_OVERRIDE=1 to enable task override.');
+      process.exit(1);
+    }
+
+    startTaskId = startTask as InstallTaskId;
+  }
 
   // For install skill, run preparation first
   let preparationContext: PreparationContext | undefined;
   if (skillType === 'install') {
-    const context = await runInstallPreparation(projectPath);
+    const context = await runInstallPreparation(projectPath, startTaskId);
     if (!context) {
       // User cancelled or config missing
       return;

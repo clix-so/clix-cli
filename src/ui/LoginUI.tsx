@@ -26,6 +26,7 @@ import { detectProjectType, formatProjectType } from '@/lib/services/project-det
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
+import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 
 type LoginPhase =
   | 'checking_existing'
@@ -98,6 +99,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
   const pkceServiceRef = useRef<PKCEFlowService | null>(null);
   const credentialsRef = useRef<ClixCredentials | null>(null);
   const memberRef = useRef<Member | null>(null);
+  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, 'Open authentication URL') : null;
 
   const handleProjectSelect = useCallback(
     async (project: Project, org: Organization) => {
@@ -302,14 +304,18 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
             <Box flexDirection="column">
               <Text color="yellow">⚠</Text>
               <Text> Could not open browser automatically.</Text>
-              <Box marginTop={1}>
-                <Text dimColor>Open this URL in your browser:</Text>
-              </Box>
-              <Box marginTop={1}>
-                <Text color="cyan">{authUrl}</Text>
-              </Box>
             </Box>
           )}
+          {authUrl ? (
+            <Box marginTop={1} flexDirection="column">
+              <Text dimColor>If browser was closed, reopen this URL:</Text>
+              <Text color="cyan">{reopenLink}</Text>
+              <Box marginTop={1} flexDirection="column">
+                <Text dimColor>Direct URL:</Text>
+                <Text>{authUrl}</Text>
+              </Box>
+            </Box>
+          ) : null}
           <Box marginTop={2}>
             <Text dimColor>
               <Spinner type="dots" />
