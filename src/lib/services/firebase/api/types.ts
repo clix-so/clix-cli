@@ -38,14 +38,6 @@ export interface CreateIosAppRequest {
   displayName?: string;
 }
 
-export interface GcpProject {
-  projectId: string;
-  name: string;
-  projectNumber: string;
-  lifecycleState: 'ACTIVE' | 'DELETE_REQUESTED' | 'DELETE_IN_PROGRESS';
-  createTime?: string;
-}
-
 export interface ServiceAccountJson {
   type: 'service_account';
   project_id: string;

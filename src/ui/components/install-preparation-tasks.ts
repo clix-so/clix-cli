@@ -11,6 +11,9 @@ export type InstallTaskId =
 
 export type RuntimeTaskState = 'idle' | 'running' | 'failed' | 'complete';
 export type RuntimeTaskStateMap = Partial<Record<InstallTaskId, RuntimeTaskState>>;
+export interface InstallTaskSelectionOptions {
+  includeRuntimeTasks?: boolean;
+}
 
 const INSTALL_TASK_ORDER: InstallTaskId[] = [
   'firebase_config_files',
@@ -55,6 +58,16 @@ export function isRuntimeTask(taskId: InstallTaskId): boolean {
   return RUNTIME_TASK_IDS.includes(taskId);
 }
 
+function shouldIncludeTask(
+  taskId: InstallTaskId,
+  options: InstallTaskSelectionOptions = {},
+): boolean {
+  if (options.includeRuntimeTasks === false && isRuntimeTask(taskId)) {
+    return false;
+  }
+  return true;
+}
+
 export function getTaskRuntimeState(
   taskId: InstallTaskId,
   runtimeTaskState: RuntimeTaskStateMap = {},
@@ -87,14 +100,20 @@ export function isTaskCompleted(
   }
 }
 
-export function getApplicableInstallTasks(context: PreparationContext): InstallTaskId[] {
-  return INSTALL_TASK_ORDER.filter((taskId) => isTaskApplicable(context, taskId));
+export function getApplicableInstallTasks(
+  context: PreparationContext,
+  options: InstallTaskSelectionOptions = {},
+): InstallTaskId[] {
+  return INSTALL_TASK_ORDER.filter(
+    (taskId) => isTaskApplicable(context, taskId) && shouldIncludeTask(taskId, options),
+  );
 }
 
 export function getNextIncompleteTaskId(
   context: PreparationContext,
   runtimeTaskState: RuntimeTaskStateMap = {},
+  options: InstallTaskSelectionOptions = {},
 ): InstallTaskId | null {
-  const tasks = getApplicableInstallTasks(context);
+  const tasks = getApplicableInstallTasks(context, options);
   return tasks.find((taskId) => !isTaskCompleted(context, taskId, runtimeTaskState)) ?? null;
 }

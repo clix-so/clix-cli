@@ -4,10 +4,6 @@
  * @module services/firebase/api/firebase-api
  */
 
-import {
-  cloudresourcemanager,
-  type cloudresourcemanager_v1,
-} from '@googleapis/cloudresourcemanager';
 import { firebase, type firebase_v1beta1 } from '@googleapis/firebase';
 import { OAuth2Client } from 'google-auth-library';
 import { oauthLogger } from '@/lib/debug/logger';
@@ -17,12 +13,10 @@ import type {
   CreateAndroidAppRequest,
   CreateIosAppRequest,
   FirebaseProject,
-  GcpProject,
   IosApp,
 } from './types';
 
 type FirebaseApi = firebase_v1beta1.Firebase;
-type ResourceManagerApi = cloudresourcemanager_v1.Cloudresourcemanager;
 
 /**
  * Log API errors to debug.log for troubleshooting.
@@ -48,7 +42,6 @@ export interface ApiClientCredentials {
 
 export class FirebaseApiClient {
   private fb: FirebaseApi;
-  private rm: ResourceManagerApi;
   private auth: OAuth2Client;
   private getAccessTokenFn: () => Promise<string>;
 
@@ -64,7 +57,6 @@ export class FirebaseApiClient {
       : new OAuth2Client();
 
     this.fb = firebase({ version: 'v1beta1', auth: this.auth });
-    this.rm = cloudresourcemanager({ version: 'v1', auth: this.auth });
   }
 
   /**
@@ -219,62 +211,6 @@ export class FirebaseApiClient {
       displayName: app.displayName ?? undefined,
       bundleId: app.bundleId ?? '',
       projectId: app.projectId ?? projectId,
-    };
-  }
-
-  async listGcpProjects(): Promise<GcpProject[]> {
-    try {
-      await this.updateCredentials();
-      const projects: GcpProject[] = [];
-      let pageToken: string | undefined;
-
-      do {
-        const res = await this.rm.projects.list({ pageToken });
-        for (const p of res.data.projects ?? []) {
-          projects.push({
-            projectId: p.projectId ?? '',
-            name: p.name ?? '',
-            projectNumber: p.projectNumber ?? '',
-            lifecycleState: (p.lifecycleState as GcpProject['lifecycleState']) ?? 'ACTIVE',
-            createTime: p.createTime ?? undefined,
-          });
-        }
-        pageToken = res.data.nextPageToken ?? undefined;
-      } while (pageToken);
-
-      return projects;
-    } catch (error) {
-      logApiError('listGcpProjects', error);
-      throw error;
-    }
-  }
-
-  async listAvailableGcpProjects(): Promise<GcpProject[]> {
-    const [gcpProjects, firebaseProjects] = await Promise.all([
-      this.listGcpProjects(),
-      this.listProjects(),
-    ]);
-    const firebaseProjectIds = new Set(firebaseProjects.map((p) => p.projectId));
-    return gcpProjects.filter(
-      (gcp) => gcp.lifecycleState === 'ACTIVE' && !firebaseProjectIds.has(gcp.projectId),
-    );
-  }
-
-  async addFirebaseToProject(projectId: string): Promise<FirebaseProject> {
-    await this.updateCredentials();
-    const res = await this.fb.projects.addFirebase({ project: `projects/${projectId}` });
-    if (!res.data.name) {
-      throw new Error('Failed to add Firebase: no operation name returned');
-    }
-    const project = await this.waitForOperation<firebase_v1beta1.Schema$FirebaseProject>(
-      res.data.name,
-    );
-    return {
-      name: project.name ?? '',
-      projectId: project.projectId ?? '',
-      projectNumber: project.projectNumber ?? '',
-      displayName: project.displayName ?? '',
-      state: (project.state as 'ACTIVE' | 'DELETED') ?? 'ACTIVE',
     };
   }
 

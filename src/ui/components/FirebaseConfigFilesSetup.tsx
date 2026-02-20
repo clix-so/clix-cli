@@ -8,7 +8,6 @@ import {
   type AndroidApp,
   type FirebaseDetectionResult,
   type FirebaseProject,
-  type GcpProject,
   type IosApp,
   platformNeedsAndroid,
   platformNeedsIos,
@@ -457,16 +456,16 @@ function CreatingAppPhase({ platform }: { platform: 'android' | 'ios' }): React.
 
 function NoProjectsPhase({
   onOpenConsole,
-  onSelectGcp,
+  onRetry,
   onCancel,
 }: {
   onOpenConsole: () => void;
-  onSelectGcp: () => void;
+  onRetry: () => void;
   onCancel: () => void;
 }): React.ReactElement {
   const items = [
     { label: '🌐 Open Firebase Console', value: 'console' },
-    { label: '📦 Add Firebase to existing GCP project', value: 'gcp' },
+    { label: '↻ Retry project list', value: 'retry' },
     { label: '← Back', value: 'cancel' },
   ];
 
@@ -477,8 +476,8 @@ function NoProjectsPhase({
       case 'console':
         onOpenConsole();
         break;
-      case 'gcp':
-        onSelectGcp();
+      case 'retry':
+        onRetry();
         break;
       default:
         onCancel();
@@ -504,76 +503,11 @@ function NoProjectsPhase({
         <Text>No Firebase projects are associated with this account.</Text>
       </Box>
       <Box marginBottom={1}>
-        <Text dimColor>Create a project or add Firebase to an existing GCP project:</Text>
+        <Text dimColor>Create a Firebase project in console, then retry.</Text>
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
       <Box marginTop={1}>
         <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
-      </Box>
-    </Box>
-  );
-}
-
-function GcpProjectSelectorPhase({
-  projects,
-  onSelect,
-  onCancel,
-}: {
-  projects: GcpProject[];
-  onSelect: (project: GcpProject) => void;
-  onCancel: () => void;
-}): React.ReactElement {
-  const items = projects.map((project) => ({
-    label: project.name || project.projectId,
-    value: project,
-  }));
-
-  useCancelInput(onCancel);
-
-  return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="blue"
-      paddingX={1}
-      marginX={1}
-      marginY={1}
-    >
-      <Box marginBottom={1}>
-        <Text bold>Select GCP Project</Text>
-      </Box>
-      <Box marginBottom={1}>
-        <Text dimColor>Select a project to add Firebase:</Text>
-      </Box>
-      <SelectInput items={items} onSelect={(item) => onSelect(item.value)} />
-      <Box marginTop={1}>
-        <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
-      </Box>
-    </Box>
-  );
-}
-
-function AddingFirebasePhase({ projectId }: { projectId: string }): React.ReactElement {
-  return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="blue"
-      paddingX={1}
-      marginX={1}
-      marginY={1}
-    >
-      <Box marginBottom={1}>
-        <Text bold>Adding Firebase</Text>
-      </Box>
-      <Box>
-        <Text dimColor>
-          <Spinner type="dots" />
-        </Text>
-        <Text> Adding Firebase to {projectId}...</Text>
-      </Box>
-      <Box marginTop={1}>
-        <Text dimColor>This may take a moment...</Text>
       </Box>
     </Box>
   );
@@ -614,7 +548,6 @@ Press Enter to re-authenticate with updated permissions.`;
 }
 
 export {
-  AddingFirebasePhase as FirebaseConfigAddingFirebaseTask,
   AppSelectorPhase as FirebaseConfigAppSelectorTask,
   AuthenticatingPhase as FirebaseConfigAuthenticatingTask,
   CreateAppInputPhase as FirebaseConfigCreateAppInputTask,
@@ -622,7 +555,6 @@ export {
   DetectingPhase as FirebaseConfigDetectingTask,
   DownloadingPhase as FirebaseConfigDownloadingTask,
   ErrorPhase as FirebaseConfigErrorTask,
-  GcpProjectSelectorPhase as FirebaseConfigGcpProjectSelectorTask,
   NoAppsFoundPhase as FirebaseConfigNoAppsFoundTask,
   NoProjectsPhase as FirebaseConfigNoProjectsTask,
   ProjectSelectorPhase as FirebaseConfigProjectSelectorTask,

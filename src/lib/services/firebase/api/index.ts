@@ -10,7 +10,6 @@ export type {
   CreateAndroidAppRequest,
   CreateIosAppRequest,
   FirebaseProject,
-  GcpProject,
   IosApp,
   ServiceAccountJson,
 } from './types';

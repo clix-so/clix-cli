@@ -73,8 +73,15 @@ async function runInstallPreparation(
       <InstallPreparationUI
         projectPath={projectPath}
         startTaskId={startTaskId}
-        onRunProjectBuild={async () => ({ success: true })}
-        onRunInstallSkill={async () => ({ success: true })}
+        mode="command-prep-only"
+        onRunProjectBuild={async () => ({
+          success: false,
+          error: 'project_build is disabled in command preparation mode.',
+        })}
+        onRunInstallSkill={async () => ({
+          success: false,
+          error: 'install_skill is disabled in command preparation mode.',
+        })}
         onComplete={(context) => {
           unmount();
           resolve(context);

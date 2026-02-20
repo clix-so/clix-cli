@@ -14,7 +14,6 @@ import type {
   CreateAndroidAppRequest,
   CreateIosAppRequest,
   FirebaseProject,
-  GcpProject,
   IosApp,
   ServiceAccountJson,
 } from './api';
@@ -306,37 +305,6 @@ export class FirebaseDownloader {
   async logout(): Promise<void> {
     await this.authClient.logout();
     this.apiClient = null;
-  }
-
-  // ============================================================================
-  // GCP Project and Firebase Project Management
-  // ============================================================================
-
-  /**
-   * List GCP projects that don't have Firebase yet.
-   *
-   * These projects can have Firebase added to them.
-   */
-  async listAvailableGcpProjects(): Promise<GcpProject[]> {
-    if (!(await this.isAuthenticated())) {
-      throw new Error('Not authenticated. Run OAuth flow first.');
-    }
-    const api = await this.ensureApiClient();
-    return api.listAvailableGcpProjects();
-  }
-
-  /**
-   * Add Firebase to an existing GCP project.
-   *
-   * @param projectId - GCP project ID
-   * @returns Created Firebase project
-   */
-  async addFirebaseToProject(projectId: string): Promise<FirebaseProject> {
-    if (!(await this.isAuthenticated())) {
-      throw new Error('Not authenticated. Run OAuth flow first.');
-    }
-    const api = await this.ensureApiClient();
-    return api.addFirebaseToProject(projectId);
   }
 
   // ============================================================================

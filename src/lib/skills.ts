@@ -37,6 +37,8 @@ export interface SkillInfo {
   isLocal?: boolean;
   /** Whether this skill uses an AI agent (default: true). Set to false for direct implementation. */
   usesAgent?: boolean;
+  /** Visibility in user-facing command lists/help. */
+  visibility?: 'public' | 'internal';
 }
 
 /**
@@ -55,6 +57,7 @@ const LOCAL_SKILLS: SkillInfo[] = [
     name: 'Project Build',
     description: 'Autonomous project build with automatic diagnostics and fixes',
     isLocal: true,
+    visibility: 'internal',
   },
   {
     type: 'doctor',
@@ -71,17 +74,25 @@ const LOCAL_SKILLS: SkillInfo[] = [
 ];
 
 /**
- * Get all available skills (from embedded metadata + local skills).
+ * Get all skills including internal-only skills.
  */
-export function getAvailableSkills(): SkillInfo[] {
+function getAllSkills(): SkillInfo[] {
   const embeddedSkills: SkillInfo[] = EMBEDDED_SKILL_METADATA.map((meta) => ({
     type: meta.commandName,
     name: meta.displayName,
     description: meta.shortDescription || meta.displayName,
     isLocal: false,
+    visibility: 'public',
   }));
 
   return [...embeddedSkills, ...LOCAL_SKILLS];
+}
+
+/**
+ * Get user-facing skills (from embedded metadata + public local skills).
+ */
+export function getAvailableSkills(): SkillInfo[] {
+  return getAllSkills().filter((skill) => skill.visibility !== 'internal');
 }
 
 /**
@@ -105,7 +116,7 @@ export function isValidSkillType(type: string): boolean {
 }
 
 export function getSkillInfo(type: SkillType): SkillInfo | undefined {
-  return getAvailableSkills().find((skill) => skill.type === type);
+  return getAllSkills().find((skill) => skill.type === type);
 }
 
 /**
@@ -120,7 +131,7 @@ function getSkillFolderByCommand(commandName: string): string | null {
  * Check if a skill is a local skill (not from package).
  */
 function isLocalSkill(skillType: SkillType): boolean {
-  return LOCAL_SKILLS.some((s) => s.type === skillType);
+  return getAllSkills().some((skill) => skill.type === skillType && skill.isLocal);
 }
 
 function getSkillsPackagePath(): string | null {

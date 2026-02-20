@@ -10,7 +10,6 @@
 export type {
   AndroidApp,
   FirebaseProject,
-  GcpProject,
   IosApp,
   ServiceAccountJson,
 } from './api';

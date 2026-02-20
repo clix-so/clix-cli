@@ -47,7 +47,6 @@ import {
   FirebaseDownloader,
   type FirebaseProject,
   FirebaseService,
-  type GcpProject,
   type IosApp,
   isOAuthConfigured,
   type ServiceAccountJson,
@@ -56,7 +55,6 @@ import { detectProjectType, formatProjectType } from '@/lib/services/project-det
 import { ChatMessageList, type ChatMessageListMessage } from '@/ui/components/ChatMessageList';
 import { useCancelInput } from '@/ui/hooks';
 import {
-  FirebaseConfigAddingFirebaseTask,
   FirebaseConfigAppSelectorTask,
   FirebaseConfigAuthenticatingTask,
   FirebaseConfigCreateAppInputTask,
@@ -64,7 +62,6 @@ import {
   FirebaseConfigDetectingTask,
   FirebaseConfigDownloadingTask,
   FirebaseConfigErrorTask,
-  FirebaseConfigGcpProjectSelectorTask,
   type NoAppsContext as FirebaseConfigNoAppsContext,
   FirebaseConfigNoAppsFoundTask,
   FirebaseConfigNoProjectsTask,
@@ -134,8 +131,6 @@ type InstallLeafTaskId =
   | 'firebase_config_create_ios_app'
   | 'firebase_config_creating_app'
   | 'firebase_config_no_projects'
-  | 'firebase_config_select_gcp_project'
-  | 'firebase_config_adding_firebase'
   | 'firebase_config_error'
   | 'apns_detecting'
   | 'apns_input'
@@ -184,12 +179,15 @@ const INSTALL_TASK_IDS = Object.keys(INSTALL_TASK_LABELS) as InstallTaskId[];
 interface InstallPreparationUIProps {
   projectPath?: string;
   startTaskId?: InstallTaskId;
+  mode?: InstallPreparationMode;
   chatMessages?: ChatMessageListMessage[];
   onRunProjectBuild: (context: PreparationContext) => Promise<ProjectBuildTaskResult>;
   onRunInstallSkill: (context: PreparationContext) => Promise<ProjectBuildTaskResult>;
   onComplete: (context: PreparationContext) => void;
   onCancel: () => void;
 }
+
+export type InstallPreparationMode = 'chat-full' | 'command-prep-only';
 
 export interface ProjectBuildTaskResult {
   success: boolean;
@@ -237,8 +235,6 @@ interface FirebaseConfigState {
   downloadingPlatform: 'android' | 'ios' | 'both';
   noAppsContext: FirebaseConfigNoAppsContext | null;
   creatingAppPlatform: 'android' | 'ios';
-  gcpProjects: GcpProject[];
-  selectedGcpProject: GcpProject | null;
   error: string | null;
 }
 
@@ -273,6 +269,7 @@ interface StartTaskOverrideValidationInput {
   effectiveStartTaskId: InstallTaskId | null;
   invalidEnvStartTask: string | null;
   taskOverrideEnabled: boolean;
+  includeRuntimeTasks: boolean;
 }
 
 interface StartTaskOverrideValidationResult {
@@ -408,6 +405,7 @@ function getStatusRows(
   context: PreparationContext,
   layoutPolicy: StatusLayoutPolicy,
   runtimeTaskState: RuntimeTaskStateMap,
+  includeRuntimeTasks: boolean,
 ): StatusRow[] {
   const rows: StatusRow[] = [
     {
@@ -425,7 +423,9 @@ function getStatusRows(
     });
   }
 
-  const taskRows: StatusRow[] = getApplicableInstallTasks(context).map((taskId) => {
+  const taskRows: StatusRow[] = getApplicableInstallTasks(context, {
+    includeRuntimeTasks,
+  }).map((taskId) => {
     const status: StatusLineState =
       isRuntimeTask(taskId) && getTaskRuntimeState(taskId, runtimeTaskState) === 'running'
         ? 'checking'
@@ -516,19 +516,23 @@ function ConfigMissingPhase({ onCancel }: { onCancel: () => void }): React.React
 function StatusPhase({
   context,
   runtimeTaskState,
+  includeRuntimeTasks,
   note,
   onContinue,
   onCancel,
 }: {
   context: PreparationContext;
   runtimeTaskState: RuntimeTaskStateMap;
+  includeRuntimeTasks: boolean;
   note: string | null;
   onContinue: () => void;
   onCancel: () => void;
 }): React.ReactElement {
   const layoutPolicy = getStatusLayoutPolicy();
-  const statusRows = getStatusRows(context, layoutPolicy, runtimeTaskState);
-  const nextTaskId = getNextIncompleteTaskId(context, runtimeTaskState);
+  const statusRows = getStatusRows(context, layoutPolicy, runtimeTaskState, includeRuntimeTasks);
+  const nextTaskId = getNextIncompleteTaskId(context, runtimeTaskState, {
+    includeRuntimeTasks,
+  });
   const showMissingSummary =
     layoutPolicy.missingDisplayMode === 'summary' && context.missing.length > 0;
   const showMissingList = layoutPolicy.missingDisplayMode === 'full' && context.missing.length > 0;
@@ -654,8 +658,6 @@ function createInitialFirebaseConfigState(): FirebaseConfigState {
     downloadingPlatform: 'both',
     noAppsContext: null,
     creatingAppPlatform: 'android',
-    gcpProjects: [],
-    selectedGcpProject: null,
     error: null,
   };
 }
@@ -770,6 +772,7 @@ function validateStartTaskOverride({
   effectiveStartTaskId,
   invalidEnvStartTask,
   taskOverrideEnabled,
+  includeRuntimeTasks,
 }: StartTaskOverrideValidationInput): StartTaskOverrideValidationResult {
   if (!effectiveStartTaskId) {
     if (invalidEnvStartTask) {
@@ -788,7 +791,14 @@ function validateStartTaskOverride({
     };
   }
 
-  const applicableTasks = getApplicableInstallTasks(context);
+  if (!includeRuntimeTasks && effectiveStartTaskId && isRuntimeTask(effectiveStartTaskId)) {
+    return {
+      taskId: null,
+      note: `Task override "${effectiveStartTaskId}" is not available in command preparation mode.`,
+    };
+  }
+
+  const applicableTasks = getApplicableInstallTasks(context, { includeRuntimeTasks });
   if (!applicableTasks.includes(effectiveStartTaskId)) {
     return {
       taskId: null,
@@ -834,12 +844,14 @@ function validateStartTaskOverride({
 export function InstallPreparationUI({
   projectPath = process.cwd(),
   startTaskId,
+  mode = 'chat-full',
   chatMessages,
   onRunProjectBuild,
   onRunInstallSkill,
   onComplete,
   onCancel,
 }: InstallPreparationUIProps): React.ReactElement {
+  const includeRuntimeTasks = mode !== 'command-prep-only';
   const taskOverrideEnabled = process.env[TASK_OVERRIDE_ENV_NAME] === '1';
   const envStartTaskRaw = process.env[START_TASK_ENV_NAME];
   const envStartTaskId =
@@ -970,6 +982,7 @@ export function InstallPreparationUI({
         effectiveStartTaskId,
         invalidEnvStartTask,
         taskOverrideEnabled,
+        includeRuntimeTasks,
       });
       if (!overrideDecision.taskId) {
         if (overrideDecision.note) {
@@ -987,7 +1000,14 @@ export function InstallPreparationUI({
     return () => {
       mounted = false;
     };
-  }, [beginTask, effectiveStartTaskId, invalidEnvStartTask, projectPath, taskOverrideEnabled]);
+  }, [
+    beginTask,
+    effectiveStartTaskId,
+    includeRuntimeTasks,
+    invalidEnvStartTask,
+    projectPath,
+    taskOverrideEnabled,
+  ]);
 
   const applyTaskCompletion = useCallback(
     async (patch?: TaskCompletionPatch) => {
@@ -1037,7 +1057,9 @@ export function InstallPreparationUI({
       return;
     }
 
-    const nextTaskId = getNextIncompleteTaskId(context, runtimeTaskState);
+    const nextTaskId = getNextIncompleteTaskId(context, runtimeTaskState, {
+      includeRuntimeTasks,
+    });
     if (!nextTaskId) {
       onComplete(context);
       return;
@@ -1045,7 +1067,7 @@ export function InstallPreparationUI({
 
     setNote(null);
     beginTask(nextTaskId, context);
-  }, [beginTask, context, onComplete, runtimeTaskState]);
+  }, [beginTask, context, includeRuntimeTasks, onComplete, runtimeTaskState]);
 
   const handleCancelPreparation = useCallback(() => {
     cancelFirebaseAuthentication('Install preparation cancelled');
@@ -1500,119 +1522,6 @@ export function InstallPreparationUI({
     activeLeafTaskId,
     activeTaskId,
     firebaseConfigDownloader,
-    handleFirebaseConfigProjectSelect,
-    phase,
-  ]);
-
-  useEffect(() => {
-    if (
-      phase !== 'task' ||
-      activeTaskId !== 'firebase_config_files' ||
-      activeLeafTaskId !== 'firebase_config_select_gcp_project'
-    ) {
-      return;
-    }
-
-    if (firebaseConfigState.gcpProjects.length > 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const fetchGcpProjects = async () => {
-      try {
-        const available = await firebaseConfigDownloader.listAvailableGcpProjects();
-        if (cancelled) {
-          return;
-        }
-
-        if (available.length === 0) {
-          throw new Error('No GCP projects available to add Firebase.');
-        }
-
-        setFirebaseConfigState((prev) => ({ ...prev, gcpProjects: available }));
-      } catch (err) {
-        if (cancelled) {
-          return;
-        }
-
-        setFirebaseConfigState((prev) => ({
-          ...prev,
-          error: err instanceof Error ? err.message : 'Failed to fetch GCP projects',
-        }));
-        setActiveLeafTaskId('firebase_config_error');
-      }
-    };
-
-    void fetchGcpProjects();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeLeafTaskId,
-    activeTaskId,
-    firebaseConfigDownloader,
-    firebaseConfigState.gcpProjects.length,
-    phase,
-  ]);
-
-  useEffect(() => {
-    if (
-      phase !== 'task' ||
-      activeTaskId !== 'firebase_config_files' ||
-      activeLeafTaskId !== 'firebase_config_adding_firebase'
-    ) {
-      return;
-    }
-
-    if (!firebaseConfigState.selectedGcpProject) {
-      setFirebaseConfigState((prev) => ({ ...prev, error: 'No GCP project selected.' }));
-      setActiveLeafTaskId('firebase_config_error');
-      return;
-    }
-
-    let cancelled = false;
-
-    const addFirebase = async () => {
-      try {
-        const project = await firebaseConfigDownloader.addFirebaseToProject(
-          firebaseConfigState.selectedGcpProject?.projectId || '',
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        setFirebaseConfigState((prev) => ({
-          ...prev,
-          projects: [project],
-          selectedProject: project,
-        }));
-        await handleFirebaseConfigProjectSelect(project);
-      } catch (err) {
-        if (cancelled) {
-          return;
-        }
-
-        setFirebaseConfigState((prev) => ({
-          ...prev,
-          error: err instanceof Error ? err.message : 'Failed to add Firebase to GCP project',
-        }));
-        setActiveLeafTaskId('firebase_config_error');
-      }
-    };
-
-    void addFirebase();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeLeafTaskId,
-    activeTaskId,
-    firebaseConfigDownloader,
-    firebaseConfigState.selectedGcpProject,
     handleFirebaseConfigProjectSelect,
     phase,
   ]);
@@ -2420,6 +2329,7 @@ export function InstallPreparationUI({
       <StatusPhase
         context={context}
         runtimeTaskState={runtimeTaskState}
+        includeRuntimeTasks={includeRuntimeTasks}
         note={note}
         onContinue={handleContinue}
         onCancel={handleCancelPreparation}
@@ -2539,35 +2449,9 @@ export function InstallPreparationUI({
 
           {activeLeafTaskId === 'firebase_config_no_projects' && (
             <FirebaseConfigNoProjectsTask
-              onOpenConsole={() => {
-                openBrowser(FIREBASE_HELP_URLS.console);
-                setActiveLeafTaskId('firebase_config_detecting');
-              }}
-              onSelectGcp={() => {
-                setFirebaseConfigState((prev) => ({ ...prev, gcpProjects: [] }));
-                setActiveLeafTaskId('firebase_config_select_gcp_project');
-              }}
+              onOpenConsole={() => openBrowser(FIREBASE_HELP_URLS.console)}
+              onRetry={() => setActiveLeafTaskId('firebase_config_authenticating')}
               onCancel={() => handleTaskBackToStatus()}
-            />
-          )}
-
-          {activeLeafTaskId === 'firebase_config_select_gcp_project' &&
-            (firebaseConfigState.gcpProjects.length > 0 ? (
-              <FirebaseConfigGcpProjectSelectorTask
-                projects={firebaseConfigState.gcpProjects}
-                onSelect={(project) => {
-                  setFirebaseConfigState((prev) => ({ ...prev, selectedGcpProject: project }));
-                  setActiveLeafTaskId('firebase_config_adding_firebase');
-                }}
-                onCancel={() => setActiveLeafTaskId('firebase_config_no_projects')}
-              />
-            ) : (
-              <FirebaseConfigAuthenticatingTask onCancel={() => handleTaskBackToStatus()} />
-            ))}
-
-          {activeLeafTaskId === 'firebase_config_adding_firebase' && (
-            <FirebaseConfigAddingFirebaseTask
-              projectId={firebaseConfigState.selectedGcpProject?.projectId || ''}
             />
           )}
 
@@ -3047,6 +2931,7 @@ export function InstallPreparationUI({
         <StatusPhase
           context={context}
           runtimeTaskState={runtimeTaskState}
+          includeRuntimeTasks={includeRuntimeTasks}
           note={note}
           onContinue={handleContinue}
           onCancel={handleCancelPreparation}

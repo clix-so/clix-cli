@@ -12,7 +12,7 @@ import { createMockExecutorWithResponses, FIXTURES } from './test-utils';
 
 describe('AVAILABLE_SKILLS', () => {
   test('should contain at least 5 skills (embedded + local)', () => {
-    // 5 embedded skills from @clix-so/clix-agent-skills + 1 local (doctor)
+    // 5 embedded skills from @clix-so/clix-agent-skills + public local skills
     expect(AVAILABLE_SKILLS.length).toBeGreaterThanOrEqual(5);
   });
 
@@ -27,11 +27,15 @@ describe('AVAILABLE_SKILLS', () => {
     const { getAvailableSkillTypes, getSkillInfo } = require('../skills');
     const skillTypes = getAvailableSkillTypes();
     expect(skillTypes).toContain('install');
-    expect(skillTypes).toContain('project-build');
+    expect(skillTypes).not.toContain('project-build');
 
     const installSkill = getSkillInfo('install');
     expect(installSkill?.isLocal).toBe(true);
     expect(installSkill?.name).toBe('SDK Installation');
+
+    const projectBuildSkill = getSkillInfo('project-build');
+    expect(projectBuildSkill?.isLocal).toBe(true);
+    expect(projectBuildSkill?.type).toBe('project-build');
   });
 
   test('should have event-tracking skill', () => {

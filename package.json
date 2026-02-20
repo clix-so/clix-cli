@@ -49,7 +49,6 @@
     "@clix-so/clix-agent-skills": "^0.2.3",
     "@expo/apple-utils": "^2.1.14",
     "@expo/plist": "^0.4.8",
-    "@googleapis/cloudresourcemanager": "^6.0.1",
     "@googleapis/firebase": "^12.0.1",
     "asciify-image": "^0.1.10",
     "google-auth-library": "^10.5.0",

@@ -220,6 +220,62 @@ describe('Install preparation task pipeline', () => {
       }),
     ).toBeNull();
   });
+
+  test('excludes runtime tasks in command preparation mode', () => {
+    const context = createContext(
+      {
+        configured: false,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: false,
+        needed: true,
+      },
+      {
+        needed: true,
+        entitlementsConfigured: false,
+        nseConfigured: false,
+      },
+      {
+        needed: true,
+        registeredWithFirebase: false,
+      },
+      false,
+      ['APNS Key for Firebase'],
+    );
+
+    expect(getApplicableInstallTasks(context, { includeRuntimeTasks: false })).toEqual([
+      'firebase_config_files',
+      'apns_key_for_firebase',
+      'firebase_service_account',
+      'ios_entitlements',
+      'notification_service_extension',
+    ]);
+  });
+
+  test('returns null after setup tasks when runtime tasks are excluded', () => {
+    const context = createContext(
+      {
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: true,
+        needed: true,
+      },
+      {
+        needed: true,
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      {
+        needed: true,
+        registeredWithFirebase: true,
+      },
+      true,
+      [],
+    );
+
+    expect(getNextIncompleteTaskId(context, {}, { includeRuntimeTasks: false })).toBeNull();
+  });
 });
 
 describe('InstallPreparationUI status layout policy', () => {
