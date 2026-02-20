@@ -148,6 +148,14 @@ export abstract class BaseExecutor implements AgentExecutor {
     return debug === '1' || debug === 'true' || debug === '*';
   }
 
+  /**
+   * Optional environment overrides for spawned CLI process.
+   * Return undefined to inherit parent process environment as-is.
+   */
+  protected getSpawnEnv(_options?: ExecuteOptions): NodeJS.ProcessEnv | undefined {
+    return undefined;
+  }
+
   protected getPreparedPrompt(prompt: string, options?: ExecuteOptions): string {
     const shouldInject = options?.oneShot || !this.systemPromptInjected;
     if (!shouldInject) {
@@ -215,6 +223,20 @@ ${prompt}`;
     return { type: 'error', content: errorMessage };
   }
 
+  private updateAssistantContent(context: StreamContext, message: AgentMessage): void {
+    if (message.type !== 'text' || !message.content) {
+      return;
+    }
+
+    context.hasYieldedText = true;
+    if (message.streamMode === 'replace') {
+      context.assistantContent = message.content;
+      return;
+    }
+
+    context.assistantContent += message.content;
+  }
+
   async *execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage> {
     // Check if CLI is available
     if (!(await this.isAvailable())) {
@@ -247,6 +269,7 @@ ${prompt}`;
         args,
         workingDirectory: options?.workingDirectory ?? process.cwd(),
         signal: options?.signal,
+        env: this.getSpawnEnv(options),
       });
 
       this.log.debug('Process spawned', { pid: proc.pid, command: fullCommand });
@@ -316,10 +339,7 @@ ${prompt}`;
               contentLength: msg.content?.length ?? 0,
               contentPreview: msg.content?.slice(0, 100),
             });
-            if (msg.type === 'text' && msg.content) {
-              context.hasYieldedText = true;
-              context.assistantContent += msg.content;
-            }
+            this.updateAssistantContent(context, msg);
             yield msg;
           }
         }

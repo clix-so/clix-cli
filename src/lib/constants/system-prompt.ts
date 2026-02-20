@@ -65,7 +65,7 @@ Platform-specific configs to verify:
 - Verify placeholder replacement before completion
 
 ## Available Slash Commands
-- /install - Autonomous SDK installation with automatic file modifications
+- /install - Install workflow: required setup, project build, and SDK integration
 - /integration - SDK integration guide with step-by-step instructions
 - /event-tracking - Event tracking setup
 - /user-management - User management

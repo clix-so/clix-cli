@@ -12,6 +12,7 @@ export interface CLIProcessOptions {
   args: string[];
   workingDirectory?: string;
   signal?: AbortSignal;
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface CLIProcessResult {
@@ -77,12 +78,13 @@ export async function* parseTextLineStream(stream: Readable): AsyncGenerator<str
  * Supports abort signal for cancellation.
  */
 export function spawnCLIProcess(options: CLIProcessOptions): CLIProcessResult {
-  const { command, args, workingDirectory, signal } = options;
+  const { command, args, workingDirectory, signal, env } = options;
 
   const proc = spawn(command, args, {
     cwd: workingDirectory,
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: false,
+    env,
   });
 
   // Close stdin immediately - CLI tools like claude/codex need EOF on stdin to start processing

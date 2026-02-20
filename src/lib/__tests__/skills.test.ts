@@ -27,6 +27,7 @@ describe('AVAILABLE_SKILLS', () => {
     const { getAvailableSkillTypes, getSkillInfo } = require('../skills');
     const skillTypes = getAvailableSkillTypes();
     expect(skillTypes).toContain('install');
+    expect(skillTypes).toContain('project-build');
 
     const installSkill = getSkillInfo('install');
     expect(installSkill?.isLocal).toBe(true);
@@ -319,6 +320,8 @@ describe('preparationContext in install skill', () => {
     // Verify pre-configured setup section is included
     expect(prompt).toContain('Pre-configured Setup');
     expect(prompt).toContain('Test Project');
+    expect(prompt).toContain('Detected project type: react-native (iOS/Android)');
+    expect(prompt).toContain('Install Step Verification');
 
     // Verify Clix project info
     expect(prompt).toContain('Clix Project');
@@ -330,6 +333,13 @@ describe('preparationContext in install skill', () => {
     expect(prompt).toContain('my-firebase-project');
     expect(prompt).toContain('Android (google-services.json)');
     expect(prompt).toContain('iOS (GoogleService-Info.plist)');
+    expect(prompt).toContain('Sender Config (App Push): ✓ configured');
+
+    // Verify APNS info
+    expect(prompt).toContain('APNS');
+    expect(prompt).toContain('Key ID: ABC1234567');
+    expect(prompt).toContain('Team ID: TEAM123');
+    expect(prompt).toContain('Registered with Firebase: ✓ configured');
 
     // Verify iOS info
     expect(prompt).toContain('iOS');
@@ -451,6 +461,73 @@ describe('preparationContext in install skill', () => {
     expect(prompt).toContain('Project path: /test/project');
     // Pre-configured Setup section should not appear without context
     expect(prompt).not.toContain('### Clix Project');
+  });
+
+  test('install skill should execute SDK integration prompt content', async () => {
+    const { getSkillPrompt } = await import('../skills');
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/test/project',
+    });
+
+    expect(prompt).toContain('# Clix SDK Autonomous Integration');
+    expect(prompt).toContain('SDK code integration');
+  });
+
+  test('project-build skill should execute project-build prompt content', async () => {
+    const { getSkillPrompt } = await import('../skills');
+
+    const prompt = await getSkillPrompt('project-build', {
+      projectPath: '/test/project',
+    });
+
+    expect(prompt).toContain('# Project Build');
+    expect(prompt).toContain('Inputs from `/install` (already provided)');
+  });
+
+  test('install skill should infer target platform from preparationContext project type', async () => {
+    const { getSkillPrompt } = await import('../skills');
+
+    const preparationContext = {
+      projectPath: '/test/project',
+      config: {
+        version: 2 as const,
+        member: { id: 'member-1', email: 'test@example.com', name: 'Test User' },
+        organization: { id: 'org-1', name: 'Test Org' },
+        project: { id: 'project-1', name: 'Flutter Project' },
+        linkedAt: '2024-01-01T00:00:00Z',
+      },
+      projectType: { framework: 'flutter' as const, target: 'ios-android' as const },
+      firebase: {
+        needed: false,
+        configured: false,
+        androidConfigured: false,
+        iosConfigured: false,
+        senderConfigConfigured: false,
+        projectId: undefined,
+      },
+      ios: {
+        needed: false,
+        bundleId: undefined,
+        teamId: undefined,
+        appGroupId: undefined,
+        entitlementsConfigured: false,
+        nseConfigured: false,
+      },
+      apns: {
+        needed: false,
+        registeredWithFirebase: false,
+      },
+      missing: [],
+      ready: true,
+    };
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/test/project',
+      preparationContext,
+    });
+
+    expect(prompt).toContain('Target platform: flutter');
   });
 });
 

@@ -4,6 +4,7 @@
  */
 import type { AgentMessage, ExecuteOptions } from '../executor';
 import { BaseExecutor, type StreamContext, type StreamParserType } from './base-executor';
+import { extractCumulativeDelta } from './stream-delta';
 import type { CLIContentBlock, ClaudeCLIMessage } from './types';
 
 export class ClaudeExecutor extends BaseExecutor {
@@ -32,10 +33,10 @@ export class ClaudeExecutor extends BaseExecutor {
   protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
-    // Permission handling: always use acceptEdits mode
-    // This allows file operations while maintaining safety boundaries
-    // Both one-shot (command-line) and chat modes use the same permission level
-    args.push('--permission-mode', 'acceptEdits');
+    // Permission handling: fully auto-approve tool execution.
+    // Required for non-interactive /install build steps (xcodebuild, xcrun, etc.).
+    args.push('--allow-dangerously-skip-permissions');
+    args.push('--permission-mode', 'bypassPermissions');
 
     // Session persistence: disable for one-shot, enable for chat
     if (options?.oneShot) {
@@ -106,9 +107,7 @@ export class ClaudeExecutor extends BaseExecutor {
   }
 
   private extractTextDelta(textContent: string, msg: ClaudeCLIMessage): AgentMessage | null {
-    const delta = textContent.startsWith(this.lastTextContent)
-      ? textContent.slice(this.lastTextContent.length)
-      : textContent;
+    const delta = extractCumulativeDelta(this.lastTextContent, textContent);
 
     this.lastTextContent = textContent;
 
@@ -116,6 +115,7 @@ export class ClaudeExecutor extends BaseExecutor {
       return {
         type: 'text',
         content: delta,
+        streamMode: 'append',
         metadata: msg as unknown as Record<string, unknown>,
       };
     }

@@ -37,8 +37,18 @@ interface UseOverlaysOptions {
   transferSession: ReturnType<typeof useChatActions>['transferSession'];
   switchAgent: ReturnType<typeof useChatActions>['switchAgent'];
   resumeSession: ReturnType<typeof useChatActions>['resumeSession'];
+  cancelRequest: ReturnType<typeof useChatActions>['cancelRequest'];
   executeDebugSession: ReturnType<typeof useChatActions>['executeDebugSession'];
-  executeInstallWithContext?: (context: PreparationContext) => void;
+  runInstallProjectBuild: (context: PreparationContext) => Promise<{
+    success: boolean;
+    aborted?: boolean;
+    error?: string;
+  }>;
+  runInstallSkill: (context: PreparationContext) => Promise<{
+    success: boolean;
+    aborted?: boolean;
+    error?: string;
+  }>;
 }
 
 /**
@@ -52,8 +62,10 @@ export function useOverlays(options: UseOverlaysOptions) {
     transferSession,
     switchAgent,
     resumeSession,
+    cancelRequest,
     executeDebugSession,
-    executeInstallWithContext,
+    runInstallProjectBuild,
+    runInstallSkill,
   } = options;
 
   // Active overlay
@@ -239,18 +251,29 @@ export function useOverlays(options: UseOverlaysOptions) {
   );
 
   // Install preparation handlers
-  const handleInstallPreparationComplete = useCallback(
-    (context: PreparationContext) => {
-      setActiveOverlay(null);
-      executeInstallWithContext?.(context);
+  const handleInstallPreparationComplete = useCallback((_context: PreparationContext) => {
+    setActiveOverlay(null);
+  }, []);
+
+  const handleInstallProjectBuild = useCallback(
+    async (context: PreparationContext) => {
+      return await runInstallProjectBuild(context);
     },
-    [executeInstallWithContext],
+    [runInstallProjectBuild],
+  );
+
+  const handleInstallSkill = useCallback(
+    async (context: PreparationContext) => {
+      return await runInstallSkill(context);
+    },
+    [runInstallSkill],
   );
 
   const handleInstallPreparationCancel = useCallback(() => {
+    cancelRequest();
     setActiveOverlay(null);
     addSystemMessage('Install preparation cancelled');
-  }, [addSystemMessage]);
+  }, [addSystemMessage, cancelRequest]);
 
   // Login handlers
   const handleLoginComplete = useCallback(
@@ -316,6 +339,8 @@ export function useOverlays(options: UseOverlaysOptions) {
 
     // Install preparation
     showInstallPreparation,
+    handleInstallProjectBuild,
+    handleInstallSkill,
     handleInstallPreparationComplete,
     handleInstallPreparationCancel,
 

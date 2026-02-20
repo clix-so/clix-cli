@@ -73,6 +73,8 @@ async function runInstallPreparation(
       <InstallPreparationUI
         projectPath={projectPath}
         startTaskId={startTaskId}
+        onRunProjectBuild={async () => ({ success: true })}
+        onRunInstallSkill={async () => ({ success: true })}
         onComplete={(context) => {
           unmount();
           resolve(context);

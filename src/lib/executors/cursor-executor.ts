@@ -4,9 +4,12 @@
  */
 import type { AgentMessage, ExecuteOptions } from '../executor';
 import { BaseExecutor, type StreamContext, type StreamParserType } from './base-executor';
+import { extractCumulativeDelta } from './stream-delta';
 import type { CLIContentBlock, CursorCLIMessage } from './types';
 
 export class CursorExecutor extends BaseExecutor {
+  private lastTextContent = '';
+
   constructor() {
     super({
       name: 'cursor',
@@ -14,6 +17,11 @@ export class CursorExecutor extends BaseExecutor {
       notFoundMessage:
         'Cursor Agent CLI not found. Please install from: https://cursor.com/docs/agent',
     });
+  }
+
+  override async *execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage> {
+    this.lastTextContent = '';
+    yield* super.execute(prompt, options);
   }
 
   protected getStreamParserType(): StreamParserType {
@@ -54,6 +62,23 @@ export class CursorExecutor extends BaseExecutor {
     this.sessionId = null;
   }
 
+  private extractTextDelta(textContent: string, msg: CursorCLIMessage): AgentMessage | null {
+    const delta = extractCumulativeDelta(this.lastTextContent, textContent);
+
+    this.lastTextContent = textContent;
+
+    if (!delta) {
+      return null;
+    }
+
+    return {
+      type: 'text',
+      content: delta,
+      streamMode: 'append',
+      metadata: msg as unknown as Record<string, unknown>,
+    };
+  }
+
   private mapAssistantMessage(msg: CursorCLIMessage): AgentMessage | AgentMessage[] | null {
     if (!msg.message?.content) return null;
 
@@ -69,11 +94,10 @@ export class CursorExecutor extends BaseExecutor {
       .join('');
 
     if (textContent) {
-      results.push({
-        type: 'text',
-        content: textContent,
-        metadata: msg as unknown as Record<string, unknown>,
-      });
+      const textMessage = this.extractTextDelta(textContent, msg);
+      if (textMessage) {
+        results.push(textMessage);
+      }
     }
 
     // 도구 호출 추출

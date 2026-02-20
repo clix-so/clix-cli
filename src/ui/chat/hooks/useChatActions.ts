@@ -103,6 +103,7 @@ export function useChatActions(options?: ChatActionsOptions) {
     cancelRequest: messageSending.cancelRequest,
     addSystemMessage: messageSending.addSystemMessage,
     executeSkill: messageSending.executeSkill,
+    executeSkillWithResult: messageSending.executeSkillWithResult,
     executeDebugSession: messageSending.executeDebugSession,
     isStreaming: messageSending.isStreaming,
 

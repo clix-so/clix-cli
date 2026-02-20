@@ -10,9 +10,17 @@ export interface ExecuteOptions {
   interactive?: boolean;
 }
 
+export type AgentTextStreamMode = 'append' | 'replace';
+
 export interface AgentMessage {
   type: 'text' | 'tool_call' | 'tool_result' | 'error' | 'complete';
   content: string;
+  /**
+   * Streaming mode for text chunks.
+   * - append: concatenate chunk to current content
+   * - replace: replace current content with this chunk
+   */
+  streamMode?: AgentTextStreamMode;
   metadata?: Record<string, unknown>;
 }
 

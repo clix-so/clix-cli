@@ -76,7 +76,7 @@ function generateSkillCommands(): Command[] {
   commands.push(
     createLocalSkillCommand(
       'install',
-      'Autonomous SDK installation with file modifications',
+      'Autonomous SDK integration with automatic file modifications',
       'install',
     ),
   );

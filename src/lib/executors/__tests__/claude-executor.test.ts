@@ -36,6 +36,34 @@ describe('ClaudeExecutor', () => {
       expect(mockCommandExists).toHaveBeenCalledWith('claude');
     });
   });
+
+  describe('buildArgs', () => {
+    test('should enable bypass permission mode and dangerous skip permissions', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+      const args = (executor as any).buildArgs('test prompt', { oneShot: true });
+
+      expect(args).toContain('--allow-dangerously-skip-permissions');
+      expect(args).toContain('--permission-mode');
+      expect(args).toContain('bypassPermissions');
+    });
+
+    test('should include no-session-persistence in one-shot mode', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+      const args = (executor as any).buildArgs('test prompt', { oneShot: true });
+
+      expect(args).toContain('--no-session-persistence');
+    });
+
+    test('should include resume flag in chat mode when session exists', () => {
+      executor.setSessionId('session-123');
+      // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+      const args = (executor as any).buildArgs('test prompt', { oneShot: false });
+
+      expect(args).toContain('--resume');
+      expect(args).toContain('session-123');
+      expect(args).not.toContain('--no-session-persistence');
+    });
+  });
 });
 
 describe('ClaudeExecutor session management', () => {
@@ -161,5 +189,39 @@ describe('ClaudeExecutor message mapping', () => {
       expect(msg.type).toBe('system');
       expect(msg.session_id).toBe('abc-123-def');
     });
+  });
+});
+
+describe('ClaudeExecutor stream mode mapping', () => {
+  test('emits append-only cumulative deltas, including rewritten snapshots', () => {
+    const executor = new ClaudeExecutor() as unknown as {
+      extractTextDelta: (
+        textContent: string,
+        msg: ClaudeCLIMessage,
+      ) => {
+        type: string;
+        content: string;
+        streamMode?: 'append' | 'replace';
+      } | null;
+    };
+
+    const msg: ClaudeCLIMessage = {
+      type: 'assistant',
+      message: {
+        content: [{ type: 'text', text: 'placeholder' }],
+      },
+    };
+
+    const first = executor.extractTextDelta('Hello', msg);
+    expect(first?.content).toBe('Hello');
+    expect(first?.streamMode).toBe('append');
+
+    const second = executor.extractTextDelta('Hello world', msg);
+    expect(second?.content).toBe(' world');
+    expect(second?.streamMode).toBe('append');
+
+    const rewrite = executor.extractTextDelta('Rewritten output', msg);
+    expect(rewrite?.content).toBe('\nRewritten output');
+    expect(rewrite?.streamMode).toBe('append');
   });
 });

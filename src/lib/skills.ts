@@ -47,7 +47,13 @@ const LOCAL_SKILLS: SkillInfo[] = [
   {
     type: 'install',
     name: 'SDK Installation',
-    description: 'Autonomous SDK installation with automatic file modifications',
+    description: 'Autonomous SDK integration with automatic file modifications',
+    isLocal: true,
+  },
+  {
+    type: 'project-build',
+    name: 'Project Build',
+    description: 'Autonomous project build with automatic diagnostics and fixes',
     isLocal: true,
   },
   {
@@ -231,6 +237,30 @@ function readLocalSkillPrompt(skillName: string): string {
   }
 }
 
+function formatSetupStepStatus(required: boolean, configured: boolean): string {
+  if (!required) {
+    return '- not required';
+  }
+  return configured ? '✓ verified' : '✗ missing';
+}
+
+function appendOptionalSection(
+  lines: string[],
+  title: string,
+  rows: string[],
+  enabled: boolean = true,
+): void {
+  if (!enabled) {
+    return;
+  }
+
+  lines.push(`### ${title}`);
+  for (const row of rows) {
+    lines.push(`- ${row}`);
+  }
+  lines.push('');
+}
+
 /**
  * Build pre-configured setup section from preparation context.
  */
@@ -240,65 +270,87 @@ function buildPreparationSection(context: PreparationContext): string {
   lines.push(`Type: ${formatProjectType(context.projectType)}`);
   lines.push('');
 
-  // Clix project info
-  lines.push('### Clix Project');
-  lines.push(`- Project ID: ${context.config.project.id}`);
-  if (context.config.project.publicKey) {
-    lines.push(`- Public Key: ${context.config.project.publicKey}`);
-  }
-  lines.push('');
+  const iosTarget =
+    context.projectType.target === 'ios' || context.projectType.target === 'ios-android';
+  const androidTarget =
+    context.projectType.target === 'android' || context.projectType.target === 'ios-android';
+  const firebaseFilesConfigured =
+    !context.firebase.needed ||
+    ((!iosTarget || context.firebase.iosConfigured) &&
+      (!androidTarget || context.firebase.androidConfigured));
+  appendOptionalSection(lines, 'Install Step Verification', [
+    'Project linked: ✓ verified',
+    `Firebase Configuration Files: ${formatSetupStepStatus(
+      context.firebase.needed,
+      firebaseFilesConfigured,
+    )}`,
+    `APNS Key for Firebase: ${formatSetupStepStatus(
+      context.apns.needed,
+      context.apns.registeredWithFirebase,
+    )}`,
+    `Firebase Service Account: ${formatSetupStepStatus(
+      context.firebase.needed,
+      context.firebase.senderConfigConfigured,
+    )}`,
+    `iOS Entitlements: ${formatSetupStepStatus(context.ios.needed, context.ios.entitlementsConfigured)}`,
+    `Notification Service Extension: ${formatSetupStepStatus(
+      context.ios.needed,
+      context.ios.nseConfigured,
+    )}`,
+  ]);
 
-  // Firebase status
-  if (context.firebase.needed) {
-    lines.push('### Firebase');
-    lines.push(`- Project ID: ${context.firebase.projectId || 'not configured'}`);
-    lines.push(
-      `- Android (google-services.json): ${context.firebase.androidConfigured ? '✓ configured' : '✗ missing'}`,
-    );
-    lines.push(
-      `- iOS (GoogleService-Info.plist): ${context.firebase.iosConfigured ? '✓ configured' : '✗ missing'}`,
-    );
-    lines.push(
-      `- Sender Config (App Push): ${context.firebase.senderConfigConfigured ? '✓ configured' : '✗ missing'}`,
-    );
-    lines.push('');
-  }
+  appendOptionalSection(lines, 'Clix Project', [
+    `Project ID: ${context.config.project.id}`,
+    ...(context.config.project.publicKey
+      ? [`Public Key: ${context.config.project.publicKey}`]
+      : []),
+  ]);
 
-  if (context.apns.needed) {
-    lines.push('### APNS');
-    lines.push(`- Key ID: ${context.apns.keyId || 'not configured'}`);
-    lines.push(`- Team ID: ${context.apns.teamId || 'not configured'}`);
-    lines.push(
-      `- Registered with Firebase: ${context.apns.registeredWithFirebase ? '✓ configured' : '✗ missing'}`,
-    );
-    lines.push('');
-  }
+  appendOptionalSection(
+    lines,
+    'Firebase',
+    [
+      `Project ID: ${context.firebase.projectId || 'not configured'}`,
+      `Android (google-services.json): ${context.firebase.androidConfigured ? '✓ configured' : '✗ missing'}`,
+      `iOS (GoogleService-Info.plist): ${context.firebase.iosConfigured ? '✓ configured' : '✗ missing'}`,
+      `Sender Config (App Push): ${context.firebase.senderConfigConfigured ? '✓ configured' : '✗ missing'}`,
+    ],
+    context.firebase.needed,
+  );
 
-  // iOS status
-  if (context.ios.needed) {
-    lines.push('### iOS');
-    lines.push(`- Bundle ID: ${context.ios.bundleId || 'not detected'}`);
-    lines.push(`- Team ID: ${context.ios.teamId || 'not detected'}`);
-    lines.push(`- App Group: ${context.ios.appGroupId || 'not configured'}`);
-    lines.push(
-      `- Entitlements: ${context.ios.entitlementsConfigured ? '✓ configured' : '✗ not configured'}`,
-    );
-    lines.push(
-      `- NSE (Notification Service Extension): ${context.ios.nseConfigured ? '✓ configured' : '✗ not configured'}`,
-    );
-    lines.push('');
-  }
+  appendOptionalSection(
+    lines,
+    'APNS',
+    [
+      `Key ID: ${context.apns.keyId || 'not configured'}`,
+      `Team ID: ${context.apns.teamId || 'not configured'}`,
+      `Registered with Firebase: ${context.apns.registeredWithFirebase ? '✓ configured' : '✗ missing'}`,
+    ],
+    context.apns.needed,
+  );
 
-  // Missing items
-  if (context.missing.length > 0) {
-    lines.push('### Missing Setup (handle during installation)');
-    for (const item of context.missing) {
-      lines.push(`- ${item}`);
-    }
-    lines.push('');
-  }
+  appendOptionalSection(
+    lines,
+    'iOS',
+    [
+      `Bundle ID: ${context.ios.bundleId || 'not detected'}`,
+      `Team ID: ${context.ios.teamId || 'not detected'}`,
+      `App Group: ${context.ios.appGroupId || 'not configured'}`,
+      `Entitlements: ${context.ios.entitlementsConfigured ? '✓ configured' : '✗ not configured'}`,
+      `NSE (Notification Service Extension): ${context.ios.nseConfigured ? '✓ configured' : '✗ not configured'}`,
+    ],
+    context.ios.needed,
+  );
 
-  lines.push('Use these pre-configured values when integrating the SDK.');
+  appendOptionalSection(
+    lines,
+    'Missing Setup (handle before build)',
+    context.missing,
+    context.missing.length > 0,
+  );
+
+  lines.push('Treat the above as already executed/validated by /install.');
+  lines.push('Use these pre-configured values when running build and troubleshooting failures.');
   lines.push('');
 
   return lines.join('\n');
@@ -306,15 +358,32 @@ function buildPreparationSection(context: PreparationContext): string {
 
 /**
  * Get prompt for the install skill.
- * Uses the autonomous installation prompt optimized for one-shot execution.
+ * Uses the SDK integration workflow prompt.
  * Prompt is loaded from src/lib/skills/install/SKILL.md
  */
 function getInstallPrompt(options?: SkillOptions): string {
   const projectPath = options?.projectPath ?? process.cwd();
-  const platform = options?.platform ?? 'auto-detect';
   const context = options?.preparationContext;
+  const inferredPlatform =
+    context?.projectType.framework === 'flutter'
+      ? 'flutter'
+      : context?.projectType.framework === 'react-native' ||
+          context?.projectType.framework === 'expo'
+        ? 'react-native'
+        : context?.projectType.framework === 'native'
+          ? context.projectType.target === 'ios'
+            ? 'ios'
+            : context.projectType.target === 'android'
+              ? 'android'
+              : undefined
+          : undefined;
+  const platform = options?.platform ?? inferredPlatform ?? 'auto-detect';
 
-  let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n\n`;
+  let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n`;
+  if (context) {
+    prompt += `Detected project type: ${formatProjectType(context.projectType)}\n`;
+  }
+  prompt += '\n';
 
   // Add preparation context if available
   if (context) {
@@ -337,11 +406,60 @@ You are in autonomous one-shot execution mode:
 
 `;
   }
-
-  // Load the autonomous installation prompt from external file
   const installPrompt = readLocalSkillPrompt('install');
   prompt += installPrompt;
 
+  return prompt;
+}
+
+/**
+ * Get prompt for the project-build skill.
+ * Prompt is loaded from src/lib/skills/project-build/SKILL.md
+ */
+function getProjectBuildPrompt(options?: SkillOptions): string {
+  const projectPath = options?.projectPath ?? process.cwd();
+  const context = options?.preparationContext;
+  const inferredPlatform =
+    context?.projectType.framework === 'flutter'
+      ? 'flutter'
+      : context?.projectType.framework === 'react-native' ||
+          context?.projectType.framework === 'expo'
+        ? 'react-native'
+        : context?.projectType.framework === 'native'
+          ? context.projectType.target === 'ios'
+            ? 'ios'
+            : context.projectType.target === 'android'
+              ? 'android'
+              : undefined
+          : undefined;
+  const platform = options?.platform ?? inferredPlatform ?? 'auto-detect';
+
+  let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n`;
+  if (context) {
+    prompt += `Detected project type: ${formatProjectType(context.projectType)}\n`;
+  }
+  prompt += '\n';
+
+  if (context) {
+    prompt += buildPreparationSection(context);
+    prompt += '\n';
+  }
+
+  if (options?.oneShot) {
+    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
+    prompt += `## EXECUTION MODE: AUTONOMOUS
+
+You are in autonomous one-shot execution mode:
+- ALL file operations are pre-approved
+- Use Write/Edit/Bash tools immediately without asking
+- Complete all integration steps automatically
+- Report what was done, not what should be done
+
+`;
+  }
+
+  const projectBuildPrompt = readLocalSkillPrompt('project-build');
+  prompt += projectBuildPrompt;
   return prompt;
 }
 
@@ -389,8 +507,9 @@ Target platform: ${platform}
 async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions): Promise<string> {
   switch (skillType) {
     case 'install':
-      // install uses autonomous installation prompt
       return getInstallPrompt(options);
+    case 'project-build':
+      return getProjectBuildPrompt(options);
     case 'doctor':
       return getDoctorPrompt(options);
     case 'debug':

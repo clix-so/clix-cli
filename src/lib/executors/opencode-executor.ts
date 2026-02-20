@@ -28,6 +28,18 @@ export class OpenCodeExecutor extends BaseExecutor {
     return 'jsonl';
   }
 
+  protected override getSpawnEnv(_options?: ExecuteOptions): NodeJS.ProcessEnv | undefined {
+    if (process.env.OPENCODE_PERMISSION) {
+      return undefined;
+    }
+
+    // Default to allow-all tool permission to avoid interactive approval prompts.
+    return {
+      ...process.env,
+      OPENCODE_PERMISSION: '{"*":"allow"}',
+    };
+  }
+
   protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
     const args = ['run', '--format', 'json'];
 
@@ -86,6 +98,7 @@ export class OpenCodeExecutor extends BaseExecutor {
         return {
           type: 'text',
           content: messageEvent.content,
+          streamMode: 'append',
           metadata: {
             role: messageEvent.role,
             timestamp: messageEvent.timestamp,
@@ -101,6 +114,7 @@ export class OpenCodeExecutor extends BaseExecutor {
         return {
           type: 'text',
           content: text,
+          streamMode: 'append',
           metadata: {
             timestamp: textEvent.timestamp,
           },

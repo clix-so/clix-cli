@@ -90,6 +90,7 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
     navigateHistory,
     transferSession,
     addSystemMessage,
+    executeSkillWithResult,
   } = chatActions;
 
   // Initialize agent after session restore (if any)
@@ -117,12 +118,19 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
     [onExit, exit],
   );
 
-  // Execute install skill with preparation context
-  const executeInstallWithContext = useCallback(
+  // Execute install build step with preparation context
+  const runInstallProjectBuild = useCallback(
     (context: Parameters<typeof chatActions.executeSkill>[1]) => {
-      chatActions.executeSkill('install', context);
+      return executeSkillWithResult('project-build', context);
     },
-    [chatActions],
+    [executeSkillWithResult],
+  );
+
+  const runInstallSkill = useCallback(
+    (context: Parameters<typeof chatActions.executeSkill>[1]) => {
+      return executeSkillWithResult('install', context);
+    },
+    [executeSkillWithResult],
   );
 
   // Overlay management
@@ -133,8 +141,10 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
     transferSession,
     switchAgent: chatActions.switchAgent,
     resumeSession: chatActions.resumeSession,
+    cancelRequest: chatActions.cancelRequest,
     executeDebugSession: chatActions.executeDebugSession,
-    executeInstallWithContext,
+    runInstallProjectBuild,
+    runInstallSkill,
   });
 
   // Handle direct transfer command with agent name
@@ -241,6 +251,9 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
       {overlays.activeOverlay === 'install-preparation' && (
         <InstallPreparationUI
           projectPath={process.cwd()}
+          chatMessages={messages}
+          onRunProjectBuild={overlays.handleInstallProjectBuild}
+          onRunInstallSkill={overlays.handleInstallSkill}
           onComplete={overlays.handleInstallPreparationComplete}
           onCancel={overlays.handleInstallPreparationCancel}
         />

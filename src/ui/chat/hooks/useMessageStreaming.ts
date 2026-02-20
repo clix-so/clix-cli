@@ -2,12 +2,127 @@
  * Message streaming hook for handling streamed agent responses.
  */
 import { useCallback } from 'react';
-import type { AgentMessage } from '../../../lib/executor';
+import type { AgentMessage, AgentTextStreamMode } from '../../../lib/executor';
+import { normalizeStreamText } from '../../../lib/utils/stream-text';
 import { generateMessageId, useChatContext } from '../context/ChatContext';
 import type { ChatRefs } from './types';
 
 export interface StreamingOptions {
   signal?: AbortSignal;
+}
+
+export interface StreamingProcessResult {
+  aborted: boolean;
+  errorMessage: string | null;
+}
+
+type ChatDispatch = ReturnType<typeof useChatContext>['dispatch'];
+
+export function mergeStreamText(
+  current: string,
+  chunk: string,
+  streamMode: AgentTextStreamMode = 'append',
+): string {
+  if (streamMode === 'replace') {
+    return chunk;
+  }
+  return `${current}${chunk}`;
+}
+
+function getInterruptedContent(content: string): string {
+  const interruptedSuffix = content.endsWith('\n') ? '[Interrupted]' : '\n\n[Interrupted]';
+  return `${content}${interruptedSuffix}`;
+}
+
+function markPendingToolsComplete(dispatch: ChatDispatch, pendingToolIds: string[]): void {
+  for (const toolId of pendingToolIds) {
+    dispatch({
+      type: 'UPDATE_MESSAGE',
+      payload: {
+        id: toolId,
+        updates: { status: 'complete' },
+      },
+    });
+  }
+}
+
+function processStreamMessage(params: {
+  message: AgentMessage;
+  dispatch: ChatDispatch;
+  agentMessageId: string;
+  accumulatedContent: string;
+  pendingToolIds: string[];
+}): string {
+  const { message, dispatch, agentMessageId, accumulatedContent, pendingToolIds } = params;
+
+  switch (message.type) {
+    case 'text': {
+      const nextContent = mergeStreamText(
+        accumulatedContent,
+        normalizeStreamText(message.content),
+        message.streamMode,
+      );
+      dispatch({
+        type: 'UPDATE_MESSAGE',
+        payload: {
+          id: agentMessageId,
+          updates: { content: nextContent, status: 'streaming' },
+        },
+      });
+      return nextContent;
+    }
+
+    case 'tool_call': {
+      const toolMessageId = generateMessageId();
+      pendingToolIds.push(toolMessageId);
+      dispatch({
+        type: 'ADD_MESSAGE',
+        payload: {
+          id: toolMessageId,
+          role: 'tool',
+          content: message.content,
+          toolName: (message.metadata?.toolName as string) ?? 'Tool',
+          timestamp: new Date(),
+          status: 'pending',
+        },
+      });
+      return accumulatedContent;
+    }
+
+    case 'tool_result': {
+      const toolId = pendingToolIds.shift();
+      if (toolId) {
+        const normalizedResult = message.content.replace(/\s+/g, ' ').trim();
+        const truncatedResult =
+          normalizedResult.length > 400 ? `${normalizedResult.slice(0, 397)}...` : normalizedResult;
+        const updates: { status: 'complete'; content?: string } = { status: 'complete' };
+        if (truncatedResult) {
+          updates.content = truncatedResult;
+        }
+        dispatch({
+          type: 'UPDATE_MESSAGE',
+          payload: {
+            id: toolId,
+            updates,
+          },
+        });
+      }
+      return accumulatedContent;
+    }
+
+    case 'error':
+      dispatch({
+        type: 'UPDATE_MESSAGE',
+        payload: {
+          id: agentMessageId,
+          updates: { content: message.content, status: 'error' },
+        },
+      });
+      return accumulatedContent;
+
+    case 'complete':
+      return accumulatedContent;
+  }
 }
 
 /**
@@ -82,106 +197,46 @@ export function useMessageStreaming(_refs: ChatRefs) {
       messageGenerator: AsyncGenerator<AgentMessage>,
       agentMessageId: string,
       options: StreamingOptions = {},
-    ): Promise<void> => {
+    ): Promise<StreamingProcessResult> => {
       const { signal } = options;
       let accumulatedContent = '';
+      let aborted = false;
+      let errorMessage: string | null = null;
       // Track pending tool message IDs locally to avoid stale closure issues
       const pendingToolIds: string[] = [];
 
       for await (const message of messageGenerator) {
-        // Check if aborted
         if (signal?.aborted) {
+          aborted = true;
           dispatch({
             type: 'UPDATE_MESSAGE',
             payload: {
               id: agentMessageId,
               updates: {
-                content: `${accumulatedContent}\n\n[Interrupted]`,
+                content: getInterruptedContent(accumulatedContent),
                 status: 'complete',
               },
             },
           });
-          // Mark any remaining pending tools as complete
-          for (const toolId of pendingToolIds) {
-            dispatch({
-              type: 'UPDATE_MESSAGE',
-              payload: {
-                id: toolId,
-                updates: { status: 'complete' },
-              },
-            });
-          }
+          markPendingToolsComplete(dispatch, pendingToolIds);
           break;
         }
 
-        switch (message.type) {
-          case 'text':
-            accumulatedContent += `\n${message.content}`;
-            dispatch({
-              type: 'UPDATE_MESSAGE',
-              payload: {
-                id: agentMessageId,
-                updates: { content: accumulatedContent, status: 'streaming' },
-              },
-            });
-            break;
-
-          case 'tool_call': {
-            const toolMessageId = generateMessageId();
-            pendingToolIds.push(toolMessageId);
-            dispatch({
-              type: 'ADD_MESSAGE',
-              payload: {
-                id: toolMessageId,
-                role: 'tool',
-                content: message.content,
-                toolName: (message.metadata?.toolName as string) ?? 'Tool',
-                timestamp: new Date(),
-                status: 'pending',
-              },
-            });
-            break;
-          }
-
-          case 'tool_result': {
-            // Update the first pending tool message (FIFO order)
-            const toolId = pendingToolIds.shift();
-            if (toolId) {
-              dispatch({
-                type: 'UPDATE_MESSAGE',
-                payload: {
-                  id: toolId,
-                  updates: { status: 'complete' },
-                },
-              });
-            }
-            break;
-          }
-
-          case 'error':
-            dispatch({
-              type: 'UPDATE_MESSAGE',
-              payload: {
-                id: agentMessageId,
-                updates: { content: message.content, status: 'error' },
-              },
-            });
-            break;
-
-          case 'complete':
-            dispatch({
-              type: 'UPDATE_MESSAGE',
-              payload: {
-                id: agentMessageId,
-                updates: { status: 'complete' },
-              },
-            });
-            break;
+        if (message.type === 'error') {
+          errorMessage = message.content;
         }
+
+        accumulatedContent = processStreamMessage({
+          message,
+          dispatch,
+          agentMessageId,
+          accumulatedContent,
+          pendingToolIds,
+        });
       }
 
-      // Ensure the message is marked complete (if not aborted)
-      if (!signal?.aborted) {
+      // Ensure the message is marked complete (if not aborted and no error surfaced)
+      if (!signal?.aborted && !errorMessage) {
         dispatch({
           type: 'UPDATE_MESSAGE',
           payload: {
@@ -189,17 +244,16 @@ export function useMessageStreaming(_refs: ChatRefs) {
             updates: { status: 'complete' },
           },
         });
-        // Mark any remaining pending tools as complete
-        for (const toolId of pendingToolIds) {
-          dispatch({
-            type: 'UPDATE_MESSAGE',
-            payload: {
-              id: toolId,
-              updates: { status: 'complete' },
-            },
-          });
-        }
       }
+
+      if (!aborted) {
+        markPendingToolsComplete(dispatch, pendingToolIds);
+      }
+
+      return {
+        aborted,
+        errorMessage,
+      };
     },
     [dispatch],
   );

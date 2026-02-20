@@ -70,6 +70,8 @@ describe('Install preparation task pipeline', () => {
       'firebase_service_account',
       'ios_entitlements',
       'notification_service_extension',
+      'project_build',
+      'install_skill',
     ]);
   });
 
@@ -157,6 +159,66 @@ describe('Install preparation task pipeline', () => {
     };
 
     expect(isTaskCompleted(completedContext, 'apns_key_for_firebase')).toBe(true);
+  });
+
+  test('routes to project build after setup tasks are complete', () => {
+    const context = createContext(
+      {
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: true,
+        needed: true,
+      },
+      {
+        needed: true,
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      {
+        needed: true,
+        registeredWithFirebase: true,
+      },
+      true,
+      [],
+    );
+
+    expect(getNextIncompleteTaskId(context)).toBe('project_build');
+    expect(isTaskCompleted(context, 'project_build')).toBe(false);
+  });
+
+  test('routes to SDK installation after project build is complete', () => {
+    const context = createContext(
+      {
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: true,
+        needed: true,
+      },
+      {
+        needed: true,
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      {
+        needed: true,
+        registeredWithFirebase: true,
+      },
+      true,
+      [],
+    );
+
+    expect(isTaskCompleted(context, 'project_build')).toBe(false);
+    expect(isTaskCompleted(context, 'project_build', { project_build: 'complete' })).toBe(true);
+    expect(getNextIncompleteTaskId(context, { project_build: 'complete' })).toBe('install_skill');
+    expect(isTaskCompleted(context, 'install_skill')).toBe(false);
+    expect(
+      getNextIncompleteTaskId(context, {
+        project_build: 'complete',
+        install_skill: 'complete',
+      }),
+    ).toBeNull();
   });
 });
 

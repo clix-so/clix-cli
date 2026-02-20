@@ -89,12 +89,13 @@ export class CopilotExecutor extends BaseExecutorClass {
       contentLine = line.replace(/\s*\([^)]+\)[.]?$/, '').trim();
     }
 
-    // Add line to assistant content (with newline if not first line)
-    const lineWithNewline = context.assistantContent ? `\n${contentLine}` : contentLine;
+    // Add line to assistant content (with newline if not first emitted line)
+    const lineWithNewline = context.hasYieldedText ? `\n${contentLine}` : contentLine;
 
     return {
       type: 'text',
       content: lineWithNewline,
+      streamMode: 'append',
       metadata: progressAction
         ? {
             isProgress: true,

@@ -74,6 +74,7 @@ describe('Final Output Format Verification', () => {
   test('should verify final output format in help text', async () => {
     const rig = createTestRig({ timeout: 10000 });
     const result = await rig.run(['--help']);
+    const installDescriptionPattern = /Autonomous SDK integration|Autonomous project build/;
 
     // Verify commands that support final output are listed
     expect(result.stdout).toContain('install');
@@ -82,7 +83,7 @@ describe('Final Output Format Verification', () => {
     // Note: config is not shown in help (interactive command)
 
     // These commands should now persist their output
-    expect(result.stdout).toContain('Autonomous SDK installation');
+    expect(result.stdout).toMatch(installDescriptionPattern);
     expect(result.stdout).toContain('Interactive debugging assistant');
   });
 });

@@ -5,7 +5,12 @@ export type InstallTaskId =
   | 'apns_key_for_firebase'
   | 'firebase_service_account'
   | 'ios_entitlements'
-  | 'notification_service_extension';
+  | 'notification_service_extension'
+  | 'project_build'
+  | 'install_skill';
+
+export type RuntimeTaskState = 'idle' | 'running' | 'failed' | 'complete';
+export type RuntimeTaskStateMap = Partial<Record<InstallTaskId, RuntimeTaskState>>;
 
 const INSTALL_TASK_ORDER: InstallTaskId[] = [
   'firebase_config_files',
@@ -13,7 +18,11 @@ const INSTALL_TASK_ORDER: InstallTaskId[] = [
   'firebase_service_account',
   'ios_entitlements',
   'notification_service_extension',
+  'project_build',
+  'install_skill',
 ];
+
+const RUNTIME_TASK_IDS: InstallTaskId[] = ['project_build', 'install_skill'];
 
 export const INSTALL_TASK_LABELS: Record<InstallTaskId, string> = {
   firebase_config_files: 'Firebase Configuration Files',
@@ -21,6 +30,8 @@ export const INSTALL_TASK_LABELS: Record<InstallTaskId, string> = {
   firebase_service_account: 'Firebase Service Account',
   ios_entitlements: 'iOS Entitlements',
   notification_service_extension: 'Notification Service Extension',
+  project_build: 'Project Build',
+  install_skill: 'SDK Installation',
 };
 
 export function isTaskApplicable(context: PreparationContext, taskId: InstallTaskId): boolean {
@@ -32,12 +43,34 @@ export function isTaskApplicable(context: PreparationContext, taskId: InstallTas
     case 'ios_entitlements':
     case 'notification_service_extension':
       return context.ios.needed;
+    case 'project_build':
+    case 'install_skill':
+      return true;
     default:
       return false;
   }
 }
 
-export function isTaskCompleted(context: PreparationContext, taskId: InstallTaskId): boolean {
+export function isRuntimeTask(taskId: InstallTaskId): boolean {
+  return RUNTIME_TASK_IDS.includes(taskId);
+}
+
+export function getTaskRuntimeState(
+  taskId: InstallTaskId,
+  runtimeTaskState: RuntimeTaskStateMap = {},
+): RuntimeTaskState {
+  return runtimeTaskState[taskId] ?? 'idle';
+}
+
+export function isTaskCompleted(
+  context: PreparationContext,
+  taskId: InstallTaskId,
+  runtimeTaskState: RuntimeTaskStateMap = {},
+): boolean {
+  if (isRuntimeTask(taskId)) {
+    return getTaskRuntimeState(taskId, runtimeTaskState) === 'complete';
+  }
+
   switch (taskId) {
     case 'firebase_config_files':
       return context.firebase.androidConfigured && context.firebase.iosConfigured;
@@ -58,7 +91,10 @@ export function getApplicableInstallTasks(context: PreparationContext): InstallT
   return INSTALL_TASK_ORDER.filter((taskId) => isTaskApplicable(context, taskId));
 }
 
-export function getNextIncompleteTaskId(context: PreparationContext): InstallTaskId | null {
+export function getNextIncompleteTaskId(
+  context: PreparationContext,
+  runtimeTaskState: RuntimeTaskStateMap = {},
+): InstallTaskId | null {
   const tasks = getApplicableInstallTasks(context);
-  return tasks.find((taskId) => !isTaskCompleted(context, taskId)) ?? null;
+  return tasks.find((taskId) => !isTaskCompleted(context, taskId, runtimeTaskState)) ?? null;
 }

@@ -10,6 +10,12 @@ import type { ChatRefs } from './types';
 import { useMessageStreaming } from './useMessageStreaming';
 import type { SessionPersistenceAPI } from './useSessionPersistence';
 
+export interface SkillExecutionResult {
+  success: boolean;
+  aborted: boolean;
+  error?: string;
+}
+
 /**
  * Hook for message sending operations.
  */
@@ -90,17 +96,22 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
     ],
   );
 
-  const executeSkill = useCallback(
-    async (skillType: SkillType, preparationContext?: PreparationContext) => {
+  const executeSkillWithResult = useCallback(
+    async (
+      skillType: SkillType,
+      preparationContext?: PreparationContext,
+    ): Promise<SkillExecutionResult> => {
       if (!executorRef.current) {
-        addSystemMessage('No agent configured. Please run "clix config" to select an agent.');
-        return;
+        const error = 'No agent configured. Please run "clix config" to select an agent.';
+        addSystemMessage(error);
+        return { success: false, aborted: false, error };
       }
 
       const skillInfo = getSkillInfo(skillType);
       if (!skillInfo) {
-        addSystemMessage(`Unknown skill: ${skillType}`);
-        return;
+        const error = `Unknown skill: ${skillType}`;
+        addSystemMessage(error);
+        return { success: false, aborted: false, error };
       }
 
       // Add system message showing skill activation
@@ -123,13 +134,47 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
           preparationContext,
         });
 
-        await processStreamingMessages(messageGenerator, agentMessageId, { signal });
+        const streamResult = await processStreamingMessages(messageGenerator, agentMessageId, {
+          signal,
+        });
+
+        if (streamResult.aborted || signal.aborted) {
+          addSystemMessage('Request interrupted.');
+          return {
+            success: false,
+            aborted: true,
+            error: 'Request interrupted.',
+          };
+        }
+
+        if (streamResult.errorMessage) {
+          return {
+            success: false,
+            aborted: false,
+            error: streamResult.errorMessage,
+          };
+        }
+
+        return {
+          success: true,
+          aborted: false,
+        };
       } catch (error) {
         // Handle abort error gracefully
         if (error instanceof Error && error.name === 'AbortError') {
           addSystemMessage('Request interrupted.');
+          return {
+            success: false,
+            aborted: true,
+            error: 'Request interrupted.',
+          };
         } else {
           handleStreamingError(error, agentMessageId);
+          return {
+            success: false,
+            aborted: false,
+            error: error instanceof Error ? error.message : 'Unknown execution error',
+          };
         }
       } finally {
         abortControllerRef.current = null;
@@ -147,6 +192,13 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
       handleStreamingError,
       persistSession,
     ],
+  );
+
+  const executeSkill = useCallback(
+    async (skillType: SkillType, preparationContext?: PreparationContext): Promise<void> => {
+      await executeSkillWithResult(skillType, preparationContext);
+    },
+    [executeSkillWithResult],
   );
 
   const executeDebugSession = useCallback(
@@ -210,6 +262,7 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
     cancelRequest,
     addSystemMessage,
     executeSkill,
+    executeSkillWithResult,
     executeDebugSession,
     isStreaming: state.isStreaming,
   };

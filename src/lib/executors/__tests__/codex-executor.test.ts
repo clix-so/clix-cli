@@ -36,6 +36,16 @@ describe('CodexExecutor', () => {
       expect(mockCommandExists).toHaveBeenCalledWith('codex');
     });
   });
+
+  describe('buildArgs', () => {
+    test('should enable dangerous bypass flag by default', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+      const args = (executor as any).buildArgs('test prompt', { oneShot: true });
+
+      expect(args).toContain('--dangerously-bypass-approvals-and-sandbox');
+      expect(args).not.toContain('--sandbox');
+    });
+  });
 });
 
 describe('CodexExecutor message mapping', () => {

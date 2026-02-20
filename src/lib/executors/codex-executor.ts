@@ -20,10 +20,11 @@ export class CodexExecutor extends BaseExecutor {
   }
 
   protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
-    // Permission handling: always use workspace-write sandbox mode
-    // This allows file operations while maintaining safety boundaries
-    // Both one-shot (command-line) and chat modes use the same permission level
-    const baseArgs = ['--json', '--skip-git-repo-check', '--sandbox', 'workspace-write'];
+    const baseArgs = [
+      '--json',
+      '--skip-git-repo-check',
+      '--dangerously-bypass-approvals-and-sandbox',
+    ];
 
     // Codex CLI does not support log-level flags
 
@@ -69,6 +70,7 @@ export class CodexExecutor extends BaseExecutor {
         return {
           type: 'text',
           content: item.text,
+          streamMode: 'append',
           metadata: msg as unknown as Record<string, unknown>,
         };
       }

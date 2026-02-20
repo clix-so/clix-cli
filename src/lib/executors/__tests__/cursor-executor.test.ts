@@ -151,3 +151,37 @@ describe('Cursor CLI message format', () => {
     expect(msg.result).toBe('Error: Something went wrong');
   });
 });
+
+describe('CursorExecutor stream mode mapping', () => {
+  test('emits append-only cumulative deltas, including rewritten snapshots', () => {
+    const executor = new CursorExecutor() as unknown as {
+      extractTextDelta: (
+        textContent: string,
+        msg: CursorCLIMessage,
+      ) => {
+        type: string;
+        content: string;
+        streamMode?: 'append' | 'replace';
+      } | null;
+    };
+
+    const msg: CursorCLIMessage = {
+      type: 'assistant',
+      message: {
+        content: [{ type: 'text', text: 'placeholder' }],
+      },
+    };
+
+    const first = executor.extractTextDelta('Hello', msg);
+    expect(first?.content).toBe('Hello');
+    expect(first?.streamMode).toBe('append');
+
+    const second = executor.extractTextDelta('Hello world', msg);
+    expect(second?.content).toBe(' world');
+    expect(second?.streamMode).toBe('append');
+
+    const rewrite = executor.extractTextDelta('Completely different', msg);
+    expect(rewrite?.content).toBe('\nCompletely different');
+    expect(rewrite?.streamMode).toBe('append');
+  });
+});

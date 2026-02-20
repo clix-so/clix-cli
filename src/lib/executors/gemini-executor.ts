@@ -4,6 +4,7 @@
  */
 import type { AgentMessage, ExecuteOptions } from '../executor';
 import { BaseExecutor, type StreamContext, type StreamParserType } from './base-executor';
+import { extractCumulativeDelta } from './stream-delta';
 import type {
   GeminiCLIErrorEvent,
   GeminiCLIInitEvent,
@@ -15,6 +16,8 @@ import type {
 } from './types';
 
 export class GeminiExecutor extends BaseExecutor {
+  private lastTextContent = '';
+
   constructor() {
     super({
       name: 'gemini',
@@ -64,6 +67,11 @@ export class GeminiExecutor extends BaseExecutor {
     this.sessionId = null;
   }
 
+  override async *execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage> {
+    this.lastTextContent = '';
+    yield* super.execute(prompt, options);
+  }
+
   protected processStreamData(
     data: unknown,
     _context: StreamContext,
@@ -76,9 +84,21 @@ export class GeminiExecutor extends BaseExecutor {
       const messageEvent = msg as GeminiCLIMessageEvent;
       // Only process assistant messages, not user messages
       if (messageEvent.role === 'assistant' && messageEvent.content) {
+        const nextTextContent =
+          messageEvent.delta === true
+            ? `${this.lastTextContent}${messageEvent.content}`
+            : messageEvent.content;
+        const delta = extractCumulativeDelta(this.lastTextContent, nextTextContent);
+        this.lastTextContent = nextTextContent;
+
+        if (!delta) {
+          return null;
+        }
+
         return {
           type: 'text',
-          content: messageEvent.content,
+          content: delta,
+          streamMode: 'append',
           metadata: {
             delta: messageEvent.delta,
             timestamp: messageEvent.timestamp,

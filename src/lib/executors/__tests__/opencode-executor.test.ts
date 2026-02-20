@@ -36,6 +36,43 @@ describe('OpenCodeExecutor', () => {
       expect(mockCommandExists).toHaveBeenCalledWith('opencode');
     });
   });
+
+  describe('permission env', () => {
+    test('should set allow-all OpenCode permission when env is not provided', () => {
+      const original = process.env.OPENCODE_PERMISSION;
+      process.env.OPENCODE_PERMISSION = undefined;
+
+      try {
+        // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+        const env = (executor as any).getSpawnEnv();
+        expect(env).toBeDefined();
+        expect(env.OPENCODE_PERMISSION).toBe('{"*":"allow"}');
+      } finally {
+        if (original === undefined) {
+          process.env.OPENCODE_PERMISSION = undefined;
+        } else {
+          process.env.OPENCODE_PERMISSION = original;
+        }
+      }
+    });
+
+    test('should not override explicit OpenCode permission env', () => {
+      const original = process.env.OPENCODE_PERMISSION;
+      process.env.OPENCODE_PERMISSION = '{"bash":"ask"}';
+
+      try {
+        // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+        const env = (executor as any).getSpawnEnv();
+        expect(env).toBeUndefined();
+      } finally {
+        if (original === undefined) {
+          process.env.OPENCODE_PERMISSION = undefined;
+        } else {
+          process.env.OPENCODE_PERMISSION = original;
+        }
+      }
+    });
+  });
 });
 
 describe('OpenCode CLI message format', () => {
