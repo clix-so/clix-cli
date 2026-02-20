@@ -214,6 +214,7 @@ export interface FirebaseRecommendation {
 export const FIREBASE_HELP_URLS = {
   androidSetup: 'https://firebase.google.com/docs/android/setup',
   iosSetup: 'https://firebase.google.com/docs/ios/setup',
+  createProject: 'https://console.firebase.google.com/',
   console: 'https://console.firebase.google.com/',
   downloadConfig: 'https://support.google.com/firebase/answer/7015592',
   reactNativeSetup: 'https://rnfirebase.io/',

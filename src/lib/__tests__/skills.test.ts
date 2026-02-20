@@ -32,10 +32,6 @@ describe('AVAILABLE_SKILLS', () => {
     const installSkill = getSkillInfo('install');
     expect(installSkill?.isLocal).toBe(true);
     expect(installSkill?.name).toBe('SDK Installation');
-
-    const projectBuildSkill = getSkillInfo('project-build');
-    expect(projectBuildSkill?.isLocal).toBe(true);
-    expect(projectBuildSkill?.type).toBe('project-build');
   });
 
   test('should have event-tracking skill', () => {
@@ -474,19 +470,20 @@ describe('preparationContext in install skill', () => {
       projectPath: '/test/project',
     });
 
-    expect(prompt).toContain('# Clix SDK Autonomous Integration');
-    expect(prompt).toContain('SDK code integration');
+    expect(prompt).toContain('# Clix SDK Autonomous Install');
+    expect(prompt).toContain('execute SDK integration workflow');
   });
 
-  test('project-build skill should execute project-build prompt content', async () => {
+  test('install skill should include project build phase instructions when requested', async () => {
     const { getSkillPrompt } = await import('../skills');
 
-    const prompt = await getSkillPrompt('project-build', {
+    const prompt = await getSkillPrompt('install', {
       projectPath: '/test/project',
+      installPhase: 'project-build',
     });
 
-    expect(prompt).toContain('# Project Build');
-    expect(prompt).toContain('Inputs from `/install` (already provided)');
+    expect(prompt).toContain('Install phase: project-build');
+    expect(prompt).toContain('execute only project build workflow');
   });
 
   test('install skill should infer target platform from preparationContext project type', async () => {

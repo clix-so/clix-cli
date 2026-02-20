@@ -2,6 +2,23 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ProjectType } from '@/lib/config';
 import { checkApnsStatus, checkFirebaseStatus, checkIosStatus } from '../preparation';
 
+function createEncodedServiceAccount(projectId: string): string {
+  const serviceAccount = {
+    type: 'service_account',
+    project_id: projectId,
+    private_key_id: 'private-key-id',
+    private_key: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n',
+    client_email: `svc@${projectId}.iam.gserviceaccount.com`,
+    client_id: '12345678901234567890',
+    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+    token_uri: 'https://oauth2.googleapis.com/token',
+    auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+    client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/svc%40${projectId}.iam.gserviceaccount.com`,
+  };
+
+  return Buffer.from(JSON.stringify(serviceAccount), 'utf-8').toString('base64');
+}
+
 // Mock the dependencies
 const mockFirebaseService = {
   detect: mock(() =>
@@ -38,7 +55,16 @@ const mockInternalApiClient = {
       id: 'clix-project',
       name: 'Project',
       organization_id: 'org-1',
-      sender_configs: [{ channel_type: 'CHANNEL_TYPE_APP_PUSH' }],
+      sender_configs: [
+        {
+          channel_type: 'CHANNEL_TYPE_APP_PUSH',
+          app_push: {
+            ios_config: {
+              fcm_sa_json_base64_encoded: createEncodedServiceAccount('test-project'),
+            },
+          },
+        },
+      ],
     }),
   ),
 };
@@ -175,7 +201,16 @@ describe('preparation', () => {
         id: 'clix-project',
         name: 'Project',
         organization_id: 'org-1',
-        sender_configs: [{ channel_type: 'CHANNEL_TYPE_APP_PUSH' }],
+        sender_configs: [
+          {
+            channel_type: 'CHANNEL_TYPE_APP_PUSH',
+            app_push: {
+              ios_config: {
+                fcm_sa_json_base64_encoded: createEncodedServiceAccount('test-project'),
+              },
+            },
+          },
+        ],
       }),
     );
 
@@ -433,6 +468,7 @@ describe('preparation', () => {
       expect(status.needed).toBe(false);
       expect(status.configured).toBe(true);
       expect(status.senderConfigConfigured).toBe(true);
+      expect(status.senderConfigProjectMatched).toBe(true);
     });
 
     test('should always detect files even if setup config exists', async () => {
@@ -455,6 +491,7 @@ describe('preparation', () => {
       // Project ID from detected files takes precedence over cached config
       expect(status.projectId).toBe('test-project');
       expect(status.senderConfigConfigured).toBe(true);
+      expect(status.senderConfigProjectMatched).toBe(true);
     });
 
     test('should fallback to cached projectId when files have no project ID', async () => {
@@ -556,6 +593,56 @@ describe('preparation', () => {
 
       expect(status.iosConfigured).toBe(true);
       expect(status.senderConfigConfigured).toBe(false);
+      expect(status.configured).toBe(false);
+    });
+
+    test('should return configured=false when sender config project mismatches Firebase config files', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+      mockInternalApiClient.getProject.mockResolvedValueOnce({
+        id: 'clix-project',
+        name: 'Project',
+        organization_id: 'org-1',
+        sender_configs: [
+          {
+            channel_type: 'CHANNEL_TYPE_APP_PUSH',
+            app_push: {
+              ios_config: {
+                fcm_sa_json_base64_encoded: createEncodedServiceAccount('other-project'),
+              },
+            },
+          },
+        ],
+      });
+
+      const status = await checkFirebaseStatus('/test', projectType, undefined, 'clix-project');
+
+      expect(status.senderConfigConfigured).toBe(true);
+      expect(status.senderConfigProjectMatched).toBe(false);
+      expect(status.configured).toBe(false);
+    });
+
+    test('should return configured=false when sender config cannot be decoded for project match', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+      mockInternalApiClient.getProject.mockResolvedValueOnce({
+        id: 'clix-project',
+        name: 'Project',
+        organization_id: 'org-1',
+        sender_configs: [
+          {
+            channel_type: 'CHANNEL_TYPE_APP_PUSH',
+            app_push: {
+              ios_config: {
+                fcm_sa_json_base64_encoded: 'not-valid-base64',
+              },
+            },
+          },
+        ],
+      });
+
+      const status = await checkFirebaseStatus('/test', projectType, undefined, 'clix-project');
+
+      expect(status.senderConfigConfigured).toBe(true);
+      expect(status.senderConfigProjectMatched).toBe(false);
       expect(status.configured).toBe(false);
     });
   });

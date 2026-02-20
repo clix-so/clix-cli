@@ -7,6 +7,7 @@
  * @module commands/skill/preparation
  */
 
+import type { SenderConfig } from '@/lib/api';
 import { getInternalApiClient } from '@/lib/api';
 import {
   getProjectConfigManager,
@@ -31,6 +32,8 @@ import {
   verifyExtensionFiles,
 } from '@/lib/ios';
 import { FirebaseService } from '@/lib/services/firebase/firebase-service';
+import { parseBase64ServiceAccountJson } from '@/lib/services/firebase/service-account-validator';
+import type { FirebaseDetectionResult } from '@/lib/services/firebase/types';
 import { detectProjectType } from '@/lib/services/project-detector';
 
 /**
@@ -45,10 +48,17 @@ export interface FirebaseStatus {
   iosConfigured: boolean;
   /** Whether app push sender config is registered in Clix project */
   senderConfigConfigured: boolean;
+  /** Whether sender config project matches detected Firebase config files */
+  senderConfigProjectMatched?: boolean;
   /** Firebase project ID if detected */
   projectId?: string;
   /** Whether Firebase setup is needed based on project type */
   needed: boolean;
+}
+
+interface SenderConfigStatus {
+  configured: boolean;
+  projectMatched: boolean;
 }
 
 /**
@@ -190,25 +200,91 @@ export async function ensureProjectType(
   return { config: updatedConfig, projectType };
 }
 
+function getFirebaseProjectIdsFromDetection(detection: FirebaseDetectionResult): string[] {
+  const detectedProjectIds: string[] = [];
+
+  if (detection.android?.content && 'project_info' in detection.android.content) {
+    const androidProjectId = detection.android.content.project_info?.project_id;
+    if (androidProjectId) {
+      detectedProjectIds.push(androidProjectId);
+    }
+  }
+
+  if (detection.ios?.content && 'PROJECT_ID' in detection.ios.content) {
+    const iosProjectId = detection.ios.content.PROJECT_ID;
+    if (iosProjectId) {
+      detectedProjectIds.push(iosProjectId);
+    }
+  }
+
+  return [...new Set(detectedProjectIds)];
+}
+
+function decodeSenderConfigProjectIds(senderConfig: SenderConfig): string[] | null {
+  const encodedServiceAccounts = [
+    senderConfig.app_push?.ios_config?.fcm_sa_json_base64_encoded,
+    senderConfig.app_push?.android_config?.fcm_sa_json_base64_encoded,
+  ].filter((encoded): encoded is string => Boolean(encoded));
+
+  if (encodedServiceAccounts.length === 0) {
+    return null;
+  }
+
+  const decodedProjectIds: string[] = [];
+  for (const encodedServiceAccount of encodedServiceAccounts) {
+    const parsed = parseBase64ServiceAccountJson(encodedServiceAccount);
+    if (!parsed.valid || !parsed.data) {
+      return null;
+    }
+
+    decodedProjectIds.push(parsed.data.project_id);
+  }
+
+  return [...new Set(decodedProjectIds)];
+}
+
 /**
- * Check whether app push sender config is registered for the Clix project.
+ * Check whether app push sender config is registered for the Clix project
+ * and whether it matches locally detected Firebase config project IDs.
  *
  * API/network errors are treated as not configured to avoid false positives.
  */
-async function hasAppPushSenderConfig(clixProjectId?: string): Promise<boolean> {
+async function getAppPushSenderConfigStatus(
+  clixProjectId: string | undefined,
+  localFirebaseProjectIds: string[],
+): Promise<SenderConfigStatus> {
   if (!clixProjectId) {
-    return false;
+    return { configured: false, projectMatched: false };
   }
 
   try {
     const apiClient = getInternalApiClient();
     const project = await apiClient.getProject(clixProjectId);
-    return (
-      project.sender_configs?.some((config) => config.channel_type === 'CHANNEL_TYPE_APP_PUSH') ??
-      false
+    const appPushConfig = project.sender_configs?.find(
+      (config) => config.channel_type === 'CHANNEL_TYPE_APP_PUSH',
     );
+
+    if (!appPushConfig) {
+      return { configured: false, projectMatched: false };
+    }
+
+    if (localFirebaseProjectIds.length !== 1) {
+      return { configured: true, projectMatched: false };
+    }
+
+    const senderProjectIds = decodeSenderConfigProjectIds(appPushConfig);
+    if (!senderProjectIds || senderProjectIds.length !== 1) {
+      return { configured: true, projectMatched: false };
+    }
+
+    const [localProjectId] = localFirebaseProjectIds;
+    const [senderProjectId] = senderProjectIds;
+    return {
+      configured: true,
+      projectMatched: senderProjectId === localProjectId,
+    };
   } catch {
-    return false;
+    return { configured: false, projectMatched: false };
   }
 }
 
@@ -236,6 +312,7 @@ export async function checkFirebaseStatus(
       androidConfigured: true,
       iosConfigured: true,
       senderConfigConfigured: true,
+      senderConfigProjectMatched: true,
       needed: false,
     };
   }
@@ -252,25 +329,27 @@ export async function checkFirebaseStatus(
   const androidConfigured = !needsAndroid || status.androidConfigured;
   const iosConfigured = !needsIos || status.iosConfigured;
   const credentialFilesConfigured = androidConfigured && iosConfigured;
-  const senderConfigConfigured = credentialFilesConfigured
-    ? await hasAppPushSenderConfig(clixProjectId)
-    : false;
+  const localProjectIds = getFirebaseProjectIdsFromDetection(detection);
+  const senderConfigStatus = credentialFilesConfigured
+    ? await getAppPushSenderConfigStatus(clixProjectId, localProjectIds)
+    : { configured: false, projectMatched: false };
+  const senderConfigConfigured = senderConfigStatus.configured;
+  const senderConfigProjectMatched = senderConfigStatus.projectMatched;
 
   // Extract project ID from detected files, fallback to cached setup
   let projectId: string | undefined;
-  if (detection.android?.content && 'project_info' in detection.android.content) {
-    projectId = detection.android.content.project_info?.project_id;
-  } else if (detection.ios?.content && 'PROJECT_ID' in detection.ios.content) {
-    projectId = detection.ios.content.PROJECT_ID;
+  if (localProjectIds.length > 0) {
+    projectId = localProjectIds[0];
   } else if (setup?.firebase?.projectId) {
     projectId = setup.firebase.projectId;
   }
 
   return {
-    configured: credentialFilesConfigured && senderConfigConfigured,
+    configured: credentialFilesConfigured && senderConfigConfigured && senderConfigProjectMatched,
     androidConfigured,
     iosConfigured,
     senderConfigConfigured,
+    senderConfigProjectMatched,
     projectId,
     needed: true,
   };
@@ -507,7 +586,10 @@ export async function gatherPreparationContext(
       firebase.androidConfigured &&
       firebase.iosConfigured &&
       (!apns.needed || apns.registeredWithFirebase);
-    if (senderConfigPrerequisitesMet && !firebase.senderConfigConfigured) {
+    if (
+      senderConfigPrerequisitesMet &&
+      (!firebase.senderConfigConfigured || firebase.senderConfigProjectMatched === false)
+    ) {
       missing.push('Firebase Service Account');
     }
   }

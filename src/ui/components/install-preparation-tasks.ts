@@ -6,7 +6,6 @@ export type InstallTaskId =
   | 'firebase_service_account'
   | 'ios_entitlements'
   | 'notification_service_extension'
-  | 'project_build'
   | 'install_skill';
 
 export type RuntimeTaskState = 'idle' | 'running' | 'failed' | 'complete';
@@ -17,15 +16,14 @@ export interface InstallTaskSelectionOptions {
 
 const INSTALL_TASK_ORDER: InstallTaskId[] = [
   'firebase_config_files',
-  'apns_key_for_firebase',
   'firebase_service_account',
+  'apns_key_for_firebase',
   'ios_entitlements',
   'notification_service_extension',
-  'project_build',
   'install_skill',
 ];
 
-const RUNTIME_TASK_IDS: InstallTaskId[] = ['project_build', 'install_skill'];
+const RUNTIME_TASK_IDS: InstallTaskId[] = ['install_skill'];
 
 export const INSTALL_TASK_LABELS: Record<InstallTaskId, string> = {
   firebase_config_files: 'Firebase Configuration Files',
@@ -33,7 +31,6 @@ export const INSTALL_TASK_LABELS: Record<InstallTaskId, string> = {
   firebase_service_account: 'Firebase Service Account',
   ios_entitlements: 'iOS Entitlements',
   notification_service_extension: 'Notification Service Extension',
-  project_build: 'Project Build',
   install_skill: 'SDK Installation',
 };
 
@@ -46,7 +43,6 @@ export function isTaskApplicable(context: PreparationContext, taskId: InstallTas
     case 'ios_entitlements':
     case 'notification_service_extension':
       return context.ios.needed;
-    case 'project_build':
     case 'install_skill':
       return true;
     default:
@@ -90,6 +86,9 @@ export function isTaskCompleted(
     case 'apns_key_for_firebase':
       return context.apns.registeredWithFirebase;
     case 'firebase_service_account':
+      if (context.firebase.senderConfigProjectMatched === false) {
+        return false;
+      }
       return context.firebase.senderConfigConfigured;
     case 'ios_entitlements':
       return context.ios.entitlementsConfigured;

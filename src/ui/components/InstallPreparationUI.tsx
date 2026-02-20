@@ -14,6 +14,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApnsStatus, IosStatus, PreparationContext } from '@/commands/skill/preparation';
 import { gatherPreparationContext, saveSetupStatus } from '@/commands/skill/preparation';
+import type { SenderConfig } from '@/lib/api';
 import { openBrowser } from '@/lib/auth/browser';
 import type { ProjectType } from '@/lib/config';
 import {
@@ -49,6 +50,7 @@ import {
   FirebaseService,
   type IosApp,
   isOAuthConfigured,
+  parseBase64ServiceAccountJson,
   type ServiceAccountJson,
 } from '@/lib/services/firebase';
 import { detectProjectType, formatProjectType } from '@/lib/services/project-detector';
@@ -80,7 +82,6 @@ import {
   FirebaseServiceAccountRegisteringTask,
   FirebaseServiceAccountRegistrationFailedTask,
   FirebaseServiceAccountSavingTask,
-  getProjectIdFromResult as getFirebaseProjectIdFromConfig,
   hasValidFirebaseConfigFiles as hasValidServiceAccountConfigFiles,
 } from './FirebaseServiceAccountSetup';
 import { GenericSelector, type SelectorItem } from './GenericSelector';
@@ -152,9 +153,6 @@ type InstallLeafTaskId =
   | 'nse_dependencies'
   | 'nse_verification'
   | 'nse_complete'
-  | 'project_build_running'
-  | 'project_build_failed'
-  | 'project_build_succeeded'
   | 'install_skill_running'
   | 'install_skill_failed'
   | 'install_skill_succeeded';
@@ -181,7 +179,6 @@ interface InstallPreparationUIProps {
   startTaskId?: InstallTaskId;
   mode?: InstallPreparationMode;
   chatMessages?: ChatMessageListMessage[];
-  onRunProjectBuild: (context: PreparationContext) => Promise<ProjectBuildTaskResult>;
   onRunInstallSkill: (context: PreparationContext) => Promise<ProjectBuildTaskResult>;
   onComplete: (context: PreparationContext) => void;
   onCancel: () => void;
@@ -376,12 +373,17 @@ function getTaskDetail(
     case 'apns_key_for_firebase':
       return context.apns.registeredWithFirebase ? context.apns.keyId || 'configured' : 'not set';
     case 'firebase_service_account':
-      return context.firebase.senderConfigConfigured ? 'registered' : 'not set';
+      if (!context.firebase.senderConfigConfigured) {
+        return 'not set';
+      }
+      if (context.firebase.senderConfigProjectMatched === false) {
+        return 'project mismatch';
+      }
+      return 'registered';
     case 'ios_entitlements':
       return context.ios.entitlementsConfigured ? 'configured' : 'not configured';
     case 'notification_service_extension':
       return context.ios.nseConfigured ? 'configured' : 'not configured';
-    case 'project_build':
     case 'install_skill':
       if (!context.ready) {
         return 'pending setup';
@@ -539,11 +541,9 @@ function StatusPhase({
   const primaryActionLabel =
     nextTaskId === null
       ? 'Finish install'
-      : nextTaskId === 'project_build'
-        ? 'Continue to build'
-        : nextTaskId === 'install_skill'
-          ? 'Continue to SDK installation'
-          : 'Continue required setup';
+      : nextTaskId === 'install_skill'
+        ? 'Continue to SDK installation'
+        : 'Continue required setup';
 
   const items: ActionItem[] = [
     {
@@ -613,7 +613,7 @@ function TaskHeader({ title, subtitle }: { title: string; subtitle: string }): R
   );
 }
 
-function getProjectBuildMessages(
+function getTaskMessages(
   chatMessages: ChatMessageListMessage[] | undefined,
   startIndex: number,
 ): ChatMessageListMessage[] {
@@ -635,8 +635,6 @@ function getInitialLeafTaskId(taskId: InstallTaskId): InstallLeafTaskId {
       return 'ios_entitlements_run';
     case 'notification_service_extension':
       return 'nse_prepare_context';
-    case 'project_build':
-      return 'project_build_running';
     case 'install_skill':
       return 'install_skill_running';
     default:
@@ -767,6 +765,122 @@ function isFirebaseScopeError(error: string): boolean {
   );
 }
 
+export interface SenderConfigProjectValidationResult {
+  status: 'no_encoded_data' | 'valid' | 'mismatch' | 'decode_error';
+  mismatchMessage?: string;
+}
+
+interface FirebaseConfigProjectIdResolution {
+  projectId: string | null;
+  mismatchMessage?: string;
+}
+
+interface SenderConfigValidationFailure {
+  message: string;
+  retryLeafTaskId: InstallLeafTaskId;
+}
+
+function getSenderConfigValidationFailure(
+  validation: SenderConfigProjectValidationResult,
+): SenderConfigValidationFailure | null {
+  switch (validation.status) {
+    case 'no_encoded_data':
+      return {
+        message:
+          'Existing Firebase Service Account on server has no decodable key data. Re-import service account and retry.',
+        retryLeafTaskId: 'firebase_service_account_input',
+      };
+
+    case 'decode_error':
+      return {
+        message:
+          'Failed to decode existing Firebase Service Account from server. Re-import service account and retry.',
+        retryLeafTaskId: 'firebase_service_account_input',
+      };
+
+    case 'mismatch':
+      return {
+        message:
+          validation.mismatchMessage ??
+          'Registered Firebase Service Account does not match Firebase config project.',
+        retryLeafTaskId: 'firebase_service_account_input',
+      };
+
+    default:
+      return null;
+  }
+}
+
+export function validateSenderConfigProjectId(
+  pushConfig: SenderConfig,
+  expectedProjectId: string,
+): SenderConfigProjectValidationResult {
+  const encodedServiceAccounts = [
+    pushConfig.app_push?.ios_config?.fcm_sa_json_base64_encoded,
+    pushConfig.app_push?.android_config?.fcm_sa_json_base64_encoded,
+  ].filter((encoded): encoded is string => Boolean(encoded));
+
+  if (encodedServiceAccounts.length === 0) {
+    return { status: 'no_encoded_data' };
+  }
+
+  const decodedProjectIds: string[] = [];
+  for (const encodedServiceAccount of encodedServiceAccounts) {
+    const parsed = parseBase64ServiceAccountJson(encodedServiceAccount);
+    if (!parsed.valid || !parsed.data) {
+      return { status: 'decode_error' };
+    }
+
+    decodedProjectIds.push(parsed.data.project_id);
+  }
+
+  const uniqueProjectIds = [...new Set(decodedProjectIds)];
+  const projectIdMatches = uniqueProjectIds.every((projectId) => projectId === expectedProjectId);
+
+  if (!projectIdMatches) {
+    return {
+      status: 'mismatch',
+      mismatchMessage: `Registered Firebase Service Account project ID (${uniqueProjectIds.join(', ')}) does not match Firebase config project ID (${expectedProjectId}).`,
+    };
+  }
+
+  return { status: 'valid' };
+}
+
+function resolveFirebaseProjectIdFromDetection(
+  detection: FirebaseDetectionResult,
+): FirebaseConfigProjectIdResolution {
+  const detectedProjectIds: string[] = [];
+
+  if (detection.android?.content && 'project_info' in detection.android.content) {
+    const androidProjectId = detection.android.content.project_info?.project_id;
+    if (androidProjectId) {
+      detectedProjectIds.push(androidProjectId);
+    }
+  }
+
+  if (detection.ios?.content && 'PROJECT_ID' in detection.ios.content) {
+    const iosProjectId = detection.ios.content.PROJECT_ID;
+    if (iosProjectId) {
+      detectedProjectIds.push(iosProjectId);
+    }
+  }
+
+  const uniqueProjectIds = [...new Set(detectedProjectIds)];
+  if (uniqueProjectIds.length === 0) {
+    return { projectId: null };
+  }
+
+  if (uniqueProjectIds.length > 1) {
+    return {
+      projectId: null,
+      mismatchMessage: `Firebase config files use different project IDs (${uniqueProjectIds.join(', ')}). Use the same Firebase project for all config files.`,
+    };
+  }
+
+  return { projectId: uniqueProjectIds[0] };
+}
+
 function validateStartTaskOverride({
   context,
   effectiveStartTaskId,
@@ -806,13 +920,6 @@ function validateStartTaskOverride({
     };
   }
 
-  if (effectiveStartTaskId === 'project_build' && !context.ready) {
-    return {
-      taskId: null,
-      note: 'Task override "project_build" requires all setup tasks to be completed first.',
-    };
-  }
-
   if (effectiveStartTaskId === 'install_skill' && !context.ready) {
     return {
       taskId: null,
@@ -846,7 +953,6 @@ export function InstallPreparationUI({
   startTaskId,
   mode = 'chat-full',
   chatMessages,
-  onRunProjectBuild,
   onRunInstallSkill,
   onComplete,
   onCancel,
@@ -862,8 +968,6 @@ export function InstallPreparationUI({
   const effectiveStartTaskId = startTaskId ?? envStartTaskId;
   const startTaskOverrideHandledRef = useRef(false);
   const nseCompletionHandledRef = useRef(false);
-  const projectBuildCompletionHandledRef = useRef(false);
-  const projectBuildRunStartedRef = useRef(false);
   const installSkillCompletionHandledRef = useRef(false);
   const installSkillRunStartedRef = useRef(false);
 
@@ -882,9 +986,7 @@ export function InstallPreparationUI({
   const [notificationExtensionState, setNotificationExtensionState] =
     useState<NotificationExtensionState>(createInitialNotificationExtensionState());
   const [runtimeTaskState, setRuntimeTaskState] = useState<RuntimeTaskStateMap>({});
-  const [buildTaskError, setBuildTaskError] = useState<string | null>(null);
   const [installSkillError, setInstallSkillError] = useState<string | null>(null);
-  const [projectBuildMessageStartIndex, setProjectBuildMessageStartIndex] = useState<number>(0);
   const [installSkillMessageStartIndex, setInstallSkillMessageStartIndex] = useState<number>(0);
   const chatMessageCountRef = useRef(chatMessages?.length ?? 0);
 
@@ -921,15 +1023,9 @@ export function InstallPreparationUI({
     (taskId: InstallTaskId, preparationContext: PreparationContext) => {
       setNote(null);
       nseCompletionHandledRef.current = false;
-      projectBuildCompletionHandledRef.current = false;
       installSkillCompletionHandledRef.current = false;
       if (isRuntimeTask(taskId)) {
         setRuntimeTaskState((prev) => ({ ...prev, [taskId]: 'running' }));
-      }
-      if (taskId === 'project_build') {
-        projectBuildRunStartedRef.current = false;
-        setBuildTaskError(null);
-        setProjectBuildMessageStartIndex(chatMessageCountRef.current);
       }
       if (taskId === 'install_skill') {
         installSkillRunStartedRef.current = false;
@@ -1077,8 +1173,8 @@ export function InstallPreparationUI({
   useCancelInput(handleCancelPreparation, {
     isActive:
       phase === 'task' &&
-      ((activeTaskId === 'project_build' && activeLeafTaskId === 'project_build_running') ||
-        (activeTaskId === 'install_skill' && activeLeafTaskId === 'install_skill_running')),
+      activeTaskId === 'install_skill' &&
+      activeLeafTaskId === 'install_skill_running',
   });
 
   const getFirebaseConfigNeeds = useCallback((detection: FirebaseDetectionResult | null) => {
@@ -1559,8 +1655,20 @@ export function InstallPreparationUI({
           return;
         }
 
-        const projectId = getFirebaseProjectIdFromConfig(detection);
-        if (!projectId) {
+        const projectIdResolution = resolveFirebaseProjectIdFromDetection(detection);
+        if (projectIdResolution.mismatchMessage) {
+          setFirebaseServiceAccountState((prev) => ({
+            ...prev,
+            error:
+              projectIdResolution.mismatchMessage ||
+              'Firebase config files use different project IDs.',
+            errorNextLeafTaskId: 'firebase_service_account_detecting',
+          }));
+          setActiveLeafTaskId('firebase_service_account_error');
+          return;
+        }
+
+        if (!projectIdResolution.projectId) {
           setFirebaseServiceAccountState((prev) => ({
             ...prev,
             error: 'Unable to determine Firebase Project ID from config files.',
@@ -1572,7 +1680,7 @@ export function InstallPreparationUI({
 
         setFirebaseServiceAccountState((prev) => ({
           ...prev,
-          projectId,
+          projectId: projectIdResolution.projectId,
           error: null,
         }));
         setActiveLeafTaskId(
@@ -1627,6 +1735,17 @@ export function InstallPreparationUI({
 
     const checkSenderConfig = async () => {
       try {
+        const expectedProjectId = firebaseServiceAccountState.projectId;
+        if (!expectedProjectId) {
+          setFirebaseServiceAccountState((prev) => ({
+            ...prev,
+            error: 'Unable to determine Firebase Project ID from config files.',
+            errorNextLeafTaskId: 'firebase_service_account_detecting',
+          }));
+          setActiveLeafTaskId('firebase_service_account_error');
+          return;
+        }
+
         const { getInternalApiClient } = await import('@/lib/api');
         const project = await getInternalApiClient().getProject(clixProjectId);
         const pushConfig = project.sender_configs?.find(
@@ -1638,6 +1757,18 @@ export function InstallPreparationUI({
         }
 
         if (pushConfig) {
+          const validation = validateSenderConfigProjectId(pushConfig, expectedProjectId);
+          const validationFailure = getSenderConfigValidationFailure(validation);
+          if (validationFailure) {
+            setFirebaseServiceAccountState((prev) => ({
+              ...prev,
+              error: validationFailure.message,
+              errorNextLeafTaskId: validationFailure.retryLeafTaskId,
+            }));
+            setActiveLeafTaskId('firebase_service_account_error');
+            return;
+          }
+
           setFirebaseServiceAccountState((prev) => ({
             ...prev,
             senderConfigUpdatedAt: pushConfig.updated_at ?? pushConfig.created_at ?? null,
@@ -1661,7 +1792,13 @@ export function InstallPreparationUI({
     return () => {
       cancelled = true;
     };
-  }, [activeLeafTaskId, activeTaskId, context?.config.project.id, phase]);
+  }, [
+    activeLeafTaskId,
+    activeTaskId,
+    context?.config.project.id,
+    firebaseServiceAccountState.projectId,
+    phase,
+  ]);
 
   useEffect(() => {
     if (
@@ -2143,88 +2280,6 @@ export function InstallPreparationUI({
   useEffect(() => {
     if (
       phase !== 'task' ||
-      activeTaskId !== 'project_build' ||
-      activeLeafTaskId !== 'project_build_running'
-    ) {
-      return;
-    }
-
-    if (!context) {
-      handleTaskBackToStatus('Install preparation context is missing.');
-      return;
-    }
-    if (projectBuildRunStartedRef.current) {
-      return;
-    }
-    projectBuildRunStartedRef.current = true;
-
-    let cancelled = false;
-
-    const runProjectBuild = async () => {
-      setRuntimeTaskState((prev) => ({ ...prev, project_build: 'running' }));
-      setBuildTaskError(null);
-
-      const result = await onRunProjectBuild(context);
-      if (cancelled) {
-        return;
-      }
-
-      if (result.success) {
-        setRuntimeTaskState((prev) => ({ ...prev, project_build: 'complete' }));
-        setActiveLeafTaskId('project_build_succeeded');
-        return;
-      }
-
-      const errorMessage =
-        result.error ??
-        (result.aborted ? 'Project build was interrupted.' : 'Project build failed.');
-      setRuntimeTaskState((prev) => ({ ...prev, project_build: 'failed' }));
-      setBuildTaskError(errorMessage);
-      setActiveLeafTaskId('project_build_failed');
-    };
-
-    void runProjectBuild();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeLeafTaskId, activeTaskId, context, handleTaskBackToStatus, onRunProjectBuild, phase]);
-
-  useEffect(() => {
-    if (
-      phase !== 'task' ||
-      activeTaskId !== 'project_build' ||
-      activeLeafTaskId !== 'project_build_succeeded'
-    ) {
-      return;
-    }
-
-    if (projectBuildCompletionHandledRef.current) {
-      return;
-    }
-    projectBuildCompletionHandledRef.current = true;
-
-    if (!context) {
-      handleTaskBackToStatus('Install preparation context is missing.');
-      return;
-    }
-
-    setActiveTaskId(null);
-    resetTaskRuntimeState(context);
-    setNote('Project build completed. Continue to SDK installation.');
-    setPhase('status');
-  }, [
-    activeLeafTaskId,
-    activeTaskId,
-    context,
-    handleTaskBackToStatus,
-    phase,
-    resetTaskRuntimeState,
-  ]);
-
-  useEffect(() => {
-    if (
-      phase !== 'task' ||
       activeTaskId !== 'install_skill' ||
       activeLeafTaskId !== 'install_skill_running'
     ) {
@@ -2449,8 +2504,21 @@ export function InstallPreparationUI({
 
           {activeLeafTaskId === 'firebase_config_no_projects' && (
             <FirebaseConfigNoProjectsTask
-              onOpenConsole={() => openBrowser(FIREBASE_HELP_URLS.console)}
-              onRetry={() => setActiveLeafTaskId('firebase_config_authenticating')}
+              onOpenProjectCreation={() => openBrowser(FIREBASE_HELP_URLS.createProject)}
+              onRetry={() => {
+                setFirebaseConfigState((prev) => ({
+                  ...prev,
+                  authUrl: null,
+                  projects: [],
+                  selectedProject: null,
+                  androidApps: [],
+                  iosApps: [],
+                  selectedAndroidApp: null,
+                  noAppsContext: null,
+                  error: null,
+                }));
+                setActiveLeafTaskId('firebase_config_authenticating');
+              }}
               onCancel={() => handleTaskBackToStatus()}
             />
           )}
@@ -2766,95 +2834,12 @@ export function InstallPreparationUI({
       );
     }
 
-    case 'project_build': {
-      const failedItems: ActionItem[] = [
-        { id: 'retry', label: 'Retry build', action: 'continue' },
-        { id: 'cancel', label: 'Cancel', action: 'cancel' },
-      ];
-      const projectBuildMessages = getProjectBuildMessages(
-        chatMessages,
-        projectBuildMessageStartIndex,
-      );
-      const waitingOutput = (
-        <Box marginTop={1}>
-          <Text color="gray">Waiting for agent output...</Text>
-        </Box>
-      );
-
-      return (
-        <Box flexDirection="column">
-          <TaskHeader
-            title="Project Build"
-            subtitle="Run the final project build task before finishing /install."
-          />
-
-          {activeLeafTaskId === 'project_build_running' && (
-            <Box flexDirection="column" marginY={1}>
-              <Box>
-                <Text color="cyan">
-                  <Spinner type="dots" />
-                </Text>
-                <Text> Running project-build agent task...</Text>
-              </Box>
-              <ChatMessageList
-                messages={projectBuildMessages}
-                maxHeight={12}
-                emptyState={waitingOutput}
-              />
-            </Box>
-          )}
-
-          {activeLeafTaskId === 'project_build_succeeded' && (
-            <Box flexDirection="column" marginY={1}>
-              <Text color="green">✓ Project build completed.</Text>
-              <Text color="gray">Returning to install checklist...</Text>
-            </Box>
-          )}
-
-          {activeLeafTaskId === 'project_build_failed' && (
-            <Box flexDirection="column" marginY={1}>
-              <Text color="red">✗ {buildTaskError || 'Project build failed.'}</Text>
-              <ChatMessageList
-                messages={projectBuildMessages}
-                maxHeight={12}
-                emptyState={waitingOutput}
-              />
-              <Box marginTop={1}>
-                <GenericSelector
-                  items={failedItems}
-                  title=""
-                  onSelect={(item) => {
-                    if (item.action === 'cancel') {
-                      handleTaskBackToStatus(
-                        'Project build was not completed. Continue to build to finish /install.',
-                      );
-                      return;
-                    }
-                    setBuildTaskError(null);
-                    setActiveLeafTaskId('project_build_running');
-                  }}
-                  onCancel={() =>
-                    handleTaskBackToStatus(
-                      'Project build was not completed. Continue to build to finish /install.',
-                    )
-                  }
-                />
-              </Box>
-            </Box>
-          )}
-        </Box>
-      );
-    }
-
     case 'install_skill': {
       const failedItems: ActionItem[] = [
         { id: 'retry', label: 'Retry SDK installation', action: 'continue' },
         { id: 'cancel', label: 'Cancel', action: 'cancel' },
       ];
-      const installSkillMessages = getProjectBuildMessages(
-        chatMessages,
-        installSkillMessageStartIndex,
-      );
+      const installSkillMessages = getTaskMessages(chatMessages, installSkillMessageStartIndex);
       const waitingOutput = (
         <Box marginTop={1}>
           <Text color="gray">Waiting for agent output...</Text>

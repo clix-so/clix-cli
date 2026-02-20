@@ -39,11 +39,6 @@ interface UseOverlaysOptions {
   resumeSession: ReturnType<typeof useChatActions>['resumeSession'];
   cancelRequest: ReturnType<typeof useChatActions>['cancelRequest'];
   executeDebugSession: ReturnType<typeof useChatActions>['executeDebugSession'];
-  runInstallProjectBuild: (context: PreparationContext) => Promise<{
-    success: boolean;
-    aborted?: boolean;
-    error?: string;
-  }>;
   runInstallSkill: (context: PreparationContext) => Promise<{
     success: boolean;
     aborted?: boolean;
@@ -64,7 +59,6 @@ export function useOverlays(options: UseOverlaysOptions) {
     resumeSession,
     cancelRequest,
     executeDebugSession,
-    runInstallProjectBuild,
     runInstallSkill,
   } = options;
 
@@ -255,13 +249,6 @@ export function useOverlays(options: UseOverlaysOptions) {
     setActiveOverlay(null);
   }, []);
 
-  const handleInstallProjectBuild = useCallback(
-    async (context: PreparationContext) => {
-      return await runInstallProjectBuild(context);
-    },
-    [runInstallProjectBuild],
-  );
-
   const handleInstallSkill = useCallback(
     async (context: PreparationContext) => {
       return await runInstallSkill(context);
@@ -339,7 +326,6 @@ export function useOverlays(options: UseOverlaysOptions) {
 
     // Install preparation
     showInstallPreparation,
-    handleInstallProjectBuild,
     handleInstallSkill,
     handleInstallPreparationComplete,
     handleInstallPreparationCancel,

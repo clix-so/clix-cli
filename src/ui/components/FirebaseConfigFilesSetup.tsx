@@ -455,16 +455,16 @@ function CreatingAppPhase({ platform }: { platform: 'android' | 'ios' }): React.
 }
 
 function NoProjectsPhase({
-  onOpenConsole,
+  onOpenProjectCreation,
   onRetry,
   onCancel,
 }: {
-  onOpenConsole: () => void;
+  onOpenProjectCreation: () => void;
   onRetry: () => void;
   onCancel: () => void;
 }): React.ReactElement {
   const items = [
-    { label: '🌐 Open Firebase Console', value: 'console' },
+    { label: '🆕 Open Firebase Project Creation', value: 'create' },
     { label: '↻ Retry project list', value: 'retry' },
     { label: '← Back', value: 'cancel' },
   ];
@@ -473,8 +473,8 @@ function NoProjectsPhase({
 
   const handleSelect = (item: { value: string }) => {
     switch (item.value) {
-      case 'console':
-        onOpenConsole();
+      case 'create':
+        onOpenProjectCreation();
         break;
       case 'retry':
         onRetry();
@@ -503,7 +503,12 @@ function NoProjectsPhase({
         <Text>No Firebase projects are associated with this account.</Text>
       </Box>
       <Box marginBottom={1}>
-        <Text dimColor>Create a Firebase project in console, then retry.</Text>
+        <Text dimColor>Create a project in browser, then retry project list.</Text>
+      </Box>
+      <Box marginBottom={1} flexDirection="column">
+        <Text dimColor>1) Open Firebase Project Creation</Text>
+        <Text dimColor>2) Complete project creation in browser</Text>
+        <Text dimColor>3) Return here and choose Retry project list</Text>
       </Box>
       <SelectInput items={items} onSelect={handleSelect} />
       <Box marginTop={1}>

@@ -74,10 +74,6 @@ async function runInstallPreparation(
         projectPath={projectPath}
         startTaskId={startTaskId}
         mode="command-prep-only"
-        onRunProjectBuild={async () => ({
-          success: false,
-          error: 'project_build is disabled in command preparation mode.',
-        })}
         onRunInstallSkill={async () => ({
           success: false,
           error: 'install_skill is disabled in command preparation mode.',

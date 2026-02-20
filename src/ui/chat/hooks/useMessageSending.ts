@@ -4,7 +4,12 @@
 import { useCallback } from 'react';
 import type { PreparationContext } from '../../../commands/skill/preparation';
 import { getDebugPrompt } from '../../../lib/services/debug-service';
-import { executeSkill as executeSkillLib, getSkillInfo, type SkillType } from '../../../lib/skills';
+import {
+  executeSkill as executeSkillLib,
+  getSkillInfo,
+  type SkillOptions,
+  type SkillType,
+} from '../../../lib/skills';
 import { generateMessageId, useChatContext } from '../context/ChatContext';
 import type { ChatRefs } from './types';
 import { useMessageStreaming } from './useMessageStreaming';
@@ -14,6 +19,10 @@ export interface SkillExecutionResult {
   success: boolean;
   aborted: boolean;
   error?: string;
+}
+
+export interface SkillExecutionOptions {
+  installPhase?: SkillOptions['installPhase'];
 }
 
 /**
@@ -100,6 +109,7 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
     async (
       skillType: SkillType,
       preparationContext?: PreparationContext,
+      options?: SkillExecutionOptions,
     ): Promise<SkillExecutionResult> => {
       if (!executorRef.current) {
         const error = 'No agent configured. Please run "clix config" to select an agent.';
@@ -132,6 +142,7 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
           signal,
           oneShot: false, // Chat mode: enable session persistence
           preparationContext,
+          installPhase: options?.installPhase,
         });
 
         const streamResult = await processStreamingMessages(messageGenerator, agentMessageId, {
@@ -195,8 +206,12 @@ export function useMessageSending(refs: ChatRefs, session: SessionPersistenceAPI
   );
 
   const executeSkill = useCallback(
-    async (skillType: SkillType, preparationContext?: PreparationContext): Promise<void> => {
-      await executeSkillWithResult(skillType, preparationContext);
+    async (
+      skillType: SkillType,
+      preparationContext?: PreparationContext,
+      options?: SkillExecutionOptions,
+    ): Promise<void> => {
+      await executeSkillWithResult(skillType, preparationContext, options);
     },
     [executeSkillWithResult],
   );

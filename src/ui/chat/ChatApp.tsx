@@ -118,17 +118,9 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
     [onExit, exit],
   );
 
-  // Execute install build step with preparation context
-  const runInstallProjectBuild = useCallback(
-    (context: Parameters<typeof chatActions.executeSkill>[1]) => {
-      return executeSkillWithResult('project-build', context);
-    },
-    [executeSkillWithResult],
-  );
-
   const runInstallSkill = useCallback(
     (context: Parameters<typeof chatActions.executeSkill>[1]) => {
-      return executeSkillWithResult('install', context);
+      return executeSkillWithResult('install', context, { installPhase: 'integration' });
     },
     [executeSkillWithResult],
   );
@@ -143,7 +135,6 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
     resumeSession: chatActions.resumeSession,
     cancelRequest: chatActions.cancelRequest,
     executeDebugSession: chatActions.executeDebugSession,
-    runInstallProjectBuild,
     runInstallSkill,
   });
 
@@ -252,7 +243,6 @@ const ChatAppInner: React.FC<ChatAppInnerProps & { initialSessionId?: string }> 
         <InstallPreparationUI
           projectPath={process.cwd()}
           chatMessages={messages}
-          onRunProjectBuild={overlays.handleInstallProjectBuild}
           onRunInstallSkill={overlays.handleInstallSkill}
           onComplete={overlays.handleInstallPreparationComplete}
           onCancel={overlays.handleInstallPreparationCancel}

@@ -27,6 +27,8 @@ export interface SkillOptions {
   oneShot?: boolean;
   /** Preparation context from install preparation phase */
   preparationContext?: PreparationContext;
+  /** Install phase for /install runtime tasks */
+  installPhase?: 'project-build' | 'integration';
 }
 
 export interface SkillInfo {
@@ -51,13 +53,6 @@ const LOCAL_SKILLS: SkillInfo[] = [
     name: 'SDK Installation',
     description: 'Autonomous SDK integration with automatic file modifications',
     isLocal: true,
-  },
-  {
-    type: 'project-build',
-    name: 'Project Build',
-    description: 'Autonomous project build with automatic diagnostics and fixes',
-    isLocal: true,
-    visibility: 'internal',
   },
   {
     type: 'doctor',
@@ -301,7 +296,8 @@ function buildPreparationSection(context: PreparationContext): string {
     )}`,
     `Firebase Service Account: ${formatSetupStepStatus(
       context.firebase.needed,
-      context.firebase.senderConfigConfigured,
+      context.firebase.senderConfigConfigured &&
+        context.firebase.senderConfigProjectMatched !== false,
     )}`,
     `iOS Entitlements: ${formatSetupStepStatus(context.ios.needed, context.ios.entitlementsConfigured)}`,
     `Notification Service Extension: ${formatSetupStepStatus(
@@ -324,7 +320,13 @@ function buildPreparationSection(context: PreparationContext): string {
       `Project ID: ${context.firebase.projectId || 'not configured'}`,
       `Android (google-services.json): ${context.firebase.androidConfigured ? '✓ configured' : '✗ missing'}`,
       `iOS (GoogleService-Info.plist): ${context.firebase.iosConfigured ? '✓ configured' : '✗ missing'}`,
-      `Sender Config (App Push): ${context.firebase.senderConfigConfigured ? '✓ configured' : '✗ missing'}`,
+      `Sender Config (App Push): ${
+        context.firebase.senderConfigConfigured
+          ? context.firebase.senderConfigProjectMatched === false
+            ? '✗ project mismatch'
+            : '✓ configured'
+          : '✗ missing'
+      }`,
     ],
     context.firebase.needed,
   );
@@ -375,6 +377,7 @@ function buildPreparationSection(context: PreparationContext): string {
 function getInstallPrompt(options?: SkillOptions): string {
   const projectPath = options?.projectPath ?? process.cwd();
   const context = options?.preparationContext;
+  const installPhase = options?.installPhase ?? 'integration';
   const inferredPlatform =
     context?.projectType.framework === 'flutter'
       ? 'flutter'
@@ -402,6 +405,15 @@ function getInstallPrompt(options?: SkillOptions): string {
     prompt += '\n';
   }
 
+  prompt += `Install phase: ${installPhase}\n`;
+  if (installPhase === 'project-build') {
+    prompt +=
+      'For this run, execute only project build workflow and build-fix retries. Do not perform new SDK integration changes unless required to fix build errors.\n\n';
+  } else {
+    prompt +=
+      'For this run, execute SDK integration workflow. Use build commands only as verification after integration changes.\n\n';
+  }
+
   // Add one-shot instruction for autonomous execution
   if (options?.oneShot) {
     prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
@@ -420,57 +432,6 @@ You are in autonomous one-shot execution mode:
   const installPrompt = readLocalSkillPrompt('install');
   prompt += installPrompt;
 
-  return prompt;
-}
-
-/**
- * Get prompt for the project-build skill.
- * Prompt is loaded from src/lib/skills/project-build/SKILL.md
- */
-function getProjectBuildPrompt(options?: SkillOptions): string {
-  const projectPath = options?.projectPath ?? process.cwd();
-  const context = options?.preparationContext;
-  const inferredPlatform =
-    context?.projectType.framework === 'flutter'
-      ? 'flutter'
-      : context?.projectType.framework === 'react-native' ||
-          context?.projectType.framework === 'expo'
-        ? 'react-native'
-        : context?.projectType.framework === 'native'
-          ? context.projectType.target === 'ios'
-            ? 'ios'
-            : context.projectType.target === 'android'
-              ? 'android'
-              : undefined
-          : undefined;
-  const platform = options?.platform ?? inferredPlatform ?? 'auto-detect';
-
-  let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n`;
-  if (context) {
-    prompt += `Detected project type: ${formatProjectType(context.projectType)}\n`;
-  }
-  prompt += '\n';
-
-  if (context) {
-    prompt += buildPreparationSection(context);
-    prompt += '\n';
-  }
-
-  if (options?.oneShot) {
-    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
-    prompt += `## EXECUTION MODE: AUTONOMOUS
-
-You are in autonomous one-shot execution mode:
-- ALL file operations are pre-approved
-- Use Write/Edit/Bash tools immediately without asking
-- Complete all integration steps automatically
-- Report what was done, not what should be done
-
-`;
-  }
-
-  const projectBuildPrompt = readLocalSkillPrompt('project-build');
-  prompt += projectBuildPrompt;
   return prompt;
 }
 
@@ -519,8 +480,6 @@ async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions)
   switch (skillType) {
     case 'install':
       return getInstallPrompt(options);
-    case 'project-build':
-      return getProjectBuildPrompt(options);
     case 'doctor':
       return getDoctorPrompt(options);
     case 'debug':
