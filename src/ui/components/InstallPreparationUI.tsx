@@ -196,9 +196,9 @@ interface ActionItem extends SelectorItem {
   action: 'continue' | 'cancel';
 }
 
-type StatusLineState = 'pending' | 'checking' | 'ok' | 'missing' | 'skipped';
+export type StatusLineState = 'pending' | 'checking' | 'ok' | 'missing' | 'skipped';
 
-interface StatusRow {
+export interface StatusRow {
   label: string;
   status: StatusLineState;
   detail?: string;
@@ -403,7 +403,7 @@ function getTaskDetail(
   }
 }
 
-function getStatusRows(
+export function getStatusRows(
   context: PreparationContext,
   layoutPolicy: StatusLayoutPolicy,
   runtimeTaskState: RuntimeTaskStateMap,
@@ -445,7 +445,7 @@ function getStatusRows(
   return [...rows, ...taskRows];
 }
 
-function StatusLine({
+export function StatusLine({
   label,
   status,
   detail,

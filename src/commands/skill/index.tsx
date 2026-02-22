@@ -1,15 +1,24 @@
+import { Box, Text } from 'ink';
+import type React from 'react';
+import { useCallback } from 'react';
 import type { AgentInfo } from '../../lib/agents';
 import { getConfigManager } from '../../lib/config/index';
 import { buildAgentHandoffInvocation, runAgentHandoff } from '../../lib/services/agent-handoff';
 import { AgentSelectionService } from '../../lib/services/agent-selection-service';
 import { getSkillPrompt } from '../../lib/skills';
-import { InstallPreparationUI } from '../../ui/components/InstallPreparationUI';
+import { GenericSelector, type SelectorItem } from '../../ui/components/GenericSelector';
+import {
+  getStatusLayoutPolicy,
+  getStatusRows,
+  InstallPreparationUI,
+  StatusLine,
+} from '../../ui/components/InstallPreparationUI';
 import {
   INSTALL_TASK_LABELS,
   type InstallTaskId,
 } from '../../ui/components/install-preparation-tasks';
 import { safeRender } from '../../ui/utils/safeRender';
-import type { PreparationContext } from './preparation';
+import { gatherPreparationContext, type PreparationContext } from './preparation';
 
 interface SkillCommandOptions {
   action?: string;
@@ -63,6 +72,105 @@ async function runInstallPreparation(
         }}
       />,
     );
+  });
+}
+
+interface DoctorActionItem extends SelectorItem {
+  action: 'diagnose' | 'exit';
+}
+
+function DoctorStatusDisplay({
+  context,
+  onAccept,
+  onCancel,
+}: {
+  context: PreparationContext;
+  onAccept?: () => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const layoutPolicy = getStatusLayoutPolicy();
+  const statusRows = getStatusRows(context, layoutPolicy, {}, false);
+
+  const items: DoctorActionItem[] = [
+    { id: 'diagnose', label: 'Run AI diagnosis', action: 'diagnose' },
+    { id: 'exit', label: 'Exit', action: 'exit' },
+  ];
+
+  const handleSelect = useCallback(
+    (item: DoctorActionItem) => {
+      if (item.action === 'diagnose') {
+        onAccept?.();
+      } else {
+        onCancel();
+      }
+    },
+    [onAccept, onCancel],
+  );
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Text bold>Clix SDK Doctor — Pre-check Status</Text>
+      <Box marginY={1} flexDirection="column">
+        {statusRows.map((row) => (
+          <StatusLine key={row.label} label={row.label} status={row.status} detail={row.detail} />
+        ))}
+      </Box>
+
+      {!context.ready && (
+        <>
+          <Box marginBottom={1} flexDirection="column">
+            <Text color="yellow">Missing setup:</Text>
+            {context.missing.map((item) => (
+              <Text key={item} color="gray">
+                {'  '}• {item}
+              </Text>
+            ))}
+          </Box>
+          <Text>
+            Run "<Text color="cyan">clix install</Text>" to complete the required setup before
+            running doctor.
+          </Text>
+        </>
+      )}
+
+      {context.ready && onAccept && (
+        <>
+          <Text color="gray">
+            Additional SDK integration issues can be diagnosed with an AI agent.
+          </Text>
+          <GenericSelector items={items} title="" onSelect={handleSelect} onCancel={onCancel} />
+        </>
+      )}
+    </Box>
+  );
+}
+
+async function runDoctorPrecheck(context: PreparationContext): Promise<'accepted' | 'cancelled'> {
+  return new Promise((resolve) => {
+    const { unmount } = safeRender(
+      <DoctorStatusDisplay
+        context={context}
+        onAccept={
+          context.ready
+            ? () => {
+                unmount();
+                resolve('accepted');
+              }
+            : undefined
+        }
+        onCancel={() => {
+          unmount();
+          resolve('cancelled');
+        }}
+      />,
+    );
+
+    if (!context.ready) {
+      setTimeout(() => {
+        unmount();
+        resolve('cancelled');
+      }, 0);
+    }
   });
 }
 
@@ -121,6 +229,17 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     const context = await runInstallPreparation(projectPath, startTaskId);
     if (!context) {
       return;
+    }
+    preparationContext = context;
+  } else if (skillType === 'doctor') {
+    const context = await gatherPreparationContext(projectPath);
+    if (!context) {
+      console.error('Project not linked. Run "clix login" first.');
+      process.exit(1);
+    }
+    const result = await runDoctorPrecheck(context);
+    if (result === 'cancelled') {
+      process.exit(context.ready ? 0 : 1);
     }
     preparationContext = context;
   }

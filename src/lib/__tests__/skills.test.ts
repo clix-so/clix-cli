@@ -110,6 +110,83 @@ describe('getSkillPrompt', () => {
     expect(prompt).toContain('Project Public API Key: pk_test_public_key_123');
   });
 
+  test('builds doctor prompt with preparation context', async () => {
+    const preparationContext: PreparationContext = {
+      projectPath: '/tmp/project',
+      config: {
+        version: 1,
+        member: {
+          id: 'member-1',
+          email: 'member@example.com',
+          name: 'Member',
+        },
+        organization: {
+          id: 'org-1',
+          name: 'Org',
+        },
+        project: {
+          id: 'project-1',
+          name: 'Project',
+          public_api_key: 'pk_test_doctor_key_456',
+        },
+        linkedAt: '2026-01-01T00:00:00.000Z',
+      },
+      projectType: {
+        framework: 'react-native',
+        target: 'ios-android',
+      },
+      firebase: {
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: true,
+        senderConfigProjectMatched: true,
+        projectId: 'firebase-project',
+        needed: true,
+      },
+      ios: {
+        needed: true,
+        bundleId: 'com.example.app',
+        teamId: 'TEAM123456',
+        appGroupId: 'group.clix.com.example.app',
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      apns: {
+        needed: true,
+        keyId: 'KEY1234567',
+        teamId: 'TEAM123456',
+        registeredWithFirebase: true,
+      },
+      ready: true,
+      missing: [],
+    };
+
+    const prompt = await getSkillPrompt('doctor', {
+      projectPath: '/tmp/project',
+      preparationContext,
+    });
+
+    expect(prompt).toContain('Pre-verified Status');
+    expect(prompt).toContain('Project: Project');
+    expect(prompt).toContain('react-native');
+    expect(prompt).toContain('firebase-project');
+    expect(prompt).toContain('Project Public API Key: pk_test_doctor_key_456');
+    expect(prompt).toContain('pre-verified by clix before agent handoff');
+    expect(prompt).not.toContain('clix install preparation');
+    expect(prompt).toContain('analyzing a mobile project for Clix SDK');
+    expect(prompt).toContain('Final Result: HEALTHY | ACTION_NEEDED | FAILED');
+  });
+
+  test('builds doctor prompt without context when not provided', async () => {
+    const prompt = await getSkillPrompt('doctor', { projectPath: '/tmp/project' });
+
+    expect(prompt).not.toContain('## Pre-configured Setup\n');
+    expect(prompt).not.toContain('Detected project type:');
+    expect(prompt).toContain('Project path: /tmp/project');
+    expect(prompt).toContain('analyzing a mobile project for Clix SDK');
+  });
+
   test('rejects non-local skill types', async () => {
     await expect(getSkillPrompt('integration')).rejects.toThrow('Unknown command type');
   });

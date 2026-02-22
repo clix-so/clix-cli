@@ -134,7 +134,15 @@ function appendOptionalSection(
   lines.push('');
 }
 
-function buildPreparationSection(context: PreparationContext): string {
+interface PreparationSectionOptions {
+  verificationTitle?: string;
+  footerLines?: string[];
+}
+
+function buildPreparationSection(
+  context: PreparationContext,
+  options?: PreparationSectionOptions,
+): string {
   const lines: string[] = ['## Pre-configured Setup', ''];
   lines.push(`Project: ${context.config.project.name}`);
   lines.push(`Type: ${formatProjectType(context.projectType)}`);
@@ -148,7 +156,7 @@ function buildPreparationSection(context: PreparationContext): string {
     !context.firebase.needed ||
     ((!iosTarget || context.firebase.iosConfigured) &&
       (!androidTarget || context.firebase.androidConfigured));
-  appendOptionalSection(lines, 'Install Step Verification', [
+  appendOptionalSection(lines, options?.verificationTitle ?? 'Setup Verification', [
     'Project linked: ✓ verified',
     `Firebase Configuration Files: ${formatSetupStepStatus(
       context.firebase.needed,
@@ -226,8 +234,13 @@ function buildPreparationSection(context: PreparationContext): string {
     context.missing.length > 0,
   );
 
-  lines.push('Treat the above as already executed/validated by clix install preparation.');
-  lines.push('Use these pre-configured values when running build and troubleshooting failures.');
+  const footer = options?.footerLines ?? [
+    'This context was pre-verified by clix before agent handoff.',
+    'Use these values as ground truth for your analysis.',
+  ];
+  for (const line of footer) {
+    lines.push(line);
+  }
   lines.push('');
 
   return lines.join('\n');
@@ -258,7 +271,13 @@ function getInstallPrompt(options?: SkillOptions): string {
   prompt += '\n';
 
   if (context) {
-    prompt += buildPreparationSection(context);
+    prompt += buildPreparationSection(context, {
+      verificationTitle: 'Install Step Verification',
+      footerLines: [
+        'Treat the above as already executed/validated by clix install preparation.',
+        'Use these pre-configured values when running build and troubleshooting failures.',
+      ],
+    });
     prompt += '\n';
   }
 
@@ -276,7 +295,25 @@ function getInstallPrompt(options?: SkillOptions): string {
 
 function getDoctorPrompt(options?: SkillOptions): string {
   const projectPath = options?.projectPath ?? process.cwd();
-  let prompt = `Project path: ${projectPath}\n\n`;
+  const context = options?.preparationContext;
+
+  let prompt = `Project path: ${projectPath}\n`;
+  if (context) {
+    prompt += `Detected project type: ${formatProjectType(context.projectType)}\n`;
+  }
+  prompt += '\n';
+
+  if (context) {
+    prompt += buildPreparationSection(context, {
+      verificationTitle: 'Pre-verified Status',
+      footerLines: [
+        'This context was pre-verified by clix before agent handoff.',
+        'Use these values as ground truth. Do not re-scan for information already provided above.',
+        'Focus your analysis on SDK integration issues, version checks, and actionable recommendations.',
+      ],
+    });
+    prompt += '\n';
+  }
 
   if (options?.oneShot) {
     prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
