@@ -30,7 +30,7 @@ export class ClaudeExecutor extends BaseExecutor {
     return 'jsonl';
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
     // Permission handling: fully auto-approve tool execution.
@@ -38,24 +38,10 @@ export class ClaudeExecutor extends BaseExecutor {
     args.push('--allow-dangerously-skip-permissions');
     args.push('--permission-mode', 'bypassPermissions');
 
-    // Session persistence: disable for one-shot, enable for chat
-    if (options?.oneShot) {
-      args.push('--no-session-persistence');
-    } else if (this.sessionId) {
-      // Resume session if available (use --resume instead of --session-id)
-      args.push('--resume', this.sessionId);
-    }
+    // Always disable session persistence for command-only execution.
+    args.push('--no-session-persistence');
 
     return args;
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as ClaudeCLIMessage;
-    return msg.session_id ?? null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
   }
 
   protected processStreamData(

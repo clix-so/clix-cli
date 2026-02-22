@@ -1,4 +1,7 @@
-import type { ConversationMessage } from '../../executor';
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 /**
  * Test fixtures for various test scenarios

@@ -31,7 +31,7 @@ describe('CLI E2E Tests', () => {
       expect(result.stdout).toContain('agent');
       expect(result.stdout).toContain('install');
       expect(result.stdout).toContain('doctor');
-      expect(result.stdout).toContain('debug');
+      expect(result.stdout).not.toContain('debug <problem>');
       expect(result.stdout).toContain('install-mcp');
 
       // Skills should NOT be in CLI help (they are chat-only)
@@ -128,23 +128,20 @@ describe('CLI Help Output Formatting', () => {
 
   test('should have proper command descriptions', async () => {
     const result = await rig.run(['--help']);
-    const installDescriptionPattern = /Autonomous SDK integration|Autonomous project build/;
 
     // Check command descriptions
-    expect(result.stdout).toContain('Start interactive chat');
+    expect(result.stdout).toContain('Show this help message');
     expect(result.stdout).toContain('List or switch AI agents');
-    expect(result.stdout).toMatch(installDescriptionPattern);
+    expect(result.stdout).toContain('Install Clix SDK');
     expect(result.stdout).toContain('doctor');
-    expect(result.stdout).toContain('Interactive debugging assistant');
     expect(result.stdout).toContain('Install Clix MCP Server');
   });
 
   test('should list install command', async () => {
     const result = await rig.run(['--help']);
-    const installDescriptionPattern = /Autonomous SDK integration|Autonomous project build/;
 
     // install command should be listed
     expect(result.stdout).toContain('install');
-    expect(result.stdout).toMatch(installDescriptionPattern);
+    expect(result.stdout).toContain('Install Clix SDK');
   });
 });

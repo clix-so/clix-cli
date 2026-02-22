@@ -1,11 +1,7 @@
+import type { AgentInfo } from '../../lib/agents';
 import type { AgentExecutor, AgentMessage } from '../../lib/executor';
-import {
-  executeSkill,
-  getAvailableSkills,
-  getAvailableSkillTypes,
-  getSkillInfo,
-  type SkillType,
-} from '../../lib/skills';
+import { ensureVercelSkillsInstalled } from '../../lib/services/vercel-skills';
+import { executeSkill } from '../../lib/skills';
 import { AgentExecutionUI } from '../../ui/AgentExecutionUI';
 import { InstallPreparationUI } from '../../ui/components/InstallPreparationUI';
 import {
@@ -22,48 +18,48 @@ interface SkillCommandOptions {
   startTask?: string;
 }
 
-/**
- * Generate help text dynamically from available skills.
- */
+type CommandSkillType = 'install' | 'doctor';
+
+const COMMAND_SKILLS: Record<
+  CommandSkillType,
+  {
+    title: string;
+    description: string;
+  }
+> = {
+  install: {
+    title: 'SDK Installation',
+    description: 'Autonomous SDK integration with automatic file modifications',
+  },
+  doctor: {
+    title: 'SDK Doctor',
+    description: 'Check Clix SDK integration status',
+  },
+};
+
+function isCommandSkillType(action: string): action is CommandSkillType {
+  return action === 'install' || action === 'doctor';
+}
+
 function generateHelpText(): string {
-  const skills = getAvailableSkills();
-  const localSkills = skills.filter((s) => s.isLocal);
-  const packageSkills = skills.filter((s) => !s.isLocal);
-
-  const localSkillsText = localSkills
-    .map((s) => `  ${s.type.padEnd(25)} ${s.description}`)
-    .join('\n');
-
-  const packageSkillsText = packageSkills
-    .map((s) => `  ${s.type.padEnd(25)} ${s.description} (interactive)`)
-    .join('\n');
-
-  const exampleSkill = localSkills[0]?.type ?? 'install';
-
   return `
-Usage: clix <skill> [options]
+Usage: clix <command> [options]
 
-Available skills (command-line mode):
-${localSkillsText}
-
-Additional skills (chat mode only):
-${packageSkillsText}
+Supported commands:
+  install                    Autonomous SDK integration with step-by-step preparation
+  doctor                     Check Clix SDK integration status
 
 Options:
-  --platform      Target platform (ios, android, react-native, flutter)
-
-Note: Interactive skills require step-by-step guidance.
-      Run 'clix' to start chat mode and use /<skill> commands.
+  --platform                 Target platform (ios, android, react-native, flutter)
+  --start-task               Development-only install task override
 
 Examples:
-  $ clix ${exampleSkill}
+  $ clix install
+  $ clix install --platform ios
   $ clix doctor
 `;
 }
 
-/**
- * Run install preparation UI and return the context.
- */
 async function runInstallPreparation(
   projectPath: string,
   startTaskId?: InstallTaskId,
@@ -91,36 +87,24 @@ async function runInstallPreparation(
   });
 }
 
+async function ensureSkillsReady(agent: AgentInfo, commandName: string): Promise<void> {
+  const ready = await ensureVercelSkillsInstalled(agent, commandName, process.cwd());
+  if (!ready) {
+    throw new Error('Required Vercel Skills are not installed.');
+  }
+}
+
 export async function skillCommand(options: SkillCommandOptions): Promise<void> {
   const { action, platform, startTask } = options;
 
-  if (!action || !isValidSkillType(action)) {
+  if (!action || !isCommandSkillType(action)) {
     console.log(generateHelpText());
     return;
   }
 
-  // Check if skill supports command-line execution
-  const skillInfo = getSkillInfo(action as SkillType);
-  if (!skillInfo) {
-    console.error(`Skill not found: ${action}`);
-    process.exit(1);
-  }
-
-  if (!skillInfo.isLocal) {
-    console.error(`Skill '${action}' requires interactive mode.`);
-    console.error(`Please run 'clix' to start chat mode and use /${action}`);
-    process.exit(1);
-  }
-
-  // Check if skill uses direct implementation (not agent-based)
-  if (skillInfo.usesAgent === false) {
-    console.error(`Skill '${action}' uses direct implementation.`);
-    console.error(`Please run 'clix ${action}' directly instead.`);
-    process.exit(1);
-  }
-
-  const skillType = action as SkillType;
+  const skillType: CommandSkillType = action;
   const projectPath = process.cwd();
+  const commandInfo = COMMAND_SKILLS[skillType];
   let startTaskId: InstallTaskId | undefined;
 
   if (startTask) {
@@ -145,18 +129,19 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     startTaskId = startTask as InstallTaskId;
   }
 
-  // For install skill, run preparation first
   let preparationContext: PreparationContext | undefined;
   if (skillType === 'install') {
     const context = await runInstallPreparation(projectPath, startTaskId);
     if (!context) {
-      // User cancelled or config missing
       return;
     }
     preparationContext = context;
   }
 
-  // Create execute function that wraps executeSkill
+  async function prepare(agent: AgentInfo): Promise<void> {
+    await ensureSkillsReady(agent, `clix ${skillType}`);
+  }
+
   async function* executeCommand(executor: AgentExecutor): AsyncGenerator<AgentMessage> {
     yield* executeSkill(skillType, executor, {
       projectPath,
@@ -166,16 +151,19 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     });
   }
 
-  // Wrapper to match AgentExecutionUI interface (ignores agent param)
-  async function* execute(executor: AgentExecutor, _agent: unknown): AsyncGenerator<AgentMessage> {
+  async function* execute(
+    executor: AgentExecutor,
+    _agent: AgentInfo,
+  ): AsyncGenerator<AgentMessage> {
     yield* executeCommand(executor);
   }
 
   return new Promise((resolve) => {
     const { unmount } = safeRender(
       <AgentExecutionUI
-        title={skillInfo.name}
-        description={skillInfo.description}
+        title={commandInfo.title}
+        description={commandInfo.description}
+        prepare={prepare}
         execute={execute}
         onComplete={(result) => {
           unmount();
@@ -187,8 +175,4 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
       />,
     );
   });
-}
-
-function isValidSkillType(action: string): action is SkillType {
-  return getAvailableSkillTypes().includes(action);
 }

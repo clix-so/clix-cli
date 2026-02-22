@@ -4,10 +4,6 @@ export interface ExecuteOptions {
   workingDirectory?: string;
   allowedTools?: string[];
   signal?: AbortSignal;
-  /** One-shot mode: disable session persistence and resumption */
-  oneShot?: boolean;
-  /** Interactive mode: enable user prompts and approval dialogs */
-  interactive?: boolean;
 }
 
 export type AgentTextStreamMode = 'append' | 'replace';
@@ -24,39 +20,10 @@ export interface AgentMessage {
   metadata?: Record<string, unknown>;
 }
 
-export interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export interface CompactionResult {
-  compacted: boolean;
-  originalLength: number;
-  newLength: number;
-  messagesCompacted: number;
-  messagesPreserved: number;
-}
-
 export interface AgentExecutor {
   name: string;
   execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage>;
   isAvailable(): Promise<boolean>;
-
-  clearHistory(): void;
-  getHistory(): ConversationMessage[];
-  setHistory(history: ConversationMessage[]): void;
-
-  /** Get underlying CLI/session identifier if supported. */
-  getSessionId(): string | null;
-  /** Set underlying CLI/session identifier if supported. */
-  setSessionId(sessionId: string | null): void;
-
-  /** Check if history needs compaction */
-  needsCompaction(): boolean;
-  /** Compact history by summarizing older messages */
-  compactHistory(force?: boolean): Promise<CompactionResult>;
-  /** Reset session without clearing history (for session conflict recovery) */
-  resetSession(): void;
 }
 
 export async function createExecutor(agent: AgentInfo): Promise<AgentExecutor> {

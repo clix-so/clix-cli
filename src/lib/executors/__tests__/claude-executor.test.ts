@@ -40,58 +40,18 @@ describe('ClaudeExecutor', () => {
   describe('buildArgs', () => {
     test('should enable bypass permission mode and dangerous skip permissions', () => {
       // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
-      const args = (executor as any).buildArgs('test prompt', { oneShot: true });
+      const args = (executor as any).buildArgs('test prompt');
 
       expect(args).toContain('--allow-dangerously-skip-permissions');
       expect(args).toContain('--permission-mode');
       expect(args).toContain('bypassPermissions');
     });
 
-    test('should include no-session-persistence in one-shot mode', () => {
+    test('should always include no-session-persistence', () => {
       // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
-      const args = (executor as any).buildArgs('test prompt', { oneShot: true });
+      const args = (executor as any).buildArgs('test prompt');
 
       expect(args).toContain('--no-session-persistence');
-    });
-
-    test('should include resume flag in chat mode when session exists', () => {
-      executor.setSessionId('session-123');
-      // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
-      const args = (executor as any).buildArgs('test prompt', { oneShot: false });
-
-      expect(args).toContain('--resume');
-      expect(args).toContain('session-123');
-      expect(args).not.toContain('--no-session-persistence');
-    });
-  });
-});
-
-describe('ClaudeExecutor session management', () => {
-  describe('session ID preservation on abort', () => {
-    test('should preserve session ID when execution is aborted', async () => {
-      const executor = new ClaudeExecutor();
-      const testSessionId = 'test-session-123';
-
-      // Set up executor with a session ID (simulating a previous execution)
-      executor.setSessionId(testSessionId);
-
-      // Verify session ID is set
-      expect(executor.getSessionId()).toBe(testSessionId);
-
-      // Create an already-aborted AbortController
-      const abortController = new AbortController();
-      abortController.abort();
-
-      // Execute with aborted signal
-      const messages: unknown[] = [];
-      for await (const message of executor.execute('test prompt', {
-        signal: abortController.signal,
-      })) {
-        messages.push(message);
-      }
-
-      // Session ID should be preserved after abort (not reset to null)
-      expect(executor.getSessionId()).toBe(testSessionId);
     });
   });
 });

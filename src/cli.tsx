@@ -1,13 +1,11 @@
 import meow from 'meow';
 import { agentCommand } from './commands/agent';
-import { chatCommand } from './commands/chat';
-import { debugCommand } from './commands/debug';
+import { doctorCommand } from './commands/doctor';
+import { installCommand } from './commands/install';
 import { installMCPCommand } from './commands/install-mcp';
 import { loginCommand } from './commands/login';
 import { logoutCommand } from './commands/logout';
-import { resumeCommand } from './commands/resume';
 import { setupCommand } from './commands/setup';
-import { skillCommand } from './commands/skill/index';
 import { uninstallCommand } from './commands/uninstall';
 import { updateCommand } from './commands/update';
 import { whoamiCommand } from './commands/whoami';
@@ -17,35 +15,25 @@ import {
   isValidMCPAgent,
   type MCPTargetAgent,
 } from './lib/services/mcp-install-service';
-import { getAvailableSkills, getAvailableSkillTypes } from './lib/skills';
 
 /**
- * Generate help text dynamically based on available skills.
+ * Generate CLI help text.
  */
 function generateHelpText(): string {
-  const skills = getAvailableSkills();
-  const localSkills = skills.filter((s) => s.isLocal);
-
-  // Generate local skill commands (command-line mode only)
-  const localSkillCommands = localSkills
-    .map((s) => `    ${s.type.padEnd(17)} ${s.description}`)
-    .join('\n');
-
   return `
   Usage
     $ clix [command] [options]
 
   Commands
-    (default)         Start interactive chat with AI agent
+    (default)         Show this help message
     help              Show this help message
     login             Log in to Clix via browser
     logout            Log out from Clix
     whoami            Show current logged-in user
     agent [name]      List or switch AI agents
-${localSkillCommands}
-    debug <problem>   Interactive debugging assistant
+    install           Install Clix SDK (step-by-step setup + one-shot execution)
+    doctor            Check Clix SDK integration status
     install-mcp [agent]  Install Clix MCP Server
-    resume            Resume a previous session
     uninstall         Uninstall Clix CLI from your system
     update            Check for available updates
 
@@ -62,10 +50,8 @@ ${localSkillCommands}
     $ clix whoami
     $ clix agent
     $ clix agent claude
-    $ clix resume
     $ clix install
     $ clix doctor
-    $ clix debug "Push notifications not working on iOS"
     $ clix install-mcp
     $ clix install-mcp claude
 `;
@@ -81,10 +67,6 @@ const cli = meow(generateHelpText(), {
     },
     startTask: {
       type: 'string',
-    },
-    interactive: {
-      type: 'boolean',
-      default: false,
     },
     keepConfig: {
       type: 'boolean',
@@ -108,9 +90,6 @@ const cli = meow(generateHelpText(), {
 
 async function main() {
   const command = cli.input[0];
-
-  // Get available skill types dynamically
-  const skillTypes = getAvailableSkillTypes();
 
   try {
     // Check if first-run setup is needed
@@ -141,14 +120,26 @@ async function main() {
         break;
       }
 
-      case 'debug': {
-        const problem = cli.input.slice(1).join(' ');
-        await debugCommand({ problem });
+      case 'install': {
+        const platform = cli.flags.platform as
+          | 'ios'
+          | 'android'
+          | 'react-native'
+          | 'flutter'
+          | undefined;
+        const startTask = cli.flags.startTask;
+        await installCommand({ platform, startTask });
         break;
       }
 
-      case 'resume': {
-        await resumeCommand();
+      case 'doctor': {
+        const platform = cli.flags.platform as
+          | 'ios'
+          | 'android'
+          | 'react-native'
+          | 'flutter'
+          | undefined;
+        await doctorCommand({ platform });
         break;
       }
 
@@ -193,24 +184,14 @@ async function main() {
       }
 
       default:
-        // Check if command is a skill type (dynamically)
-        if (skillTypes.includes(command ?? '')) {
-          const platform = cli.flags.platform as
-            | 'ios'
-            | 'android'
-            | 'react-native'
-            | 'flutter'
-            | undefined;
-          const startTask = cli.flags.startTask;
-          await skillCommand({ action: command, platform, startTask });
-        } else if (command) {
+        if (command) {
           // Unknown command - show error message
           console.error(`Unknown command: ${command}`);
           console.error(`Run 'clix help' to see available commands.`);
           process.exit(1);
         } else {
-          // No command provided - start interactive chat TUI
-          await chatCommand();
+          // No command provided - show command help
+          cli.showHelp();
         }
         break;
     }

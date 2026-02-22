@@ -3,7 +3,11 @@
  * Text-based executor for GitHub Copilot CLI
  */
 import type { AgentMessage, ExecuteOptions } from '../executor';
-import { BaseExecutor as BaseExecutorClass, type StreamParserType } from './base-executor';
+import {
+  BaseExecutor as BaseExecutorClass,
+  type StreamContext,
+  type StreamParserType,
+} from './base-executor';
 
 /**
  * Executor for GitHub Copilot CLI.
@@ -12,7 +16,6 @@ import { BaseExecutor as BaseExecutorClass, type StreamParserType } from './base
  * Features:
  * - Non-interactive mode with -p flag
  * - Silent mode to filter out statistics
- * - Session resumption with --resume flag
  * - Tool auto-approval with --allow-all-tools
  */
 export class CopilotExecutor extends BaseExecutorClass {
@@ -29,7 +32,7 @@ export class CopilotExecutor extends BaseExecutorClass {
     return 'text';
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
     // Start with non-interactive mode
     const args = ['-p', prompt];
 
@@ -38,12 +41,6 @@ export class CopilotExecutor extends BaseExecutorClass {
 
     // Auto-approve all tools (required for non-interactive mode)
     args.push('--allow-all-tools');
-
-    // Session resumption for chat mode
-    // Use --continue to resume the most recent session automatically
-    if (!options?.oneShot) {
-      args.push('--continue');
-    }
 
     // Debug mode
     if (this.isDebugMode()) {
@@ -55,7 +52,7 @@ export class CopilotExecutor extends BaseExecutorClass {
 
   protected processStreamData(
     data: unknown,
-    context: { hasYieldedText: boolean; assistantContent: string; count: number },
+    context: StreamContext,
   ): AgentMessage | AgentMessage[] | null {
     const line = String(data);
 
@@ -103,19 +100,6 @@ export class CopilotExecutor extends BaseExecutorClass {
           }
         : undefined,
     };
-  }
-
-  protected override extractSessionId(_line: string): string | null {
-    // Copilot CLI in silent mode doesn't output session IDs in stdout
-    // Session management is handled internally by the CLI
-    // We could potentially parse from logs or config, but for now
-    // we rely on --resume without explicit session ID
-    return null;
-  }
-
-  protected override onCompactionComplete(): void {
-    // After compaction, reset session so next execution starts fresh
-    this.sessionId = null;
   }
 
   protected override getInterruptedSuffix(): string {

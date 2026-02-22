@@ -34,11 +34,6 @@ export class CursorExecutor extends BaseExecutor {
     // 프롬프트 추가
     args.push(prompt);
 
-    // 세션 재개 (chat mode)
-    if (!options?.oneShot && this.sessionId) {
-      args.push('--resume', this.sessionId);
-    }
-
     // Force mode: 자동 승인
     args.push('-f');
 
@@ -51,15 +46,6 @@ export class CursorExecutor extends BaseExecutor {
     }
 
     return args;
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as CursorCLIMessage;
-    return msg.session_id ?? null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
   }
 
   private extractTextDelta(textContent: string, msg: CursorCLIMessage): AgentMessage | null {

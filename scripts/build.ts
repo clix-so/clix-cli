@@ -5,11 +5,11 @@ import { mkdir, readFile, rm } from 'node:fs/promises';
 const DIST_DIR = './dist';
 
 /**
- * Embed skills from @clix-so/clix-agent-skills package.
- * This must run before building to ensure skills are available in the binary.
+ * Embed local command prompts.
+ * This must run before building to keep binary builds self-contained.
  */
 async function embedSkills() {
-  console.log('Embedding skills from @clix-so/clix-agent-skills...');
+  console.log('Embedding local command prompts...');
   const proc = Bun.spawn(['bun', 'scripts/embed-skills.ts'], {
     stdout: 'inherit',
     stderr: 'inherit',
@@ -23,7 +23,7 @@ async function embedSkills() {
 async function build() {
   console.log('Building clix-cli...');
 
-  // Embed skills before building (required for binary to work standalone)
+  // Embed local command prompts before building (required for binary standalone use)
   await embedSkills();
   console.log('');
 
@@ -47,7 +47,6 @@ async function build() {
       // that need to be resolved at runtime from node_modules
       '@anthropic-ai/claude-agent-sdk',
       '@openai/codex-sdk',
-      // Note: @clix-so/clix-agent-skills is embedded at build time via embed-skills.ts
       // External optional dependencies that shouldn't be bundled
       'react-devtools-core',
       'ws',

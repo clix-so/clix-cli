@@ -19,40 +19,13 @@ export class CodexExecutor extends BaseExecutor {
     return 'jsonl';
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
     const baseArgs = [
       '--json',
       '--skip-git-repo-check',
       '--dangerously-bypass-approvals-and-sandbox',
     ];
-
-    // Codex CLI does not support log-level flags
-
-    // Session persistence: disable for one-shot, enable for chat
-    if (options?.oneShot) {
-      // One-shot mode: no session persistence
-      return ['exec', prompt, ...baseArgs];
-    }
-
-    // Chat mode: resume session if available
-    if (this.sessionId) {
-      return ['exec', 'resume', this.sessionId, prompt, ...baseArgs];
-    }
-
     return ['exec', prompt, ...baseArgs];
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as CodexCLIMessage;
-    // Extract thread_id from thread.started message
-    if (msg.type === 'thread.started' && msg.thread_id) {
-      return msg.thread_id;
-    }
-    return null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
   }
 
   protected processStreamData(

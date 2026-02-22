@@ -7,7 +7,6 @@ import { BaseExecutor, type StreamContext, type StreamParserType } from './base-
 import { extractCumulativeDelta } from './stream-delta';
 import type {
   GeminiCLIErrorEvent,
-  GeminiCLIInitEvent,
   GeminiCLIMessage,
   GeminiCLIMessageEvent,
   GeminiCLIResultEvent,
@@ -31,7 +30,7 @@ export class GeminiExecutor extends BaseExecutor {
     return 'jsonl';
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
     // Use positional argument for prompt (recommended by Gemini CLI)
     const args = [prompt, '-o', 'stream-json'];
 
@@ -43,28 +42,11 @@ export class GeminiExecutor extends BaseExecutor {
       args.push('-d');
     }
 
-    // Session persistence: resume session if available (not in one-shot mode)
-    if (!options?.oneShot && this.sessionId) {
-      args.push('-r', this.sessionId);
-    }
-
     // YOLO mode: auto-approve all tool calls (file edits, shell commands, etc.)
     // Similar to Claude's acceptEdits mode
     args.push('-y');
 
     return args;
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as GeminiCLIMessage;
-    if (msg.type === 'init') {
-      return (msg as GeminiCLIInitEvent).session_id ?? null;
-    }
-    return null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
   }
 
   override async *execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage> {

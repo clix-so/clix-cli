@@ -7,7 +7,7 @@ import { SUPPORTED_AGENTS } from '../../lib/agents';
 interface AgentSelectorProps {
   agents: AgentInfo[];
   onSelect: (agent: AgentInfo) => void;
-  // Optional props for controlled mode (used in ChatApp)
+  // Optional props for controlled mode.
   currentAgent?: AgentInfo | null;
   selectedIndex?: number;
   onCancel?: () => void;
@@ -68,7 +68,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
     );
   }
 
-  // Controlled mode (with border, used in ChatApp)
+  // Controlled mode with explicit navigation handlers.
   if (isControlled) {
     return (
       <Box
@@ -104,7 +104,7 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({
     );
   }
 
-  // Standalone mode (used in chat.tsx for initial selection)
+  // Standalone mode.
   return (
     <Box flexDirection="column" padding={1}>
       <Box marginBottom={1}>

@@ -8,7 +8,6 @@ import type {
   OpenCodeCLIErrorEvent,
   OpenCodeCLIMessage,
   OpenCodeCLIMessageEvent,
-  OpenCodeCLISessionEvent,
   OpenCodeCLITextEvent,
   OpenCodeCLIToolCallEvent,
   OpenCodeCLIToolResultEvent,
@@ -40,17 +39,8 @@ export class OpenCodeExecutor extends BaseExecutor {
     };
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
     const args = ['run', '--format', 'json'];
-
-    // 세션 관리
-    if (!options?.oneShot && this.sessionId) {
-      // 특정 세션 재개
-      args.push('-s', this.sessionId);
-    } else if (!options?.oneShot) {
-      // 마지막 세션 계속
-      args.push('-c');
-    }
 
     // 디버그 모드
     if (this.isDebugMode()) {
@@ -61,27 +51,6 @@ export class OpenCodeExecutor extends BaseExecutor {
     args.push(prompt);
 
     return args;
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as OpenCodeCLIMessage;
-
-    // sessionID 필드 직접 확인 (모든 메시지에 포함될 수 있음)
-    if (msg.sessionID) {
-      return msg.sessionID;
-    }
-
-    // 세션 시작 메시지 타입 확인
-    if (msg.type === 'session' || msg.type === 'start') {
-      return (msg as OpenCodeCLISessionEvent).sessionID ?? null;
-    }
-
-    return null;
-  }
-
-  protected override onCompactionComplete(): void {
-    // 히스토리 컴팩션 후 세션 리셋
-    this.sessionId = null;
   }
 
   protected processStreamData(
@@ -197,7 +166,6 @@ export class OpenCodeExecutor extends BaseExecutor {
     }
 
     // 완료 메시지는 base class에서 처리
-    // 세션 시작 메시지는 sessionID만 추출
 
     return null;
   }

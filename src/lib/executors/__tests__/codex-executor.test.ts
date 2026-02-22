@@ -40,7 +40,7 @@ describe('CodexExecutor', () => {
   describe('buildArgs', () => {
     test('should enable dangerous bypass flag by default', () => {
       // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
-      const args = (executor as any).buildArgs('test prompt', { oneShot: true });
+      const args = (executor as any).buildArgs('test prompt');
 
       expect(args).toContain('--dangerously-bypass-approvals-and-sandbox');
       expect(args).not.toContain('--sandbox');
