@@ -101,3 +101,11 @@ At completion, report:
 - commands executed
 - placeholders still requiring real values
 - hard blockers (if any)
+
+At the very end, always include a final status block in this exact shape:
+
+Final Result: SUCCESS | PARTIAL | FAILED
+- Summary: one concise sentence
+- Modified files: comma-separated list (or `none`)
+- Verification: passed | failed | not run
+- Remaining blockers: `none` or concrete blockers

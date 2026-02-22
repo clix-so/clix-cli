@@ -45,8 +45,7 @@ describe('CLI E2E Tests', () => {
 
       expect(result.stdout).toContain('--help');
       expect(result.stdout).toContain('--version');
-      expect(result.stdout).toContain('--platform');
-      expect(result.stdout).toContain('ios, android, react-native, flutter');
+      expect(result.stdout).not.toContain('--platform');
     });
 
     test('should show examples', async () => {

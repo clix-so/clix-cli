@@ -66,24 +66,22 @@ Shows help and exits.
 
 Lists available AI agents or switches the active agent.
 
-### `clix install [--platform <platform>] [--start-task <task>]`
+### `clix install [--start-task <task>]`
 
 Runs the install pipeline:
 
 1. Preparation UI (step-by-step)
 2. Interactive handoff to the selected agent CLI with the install prompt
 
-Supported platforms: `ios`, `android`, `react-native`, `flutter`.
-
 `--start-task` is development-only and requires `CLIX_DEV_ENABLE_TASK_OVERRIDE=1`.
 
-### `clix doctor [--platform <platform>]`
+### `clix doctor`
 
 Hands off to the selected agent CLI with the doctor prompt for SDK diagnostics.
 
-### `clix mcp [agent]`
+### `clix mcp`
 
-Hands off to `npx add-mcp` to install Clix MCP server (`clix-so/clix-mcp-server`).
+Hands off to `npx add-mcp @clix-so/clix-mcp-server@latest --name clix` to install Clix MCP server.
 
 ### `clix skills`
 

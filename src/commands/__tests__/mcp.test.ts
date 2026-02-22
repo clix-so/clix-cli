@@ -11,29 +11,8 @@ describe('mcpCommand', () => {
     runCommandHandoffMock.mockResolvedValue(0);
   });
 
-  test('hands off with mapped add-mcp agent when agent is provided', async () => {
-    await mcpCommand({ agent: 'codex' }, { runHandoff: runCommandHandoffMock });
-
-    expect(runCommandHandoffMock).toHaveBeenCalledTimes(1);
-    expect(runCommandHandoffMock).toHaveBeenCalledWith({
-      command: 'npx',
-      args: [
-        '-y',
-        'add-mcp',
-        'npx -y https://github.com/clix-so/clix-mcp-server',
-        '--name',
-        'clix-mcp-server',
-        '--global',
-        '--agent',
-        'codex',
-      ],
-      workingDirectory: process.cwd(),
-      displayName: 'add-mcp',
-    });
-  });
-
-  test('hands off without --agent when agent is omitted', async () => {
-    await mcpCommand({}, { runHandoff: runCommandHandoffMock });
+  test('hands off with fixed add-mcp arguments', async () => {
+    await mcpCommand({ runHandoff: runCommandHandoffMock });
 
     expect(runCommandHandoffMock).toHaveBeenCalledTimes(1);
     const invocation = runCommandHandoffMock.mock.calls[0]?.[0];
@@ -46,12 +25,10 @@ describe('mcpCommand', () => {
     expect(invocation.command).toBe('npx');
     expect(invocation.displayName).toBe('add-mcp');
     expect(invocation.args).toEqual([
-      '-y',
       'add-mcp',
-      'npx -y https://github.com/clix-so/clix-mcp-server',
+      '@clix-so/clix-mcp-server@latest',
       '--name',
-      'clix-mcp-server',
-      '--global',
+      'clix',
     ]);
   });
 });

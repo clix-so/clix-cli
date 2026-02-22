@@ -31,19 +31,20 @@ describe('getSkillPrompt', () => {
 
     expect(prompt).toContain('Project path: /tmp/project');
     expect(prompt).toContain('analyzing a mobile project for Clix SDK');
+    expect(prompt).toContain('Final Result: HEALTHY | ACTION_NEEDED | FAILED');
   });
 
   test('builds install prompt with integration goal', async () => {
     const prompt = await getSkillPrompt('install', {
       projectPath: '/tmp/project',
-      platform: 'ios',
     });
 
     expect(prompt).toContain('Project path: /tmp/project');
-    expect(prompt).toContain('Target platform: ios');
+    expect(prompt).toContain('Target platform: auto-detect');
     expect(prompt).toContain(
       'Execution goal: Complete SDK integration workflow using the pre-configured setup context.',
     );
+    expect(prompt).toContain('Final Result: SUCCESS | PARTIAL | FAILED');
     expect(prompt).not.toContain('non-interactive one-shot execution');
     expect(prompt).not.toContain('Install phase:');
     expect(prompt).not.toContain('project-build');

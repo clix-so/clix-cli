@@ -36,7 +36,7 @@ Show help and exit.
 ### `clix agent [name]`
 List/switch active AI agent.
 
-### `clix install [--platform <ios|android|react-native|flutter>] [--start-task <task>]`
+### `clix install [--start-task <task>]`
 Runs install preparation UI, then hands off to agent CLI interactive execution.
 
 Install preparation task order:
@@ -46,11 +46,11 @@ Install preparation task order:
 4. iOS Entitlements
 5. Notification Service Extension
 
-### `clix doctor [--platform <...>]`
+### `clix doctor`
 Runs diagnostics via interactive handoff to agent CLI.
 
-### `clix mcp [agent]`
-Hands off to `npx add-mcp` to install Clix MCP server.
+### `clix mcp`
+Hands off to `npx add-mcp @clix-so/clix-mcp-server@latest --name clix` to install Clix MCP server.
 
 ### `clix skills`
 Hands off to `npx skills add clix-so/skills` and transfers CLI control.

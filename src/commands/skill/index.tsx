@@ -13,7 +13,6 @@ import type { PreparationContext } from './preparation';
 
 interface SkillCommandOptions {
   action?: string;
-  platform?: 'ios' | 'android' | 'react-native' | 'flutter';
   startTask?: string;
 }
 
@@ -32,12 +31,10 @@ Supported commands:
   doctor                     Check Clix SDK integration status
 
 Options:
-  --platform                 Target platform (ios, android, react-native, flutter)
   --start-task               Development-only install task override
 
 Examples:
   $ clix install
-  $ clix install --platform ios
   $ clix doctor
 `;
 }
@@ -86,7 +83,7 @@ async function loadCommandAgent(): Promise<AgentInfo | null> {
 }
 
 export async function skillCommand(options: SkillCommandOptions): Promise<void> {
-  const { action, platform, startTask } = options;
+  const { action, startTask } = options;
 
   if (!action || !isCommandSkillType(action)) {
     console.log(generateHelpText());
@@ -137,7 +134,6 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
 
   const prompt = await getSkillPrompt(skillType, {
     projectPath,
-    platform,
     preparationContext,
   });
 

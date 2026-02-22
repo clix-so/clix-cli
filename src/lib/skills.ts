@@ -9,7 +9,6 @@ export type SkillType = string;
 
 export interface SkillOptions {
   projectPath?: string;
-  platform?: 'ios' | 'android' | 'react-native' | 'flutter';
   signal?: AbortSignal;
   oneShot?: boolean;
   preparationContext?: PreparationContext;
@@ -250,7 +249,7 @@ function getInstallPrompt(options?: SkillOptions): string {
               ? 'android'
               : undefined
           : undefined;
-  const platform = options?.platform ?? inferredPlatform ?? 'auto-detect';
+  const platform = inferredPlatform ?? 'auto-detect';
 
   let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n`;
   if (context) {

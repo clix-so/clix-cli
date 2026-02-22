@@ -125,6 +125,14 @@ At completion, report:
 - commands executed
 - placeholders still requiring real values
 - hard blockers (if any)
+
+At the very end, always include a final status block in this exact shape:
+
+Final Result: SUCCESS | PARTIAL | FAILED
+- Summary: one concise sentence
+- Modified files: comma-separated list (or \`none\`)
+- Verification: passed | failed | not run
+- Remaining blockers: \`none\` or concrete blockers
 `,
   'local-doctor': `# Clix SDK Doctor
 
@@ -225,6 +233,14 @@ Analyze the project and output a diagnostic JSON report:
 - Firebase project ID mismatch between platforms
 
 Output the JSON diagnostic, then provide a brief summary with actionable recommendations.
+
+At the very end, always include a final status block in this exact shape:
+
+Final Result: HEALTHY | ACTION_NEEDED | FAILED
+- Summary: one concise sentence
+- Critical issues: number
+- Warnings: number
+- Recommended next action: single highest-priority action
 
 Use \`/install\` to run interactive setup for missing Firebase credentials.
 `,

@@ -98,4 +98,12 @@ Analyze the project and output a diagnostic JSON report:
 
 Output the JSON diagnostic, then provide a brief summary with actionable recommendations.
 
+At the very end, always include a final status block in this exact shape:
+
+Final Result: HEALTHY | ACTION_NEEDED | FAILED
+- Summary: one concise sentence
+- Critical issues: number
+- Warnings: number
+- Recommended next action: single highest-priority action
+
 Use `/install` to run interactive setup for missing Firebase credentials.

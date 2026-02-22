@@ -11,11 +11,6 @@ import { uninstallCommand } from './commands/uninstall';
 import { updateCommand } from './commands/update';
 import { whoamiCommand } from './commands/whoami';
 import { checkFirstRun, shouldRunSetup } from './lib/services/first-run-service';
-import {
-  getValidMCPAgents,
-  isValidMCPAgent,
-  type MCPTargetAgent,
-} from './lib/services/mcp-install-service';
 
 /**
  * Generate CLI help text.
@@ -34,7 +29,7 @@ function generateHelpText(): string {
     agent [name]      List or switch AI agents
     install           Install Clix SDK (step-by-step setup + interactive agent handoff)
     doctor            Check Clix SDK integration status
-    mcp [agent]       Install Clix MCP Server
+    mcp               Install Clix MCP Server
     skills            Install Clix skill package via skills CLI
     uninstall         Uninstall Clix CLI from your system
     update            Check for available updates
@@ -42,7 +37,6 @@ function generateHelpText(): string {
   Options
     --help            Show this help message
     --version         Show version number
-    --platform <val>  Target platform (ios, android, react-native, flutter)
 
   Examples
     $ clix
@@ -55,7 +49,6 @@ function generateHelpText(): string {
     $ clix install
     $ clix doctor
     $ clix mcp
-    $ clix mcp claude
     $ clix skills
 `;
 }
@@ -65,9 +58,6 @@ const cli = meow(generateHelpText(), {
   // Use build-time embedded version if available (for binary builds)
   ...(process.env.CLIX_VERSION && { version: process.env.CLIX_VERSION }),
   flags: {
-    platform: {
-      type: 'string',
-    },
     startTask: {
       type: 'string',
     },
@@ -124,40 +114,23 @@ async function main() {
       }
 
       case 'install': {
-        const platform = cli.flags.platform as
-          | 'ios'
-          | 'android'
-          | 'react-native'
-          | 'flutter'
-          | undefined;
         const startTask = cli.flags.startTask;
-        await installCommand({ platform, startTask });
+        await installCommand({ startTask });
         break;
       }
 
       case 'doctor': {
-        const platform = cli.flags.platform as
-          | 'ios'
-          | 'android'
-          | 'react-native'
-          | 'flutter'
-          | undefined;
-        await doctorCommand({ platform });
+        await doctorCommand();
         break;
       }
 
-      case 'mcp': {
-        const agentInput = cli.input[1];
-        const validAgents = getValidMCPAgents();
-        if (agentInput && !isValidMCPAgent(agentInput)) {
-          console.error(`Unknown agent: ${agentInput}`);
-          console.error(`Supported agents: ${validAgents.join(', ')}`);
+      case 'mcp':
+        if (cli.input[1]) {
+          console.error('mcp command does not accept positional arguments.');
           process.exit(1);
         }
-        const agent = agentInput as MCPTargetAgent | undefined;
-        await mcpCommand({ agent });
+        await mcpCommand();
         break;
-      }
 
       case 'skills':
         await skillsCommand();

@@ -1,45 +1,18 @@
 import { runCommandHandoff } from '../lib/services/agent-handoff';
-import { getMCPAgentConfigs, type MCPTargetAgent } from '../lib/services/mcp-install-service';
 
 const ADD_MCP_PACKAGE = 'add-mcp';
-const CLIX_MCP_SERVER_REPO = 'https://github.com/clix-so/clix-mcp-server';
-const MCP_SERVER_NAME = 'clix-mcp-server';
-
-interface MCPCommandOptions {
-  agent?: MCPTargetAgent;
-}
+const CLIX_MCP_SERVER_PACKAGE = '@clix-so/clix-mcp-server@latest';
+const MCP_SERVER_NAME = 'clix';
 
 interface MCPCommandDependencies {
   runHandoff?: typeof runCommandHandoff;
 }
 
-function buildMcpHandoffArgs(agent?: MCPTargetAgent): string[] {
-  const args = [
-    '-y',
-    ADD_MCP_PACKAGE,
-    `npx -y ${CLIX_MCP_SERVER_REPO}`,
-    '--name',
-    MCP_SERVER_NAME,
-    '--global',
-  ];
-
-  if (!agent) {
-    return args;
-  }
-
-  const targetAgentConfig = getMCPAgentConfigs().find((config) => config.name === agent);
-  if (!targetAgentConfig) {
-    throw new Error(`Unknown agent: ${agent}`);
-  }
-
-  args.push('--agent', targetAgentConfig.addMcpAgentId);
-  return args;
+function buildMcpHandoffArgs(): string[] {
+  return [ADD_MCP_PACKAGE, CLIX_MCP_SERVER_PACKAGE, '--name', MCP_SERVER_NAME];
 }
 
-export async function mcpCommand(
-  options: MCPCommandOptions,
-  dependencies: MCPCommandDependencies = {},
-): Promise<void> {
+export async function mcpCommand(dependencies: MCPCommandDependencies = {}): Promise<void> {
   const runHandoff = dependencies.runHandoff ?? runCommandHandoff;
 
   console.log('Adding Clix MCP Server...');
@@ -48,7 +21,7 @@ export async function mcpCommand(
   try {
     exitCode = await runHandoff({
       command: 'npx',
-      args: buildMcpHandoffArgs(options.agent),
+      args: buildMcpHandoffArgs(),
       workingDirectory: process.cwd(),
       displayName: 'add-mcp',
     });
