@@ -7,7 +7,7 @@ Command-mode AI assistant for Clix SDK installation and diagnostics.
 - Command-only workflow (no interactive chat mode)
 - Multiple AI agents: Claude, Codex, Gemini, OpenCode, Cursor, GitHub Copilot
 - Step-based `install` preparation flow for Firebase/iOS push setup
-- One-shot prompt execution for `install` and `doctor`
+- Interactive agent handoff for `install` and `doctor`
 - Built-in MCP installer (`install-mcp`)
 
 ## Installation
@@ -41,15 +41,6 @@ brew install clix
 
 - Node.js 20+
 - At least one supported AI agent installed on your machine
-- Vercel Skills installed for your active agent
-
-Install Vercel Skills:
-
-```bash
-npx skills add vercel-labs/agent-skills --agent codex
-```
-
-Replace `codex` with your agent id (`claude-code`, `gemini-cli`, `opencode`, `cursor`, `github-copilot`, ...).
 
 ## Quick Start
 
@@ -79,7 +70,7 @@ Lists available AI agents or switches the active agent.
 Runs the install pipeline:
 
 1. Preparation UI (step-by-step)
-2. One-shot agent execution for SDK integration
+2. Interactive handoff to the selected agent CLI with the install prompt
 
 Supported platforms: `ios`, `android`, `react-native`, `flutter`.
 
@@ -87,7 +78,7 @@ Supported platforms: `ios`, `android`, `react-native`, `flutter`.
 
 ### `clix doctor [--platform <platform>]`
 
-Runs one-shot diagnostics and reports SDK integration status.
+Hands off to the selected agent CLI with the doctor prompt for SDK diagnostics.
 
 ### `clix install-mcp [agent]`
 
@@ -120,4 +111,3 @@ Runtime installation executes only after required preparation steps are complete
 ## Notes
 
 - `project-build` is internal-only and not exposed as a user command.
-- If Vercel Skills is missing for the selected agent, Clix shows install guidance, opens the Skills repository page, and asks you to retry after installation.

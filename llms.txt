@@ -10,31 +10,23 @@ Primary commands:
 - `clix install`
 - `clix doctor`
 
-Each command triggers a one-shot prompt execution against the selected AI agent.
+`clix install` hands off to the selected AI agent CLI in interactive mode with a prefilled prompt.
+`clix doctor` also hands off to the selected AI agent CLI with a doctor prompt.
 
 ## Execution Model
 
 1. CLI resolves command and validates flags.
-2. `AgentExecutionUI` selects configured agent in command mode.
-3. Clix verifies Vercel Skills availability for that agent.
-4. Clix executes a single prompt (`oneShot: true`) through the agent executor.
+2. For `install`, Clix runs install preparation UI first.
+3. Clix selects configured agent in command mode.
+4. Clix launches agent CLI directly and hands off control with command prompt (`install` or `doctor`).
 
 No chat wrapping, slash command flow, or interactive skill mode is required.
 
 ## Skills Policy
 
 - Legacy package-based skill integration is removed from runtime behavior.
-- Vercel Skills (`vercel-labs/skills`) is the expected skills mechanism.
 - Clix only supports local command prompts (`install`, `doctor`) for execution.
 - `project-build` is internal-only and not exposed as a CLI command.
-
-Install Vercel Skills example:
-
-```bash
-npx skills add vercel-labs/agent-skills --agent codex
-```
-
-Use agent-specific ids (`claude-code`, `gemini-cli`, `opencode`, `cursor`, `github-copilot`, ...).
 
 ## Commands
 
@@ -45,7 +37,7 @@ Show help and exit.
 List/switch active AI agent.
 
 ### `clix install [--platform <ios|android|react-native|flutter>] [--start-task <task>]`
-Runs install preparation UI, then one-shot SDK integration execution.
+Runs install preparation UI, then hands off to agent CLI interactive execution.
 
 Install preparation task order:
 1. Firebase Configuration Files
@@ -55,7 +47,7 @@ Install preparation task order:
 5. Notification Service Extension
 
 ### `clix doctor [--platform <...>]`
-Runs one-shot diagnostics for SDK integration status.
+Runs diagnostics via interactive handoff to agent CLI.
 
 ### `clix install-mcp [agent]`
 Installs Clix MCP server for target agent.
@@ -73,13 +65,12 @@ Authentication and lifecycle commands.
 - Doctor command wrapper: `src/commands/doctor.tsx`
 - Command prompt executor for install/doctor: `src/commands/skill/index.tsx`
 - Prompt composition: `src/lib/skills.ts`
-- Vercel Skills checks: `src/lib/services/vercel-skills.ts`
-- Command execution UI: `src/ui/AgentExecutionUI.tsx`
+- Agent handoff service: `src/lib/services/agent-handoff.ts`
 - Install preparation UI: `src/ui/components/InstallPreparationUI.tsx`
 
 ## Behavioral Guarantees
 
 - Command mode only.
-- One-shot execution for agent-triggered commands.
+- Interactive handoff for install and doctor.
 - Install runtime task success is based on actual execution results, not stubs.
 - Firebase service account and config mismatch is surfaced as mismatch (not completed).

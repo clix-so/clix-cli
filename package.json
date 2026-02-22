@@ -58,7 +58,6 @@
     "ink-text-input": "^6.0.0",
     "keychain": "^1.5.0",
     "meow": "^14.0.0",
-    "open": "^11.0.0",
     "picocolors": "^1.1.1",
     "plist": "^3.1.0",
     "react": "^19.2.3",
