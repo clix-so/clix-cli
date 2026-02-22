@@ -299,7 +299,7 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
         marginY={1}
       >
         <Box marginBottom={1}>
-          <Text bold>Create APNS Key with Apple Account</Text>
+          <Text bold>Choose APNS Key Creation Method</Text>
         </Box>
         <Box marginBottom={1}>
           <Text dimColor>

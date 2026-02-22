@@ -341,19 +341,16 @@ export const PushDetectionTask: React.FC<{
 
 function KeySourcePhase({
   onHasKey,
-  onNoKey,
-  onAppleLogin,
+  onCreateKey,
   onCancel,
 }: {
   onHasKey: () => void;
-  onNoKey: () => void;
-  onAppleLogin: () => void;
+  onCreateKey: () => void;
   onCancel: () => void;
 }): React.ReactElement {
   const items = [
     { label: 'Yes, I have an APNS key (.p8 file)', value: 'has_key' },
-    { label: 'Create with Apple Account (auto)', value: 'apple_login' },
-    { label: 'Create manually in browser', value: 'no_key' },
+    { label: 'No, I need to create an APNS key', value: 'create_key' },
     { label: 'Cancel', value: 'cancel' },
   ];
 
@@ -362,11 +359,8 @@ function KeySourcePhase({
       case 'has_key':
         onHasKey();
         break;
-      case 'apple_login':
-        onAppleLogin();
-        break;
-      case 'no_key':
-        onNoKey();
+      case 'create_key':
+        onCreateKey();
         break;
       case 'cancel':
         onCancel();
@@ -806,8 +800,7 @@ export const ApnsKeyAcquisitionTask: React.FC<{
     return (
       <KeySourcePhase
         onHasKey={() => setPhase('p8_input')}
-        onNoKey={() => setPhase('apple_guide')}
-        onAppleLogin={() => setPhase('apple_login')}
+        onCreateKey={() => setPhase('apple_login')}
         onCancel={onCancel}
       />
     );

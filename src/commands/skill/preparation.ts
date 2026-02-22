@@ -200,6 +200,54 @@ export async function ensureProjectType(
   return { config: updatedConfig, projectType };
 }
 
+async function ensureProjectPublicKey(
+  config: ProjectConfig,
+  projectPath: string,
+): Promise<ProjectConfig> {
+  const configuredPublicApiKey = config.project.public_api_key ?? config.project.publicKey;
+  if (config.project.public_api_key && !config.project.publicKey && configuredPublicApiKey) {
+    return config;
+  }
+
+  const manager = getProjectConfigManager(projectPath);
+
+  if (configuredPublicApiKey) {
+    const normalizedConfig: ProjectConfig = {
+      ...config,
+      project: {
+        id: config.project.id,
+        name: config.project.name,
+        public_api_key: configuredPublicApiKey,
+      },
+    };
+    await manager.save(normalizedConfig);
+    return normalizedConfig;
+  }
+
+  try {
+    const project = await getInternalApiClient().getProject(config.project.id);
+    const projectPublicKey = project.public_api_key ?? project.public_key;
+
+    if (!projectPublicKey) {
+      return config;
+    }
+
+    const updatedConfig: ProjectConfig = {
+      ...config,
+      project: {
+        id: config.project.id,
+        name: config.project.name,
+        public_api_key: projectPublicKey,
+      },
+    };
+
+    await manager.save(updatedConfig);
+    return updatedConfig;
+  } catch {
+    return config;
+  }
+}
+
 function getFirebaseProjectIdsFromDetection(detection: FirebaseDetectionResult): string[] {
   const detectedProjectIds: string[] = [];
 
@@ -552,7 +600,11 @@ export async function gatherPreparationContext(
   const config = linkStatus.config;
 
   // Step 2: Ensure project type is detected
-  const { config: updatedConfig, projectType } = await ensureProjectType(config, projectPath);
+  const { config: configWithProjectType, projectType } = await ensureProjectType(
+    config,
+    projectPath,
+  );
+  const updatedConfig = await ensureProjectPublicKey(configWithProjectType, projectPath);
 
   // Step 3: Check Firebase status
   const firebase = await checkFirebaseStatus(

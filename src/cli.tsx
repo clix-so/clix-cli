@@ -2,10 +2,11 @@ import meow from 'meow';
 import { agentCommand } from './commands/agent';
 import { doctorCommand } from './commands/doctor';
 import { installCommand } from './commands/install';
-import { installMCPCommand } from './commands/install-mcp';
 import { loginCommand } from './commands/login';
 import { logoutCommand } from './commands/logout';
+import { mcpCommand } from './commands/mcp';
 import { setupCommand } from './commands/setup';
+import { skillsCommand } from './commands/skills';
 import { uninstallCommand } from './commands/uninstall';
 import { updateCommand } from './commands/update';
 import { whoamiCommand } from './commands/whoami';
@@ -31,9 +32,10 @@ function generateHelpText(): string {
     logout            Log out from Clix
     whoami            Show current logged-in user
     agent [name]      List or switch AI agents
-    install           Install Clix SDK (step-by-step setup + one-shot execution)
+    install           Install Clix SDK (step-by-step setup + interactive agent handoff)
     doctor            Check Clix SDK integration status
-    install-mcp [agent]  Install Clix MCP Server
+    mcp [agent]       Install Clix MCP Server
+    skills            Install Clix skill package via skills CLI
     uninstall         Uninstall Clix CLI from your system
     update            Check for available updates
 
@@ -52,8 +54,9 @@ function generateHelpText(): string {
     $ clix agent claude
     $ clix install
     $ clix doctor
-    $ clix install-mcp
-    $ clix install-mcp claude
+    $ clix mcp
+    $ clix mcp claude
+    $ clix skills
 `;
 }
 
@@ -143,7 +146,7 @@ async function main() {
         break;
       }
 
-      case 'install-mcp': {
+      case 'mcp': {
         const agentInput = cli.input[1];
         const validAgents = getValidMCPAgents();
         if (agentInput && !isValidMCPAgent(agentInput)) {
@@ -152,9 +155,13 @@ async function main() {
           process.exit(1);
         }
         const agent = agentInput as MCPTargetAgent | undefined;
-        await installMCPCommand({ agent });
+        await mcpCommand({ agent });
         break;
       }
+
+      case 'skills':
+        await skillsCommand();
+        break;
 
       case 'update':
       case 'upgrade':

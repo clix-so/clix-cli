@@ -14,6 +14,14 @@ export interface AgentHandoffInvocation {
   env?: NodeJS.ProcessEnv;
 }
 
+export interface CommandHandoffInvocation {
+  command: string;
+  args: string[];
+  workingDirectory: string;
+  env?: NodeJS.ProcessEnv;
+  displayName?: string;
+}
+
 interface BuildAgentHandoffInvocationOptions {
   agent: AgentInfo;
   prompt: string;
@@ -38,6 +46,14 @@ export type HandoffSpawner = (
   args: string[],
   options: HandoffSpawnOptions,
 ) => HandoffProcess;
+
+interface HandoffExecutionInvocation {
+  command: string;
+  args: string[];
+  workingDirectory: string;
+  env?: NodeJS.ProcessEnv;
+  displayName: string;
+}
 
 function createDefaultOpenCodeEnv(): NodeJS.ProcessEnv | undefined {
   if (process.env.OPENCODE_PERMISSION) {
@@ -141,6 +157,38 @@ export async function runAgentHandoff(
   invocation: AgentHandoffInvocation,
   spawnProcess: HandoffSpawner = defaultSpawner,
 ): Promise<number> {
+  return await runHandoffInvocation(
+    {
+      command: invocation.command,
+      args: invocation.args,
+      workingDirectory: invocation.workingDirectory,
+      env: invocation.env,
+      displayName: invocation.agent.displayName,
+    },
+    spawnProcess,
+  );
+}
+
+export async function runCommandHandoff(
+  invocation: CommandHandoffInvocation,
+  spawnProcess: HandoffSpawner = defaultSpawner,
+): Promise<number> {
+  return await runHandoffInvocation(
+    {
+      command: invocation.command,
+      args: invocation.args,
+      workingDirectory: invocation.workingDirectory,
+      env: invocation.env,
+      displayName: invocation.displayName ?? invocation.command,
+    },
+    spawnProcess,
+  );
+}
+
+async function runHandoffInvocation(
+  invocation: HandoffExecutionInvocation,
+  spawnProcess: HandoffSpawner,
+): Promise<number> {
   const execve = getExecve();
   if (execve) {
     execve(invocation.command, [invocation.command, ...invocation.args], invocation.env);
@@ -156,7 +204,7 @@ export async function runAgentHandoff(
       }
 
       settled = true;
-      reject(new Error(`Failed to start ${invocation.agent.displayName}: ${error.message}`));
+      reject(new Error(`Failed to start ${invocation.displayName}: ${error.message}`));
     };
 
     try {

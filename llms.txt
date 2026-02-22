@@ -49,8 +49,11 @@ Install preparation task order:
 ### `clix doctor [--platform <...>]`
 Runs diagnostics via interactive handoff to agent CLI.
 
-### `clix install-mcp [agent]`
-Installs Clix MCP server for target agent.
+### `clix mcp [agent]`
+Hands off to `npx add-mcp` to install Clix MCP server.
+
+### `clix skills`
+Hands off to `npx skills add clix-so/skills` and transfers CLI control.
 
 ### `clix update [--dry-run] [--force]`
 Checks and optionally applies CLI updates.

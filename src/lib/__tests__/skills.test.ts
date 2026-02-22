@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
+import type { PreparationContext } from '@/commands/skill/preparation';
 import type { AgentMessage, ExecuteOptions } from '../executor';
 import {
   AVAILABLE_SKILLS,
@@ -32,17 +33,80 @@ describe('getSkillPrompt', () => {
     expect(prompt).toContain('analyzing a mobile project for Clix SDK');
   });
 
-  test('builds install prompt in integration phase by default', async () => {
+  test('builds install prompt with integration goal', async () => {
     const prompt = await getSkillPrompt('install', {
       projectPath: '/tmp/project',
       platform: 'ios',
-      oneShot: true,
     });
 
     expect(prompt).toContain('Project path: /tmp/project');
     expect(prompt).toContain('Target platform: ios');
-    expect(prompt).toContain('Install phase: integration');
-    expect(prompt).toContain('EXECUTION MODE: AUTONOMOUS');
+    expect(prompt).toContain(
+      'Execution goal: Complete SDK integration workflow using the pre-configured setup context.',
+    );
+    expect(prompt).not.toContain('non-interactive one-shot execution');
+    expect(prompt).not.toContain('Install phase:');
+    expect(prompt).not.toContain('project-build');
+  });
+
+  test('includes Project Public API Key in install prompt when available', async () => {
+    const preparationContext: PreparationContext = {
+      projectPath: '/tmp/project',
+      config: {
+        version: 1,
+        member: {
+          id: 'member-1',
+          email: 'member@example.com',
+          name: 'Member',
+        },
+        organization: {
+          id: 'org-1',
+          name: 'Org',
+        },
+        project: {
+          id: 'project-1',
+          name: 'Project',
+          public_api_key: 'pk_test_public_key_123',
+        },
+        linkedAt: '2026-01-01T00:00:00.000Z',
+      },
+      projectType: {
+        framework: 'native',
+        target: 'ios',
+      },
+      firebase: {
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: true,
+        senderConfigProjectMatched: true,
+        projectId: 'firebase-project',
+        needed: true,
+      },
+      ios: {
+        needed: true,
+        bundleId: 'com.example.app',
+        teamId: 'TEAM123456',
+        appGroupId: 'group.clix.com.example.app',
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      apns: {
+        needed: true,
+        keyId: 'KEY1234567',
+        teamId: 'TEAM123456',
+        registeredWithFirebase: true,
+      },
+      ready: true,
+      missing: [],
+    };
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/tmp/project',
+      preparationContext,
+    });
+
+    expect(prompt).toContain('Project Public API Key: pk_test_public_key_123');
   });
 
   test('rejects non-local skill types', async () => {

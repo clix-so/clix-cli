@@ -3,11 +3,12 @@ import { EventEmitter } from 'node:events';
 import type { AgentInfo } from '@/lib/agents';
 import type {
   AgentHandoffInvocation,
+  CommandHandoffInvocation,
   HandoffProcess,
   HandoffSpawner,
   HandoffSpawnOptions,
 } from '../agent-handoff';
-import { buildAgentHandoffInvocation, runAgentHandoff } from '../agent-handoff';
+import { buildAgentHandoffInvocation, runAgentHandoff, runCommandHandoff } from '../agent-handoff';
 
 class FakeHandoffProcess extends EventEmitter implements HandoffProcess {
   override on(event: 'error', listener: (error: Error) => void): this;
@@ -223,6 +224,65 @@ describe('runAgentHandoff', () => {
 
     await expect(runAgentHandoff(invocation, spawnProcess)).rejects.toThrow(
       'Failed to start Codex',
+    );
+  });
+});
+
+describe('runCommandHandoff', () => {
+  test('runs command handoff with inherited stdio', async () => {
+    const process = new FakeHandoffProcess();
+    let capturedCommand: string | undefined;
+    let capturedArgs: string[] | undefined;
+    let capturedOptions: HandoffSpawnOptions | undefined;
+
+    const invocation: CommandHandoffInvocation = {
+      command: 'npx',
+      args: ['skills', 'add', 'clix-so/skills'],
+      workingDirectory: '/tmp/project',
+      env: { TEST_ENV: '1' },
+      displayName: 'Skills CLI',
+    };
+
+    const spawnProcess: HandoffSpawner = (command, args, options) => {
+      capturedCommand = command;
+      capturedArgs = args;
+      capturedOptions = options;
+      queueMicrotask(() => {
+        process.emit('spawn');
+        process.emit('close', 0, null);
+      });
+      return process;
+    };
+
+    const exitCode = await runCommandHandoff(invocation, spawnProcess);
+    expect(exitCode).toBe(0);
+    expect(capturedCommand).toBe('npx');
+    expect(capturedArgs).toEqual(['skills', 'add', 'clix-so/skills']);
+    expect(capturedOptions).toEqual({
+      cwd: '/tmp/project',
+      stdio: 'inherit',
+      shell: false,
+      env: { TEST_ENV: '1' },
+    });
+  });
+
+  test('uses command name in error message when display name is omitted', async () => {
+    const process = new FakeHandoffProcess();
+    const invocation: CommandHandoffInvocation = {
+      command: 'npx',
+      args: ['skills', 'add', 'clix-so/skills'],
+      workingDirectory: '/tmp/project',
+    };
+
+    const spawnProcess: HandoffSpawner = () => {
+      queueMicrotask(() => {
+        process.emit('error', new Error('spawn ENOENT'));
+      });
+      return process;
+    };
+
+    await expect(runCommandHandoff(invocation, spawnProcess)).rejects.toThrow(
+      'Failed to start npx',
     );
   });
 });

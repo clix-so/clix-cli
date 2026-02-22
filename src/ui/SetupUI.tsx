@@ -103,6 +103,8 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
         const projectType = await detectProjectType(workspacePath);
 
         // Create project config
+        const projectPublicKey = project.public_api_key ?? project.public_key;
+
         const config: ProjectConfig = {
           version: CURRENT_PROJECT_CONFIG_VERSION,
           member: {
@@ -117,7 +119,7 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
           project: {
             id: project.id,
             name: project.name,
-            ...(project.public_key && { publicKey: project.public_key }),
+            ...(projectPublicKey && { public_api_key: projectPublicKey }),
           },
           projectType,
           linkedAt: new Date().toISOString(),

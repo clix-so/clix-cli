@@ -141,7 +141,7 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     preparationContext,
   });
 
-  console.log(`Handing off to ${agent.displayName} CLI...`);
+  console.log(`Launching ${agent.displayName}...`);
   const invocation = buildAgentHandoffInvocation({
     agent,
     prompt,
@@ -153,7 +153,7 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     exitCode = await runAgentHandoff(invocation);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to hand off to ${agent.displayName}: ${message}`);
+    throw new Error(`Failed to launch ${agent.displayName}: ${message}`);
   }
 
   if (exitCode !== 0) {

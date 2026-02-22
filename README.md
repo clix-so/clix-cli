@@ -8,7 +8,8 @@ Command-mode AI assistant for Clix SDK installation and diagnostics.
 - Multiple AI agents: Claude, Codex, Gemini, OpenCode, Cursor, GitHub Copilot
 - Step-based `install` preparation flow for Firebase/iOS push setup
 - Interactive agent handoff for `install` and `doctor`
-- Built-in MCP installer (`install-mcp`)
+- Built-in MCP installer (`mcp`)
+- Built-in skills installer (`skills`)
 
 ## Installation
 
@@ -80,9 +81,13 @@ Supported platforms: `ios`, `android`, `react-native`, `flutter`.
 
 Hands off to the selected agent CLI with the doctor prompt for SDK diagnostics.
 
-### `clix install-mcp [agent]`
+### `clix mcp [agent]`
 
-Installs Clix MCP server for the selected/specified agent.
+Hands off to `npx add-mcp` to install Clix MCP server (`clix-so/clix-mcp-server`).
+
+### `clix skills`
+
+Hands off to `npx skills add clix-so/skills` and transfers CLI control.
 
 ### `clix update [--dry-run] [--force]`
 

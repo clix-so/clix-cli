@@ -47,13 +47,23 @@ export const ProjectOrganizationSchema = z.object({
 /**
  * Schema for project information in project config.
  */
+export const ProjectPublicApiKeySchema = z.union([
+  z.string(),
+  z.object({
+    key: z.string(),
+    restrictions: z.array(z.unknown()).optional(),
+  }),
+]);
+
 export const ProjectInfoSchema = z.object({
   /** Project ID */
   id: z.string(),
   /** Project name */
   name: z.string(),
-  /** Project public key (for SDK integration) */
-  publicKey: z.string().optional(),
+  /** Project public API key (for SDK integration), matches Internal API response key */
+  public_api_key: ProjectPublicApiKeySchema.optional(),
+  /** Legacy project public key field (backward compatibility) */
+  publicKey: ProjectPublicApiKeySchema.optional(),
 });
 
 /**
@@ -141,6 +151,7 @@ export const ProjectConfigSchema = z.object({
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>;
 export type ProjectOrganization = z.infer<typeof ProjectOrganizationSchema>;
 export type ProjectInfo = z.infer<typeof ProjectInfoSchema>;
+export type ProjectPublicApiKey = z.infer<typeof ProjectPublicApiKeySchema>;
 export type IosSetup = z.infer<typeof IosSetupSchema>;
 export type FirebaseSetup = z.infer<typeof FirebaseSetupSchema>;
 export type ApnsSetup = z.infer<typeof ApnsSetupSchema>;
@@ -193,7 +204,22 @@ export function safeValidateProjectConfig(data: unknown): ProjectConfig | null {
  * @returns Config at latest version
  */
 export function ensureLatestVersion(config: ProjectConfig): ProjectConfig {
-  // Currently no migration needed
-  // Add migration logic here when schema changes in future versions
-  return config;
+  const publicApiKey = config.project.public_api_key ?? config.project.publicKey;
+
+  if (!publicApiKey && !config.project.public_api_key && !config.project.publicKey) {
+    return config;
+  }
+
+  if (config.project.public_api_key && !config.project.publicKey) {
+    return config;
+  }
+
+  return {
+    ...config,
+    project: {
+      id: config.project.id,
+      name: config.project.name,
+      ...(publicApiKey && { public_api_key: publicApiKey }),
+    },
+  };
 }

@@ -73,7 +73,7 @@ Platform-specific configs to verify:
 - /api-triggered-campaigns - API-triggered campaign setup
 - /doctor - Check SDK integration status
 - /debug - Debug and investigate user-reported problems
-- /install-mcp - Install Clix MCP Server for AI agents
+- /mcp - Install Clix MCP Server for AI agents
 
 ## Response Style
 - Clear, concise with bullet points

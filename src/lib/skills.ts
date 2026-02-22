@@ -13,7 +13,6 @@ export interface SkillOptions {
   signal?: AbortSignal;
   oneShot?: boolean;
   preparationContext?: PreparationContext;
-  installPhase?: 'project-build' | 'integration';
 }
 
 export interface SkillInfo {
@@ -70,22 +69,10 @@ IMPORTANT: This is a non-interactive one-shot execution with FULL file modificat
 EXECUTION GUIDELINES:
 - You have FULL permission to create, modify, and delete files autonomously
 - DO NOT ask for user input, confirmation, or permission
-- Make reasonable assumptions based on the project structure
-- Choose the most common/recommended approach when multiple options exist
-- PROCEED WITH ALL NECESSARY FILE CHANGES without waiting for user response
-- If critical information is missing, state your assumptions and proceed with changes
-
-FILE OPERATIONS:
-- Create new files as needed for the integration
-- Modify existing configuration files
-- Update source code files with initialization code
-- Add environment variables to config files
-- DO NOT just provide instructions - ACTUALLY MAKE THE CHANGES
-
-COMPLETION CRITERIA:
-- All necessary files must be created or modified
-- Integration must be fully functional without manual intervention
-- Provide a summary of changes made (not what needs to be done manually)
+- Make reasonable assumptions based on project structure and pre-configured setup context
+- PROCEED WITH FILE CHANGES directly; do not only provide instructions
+- Run required commands for dependency resolution and verification
+- If blocked by external constraints (credentials, permissions, unavailable services), report the blocker clearly
 `;
 
 function readLocalSkillPrompt(skillName: string): string {
@@ -114,6 +101,21 @@ function formatSetupStepStatus(required: boolean, configured: boolean): string {
     return '- not required';
   }
   return configured ? '✓ verified' : '✗ missing';
+}
+
+function formatProjectPublicApiKey(value: unknown): string {
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+
+  if (typeof value === 'object' && value !== null && 'key' in value) {
+    const keyValue = (value as { key: unknown }).key;
+    if (typeof keyValue === 'string' && keyValue.length > 0) {
+      return keyValue;
+    }
+  }
+
+  return 'not configured';
 }
 
 function appendOptionalSection(
@@ -171,9 +173,9 @@ function buildPreparationSection(context: PreparationContext): string {
 
   appendOptionalSection(lines, 'Clix Project', [
     `Project ID: ${context.config.project.id}`,
-    ...(context.config.project.publicKey
-      ? [`Public Key: ${context.config.project.publicKey}`]
-      : []),
+    `Project Public API Key: ${formatProjectPublicApiKey(
+      context.config.project.public_api_key ?? context.config.project.publicKey,
+    )}`,
   ]);
 
   appendOptionalSection(
@@ -225,7 +227,7 @@ function buildPreparationSection(context: PreparationContext): string {
     context.missing.length > 0,
   );
 
-  lines.push('Treat the above as already executed/validated by /install.');
+  lines.push('Treat the above as already executed/validated by clix install preparation.');
   lines.push('Use these pre-configured values when running build and troubleshooting failures.');
   lines.push('');
 
@@ -235,7 +237,6 @@ function buildPreparationSection(context: PreparationContext): string {
 function getInstallPrompt(options?: SkillOptions): string {
   const projectPath = options?.projectPath ?? process.cwd();
   const context = options?.preparationContext;
-  const installPhase = options?.installPhase ?? 'integration';
   const inferredPlatform =
     context?.projectType.framework === 'flutter'
       ? 'flutter'
@@ -262,26 +263,12 @@ function getInstallPrompt(options?: SkillOptions): string {
     prompt += '\n';
   }
 
-  prompt += `Install phase: ${installPhase}\n`;
-  if (installPhase === 'project-build') {
-    prompt +=
-      'For this run, execute only project build workflow and build-fix retries. Do not perform new SDK integration changes unless required to fix build errors.\n\n';
-  } else {
-    prompt +=
-      'For this run, execute SDK integration workflow. Use build commands only as verification after integration changes.\n\n';
-  }
+  prompt +=
+    'Execution goal: Complete SDK integration workflow using the pre-configured setup context.\n';
+  prompt += 'Use build commands for verification after integration changes.\n\n';
 
   if (options?.oneShot) {
     prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
-    prompt += `## EXECUTION MODE: AUTONOMOUS
-
-You are in autonomous one-shot execution mode:
-- ALL file operations are pre-approved
-- Use Write/Edit/Bash tools immediately without asking
-- Complete all integration steps automatically
-- Report what was done, not what should be done
-
-`;
   }
 
   prompt += readLocalSkillPrompt('install');

@@ -132,9 +132,11 @@ export class ProjectConfigManager {
 
       // Migrate to latest version if needed
       const migratedConfig = ensureLatestVersion(validatedConfig);
+      const migratedConfigChanged =
+        JSON.stringify(validatedConfig) !== JSON.stringify(migratedConfig);
 
       // Save migrated config if version changed
-      if (validatedConfig.version !== CURRENT_PROJECT_CONFIG_VERSION) {
+      if (validatedConfig.version !== CURRENT_PROJECT_CONFIG_VERSION || migratedConfigChanged) {
         await this.save(migratedConfig);
       }
 

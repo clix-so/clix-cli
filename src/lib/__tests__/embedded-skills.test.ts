@@ -19,7 +19,7 @@ describe('embedded-skills (local prompts only)', () => {
   test('returns embedded prompt by folder key', () => {
     const installPrompt = getEmbeddedSkill('local-install');
     expect(installPrompt).toBeDefined();
-    expect(installPrompt).toContain('Install phase');
+    expect(installPrompt).toContain('Integration Workflow');
   });
 
   test('returns all embedded prompt keys', () => {

@@ -24,11 +24,17 @@ export interface Organization {
 /**
  * Project information from Internal API.
  */
+export interface ProjectPublicApiKey {
+  key: string;
+  restrictions?: unknown[];
+}
+
 export interface Project {
   id: string;
   name: string;
   organization_id: string;
-  public_key?: string;
+  public_api_key?: string | ProjectPublicApiKey;
+  public_key?: string | ProjectPublicApiKey;
   sender_configs?: SenderConfig[];
   created_at?: string;
   updated_at?: string;

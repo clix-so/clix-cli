@@ -32,7 +32,8 @@ describe('CLI E2E Tests', () => {
       expect(result.stdout).toContain('install');
       expect(result.stdout).toContain('doctor');
       expect(result.stdout).not.toContain('debug <problem>');
-      expect(result.stdout).toContain('install-mcp');
+      expect(result.stdout).toContain('mcp');
+      expect(result.stdout).toContain('skills');
 
       // Skills should NOT be in CLI help (they are chat-only)
       expect(result.stdout).not.toContain('integration   ');
@@ -53,7 +54,8 @@ describe('CLI E2E Tests', () => {
 
       expect(result.stdout).toContain('Examples');
       expect(result.stdout).toContain('$ clix agent claude');
-      expect(result.stdout).toContain('$ clix install-mcp');
+      expect(result.stdout).toContain('$ clix mcp');
+      expect(result.stdout).toContain('$ clix skills');
     });
 
     test('should NOT show chat commands', async () => {

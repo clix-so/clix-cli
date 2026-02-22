@@ -34,6 +34,7 @@ describe('Command Mode Output Persistence', () => {
       // Verify that command mode commands are listed
       expect(result.stdout).toContain('install');
       expect(result.stdout).toContain('doctor');
+      expect(result.stdout).toContain('skills');
       expect(result.stdout).not.toContain('debug <problem>');
     });
   });
