@@ -76,18 +76,6 @@ describe('OpenCodeExecutor', () => {
 });
 
 describe('OpenCode CLI message format', () => {
-  test('session event structure', () => {
-    const msg: OpenCodeCLIMessage = {
-      type: 'session',
-      timestamp: 1768445719603,
-      sessionID: 'ses_4406be0e0ffek7fDmqJpninhMz',
-      model: 'gpt-4',
-    };
-
-    expect(msg.type).toBe('session');
-    expect(msg.sessionID).toBe('ses_4406be0e0ffek7fDmqJpninhMz');
-  });
-
   test('error event structure (confirmed)', () => {
     const msg: OpenCodeCLIMessage = {
       type: 'error',

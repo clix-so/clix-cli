@@ -224,6 +224,9 @@ export class FirebaseApiClient {
         if (res.data.error) {
           throw new Error(`Operation failed: ${res.data.error.message}`);
         }
+        if (!res.data.response) {
+          throw new Error('Operation completed but returned no response');
+        }
         return res.data.response as T;
       }
       await new Promise((resolve) => setTimeout(resolve, 1000));

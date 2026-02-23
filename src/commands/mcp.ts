@@ -1,3 +1,4 @@
+import { AgentError } from '../lib/errors';
 import { runCommandHandoff } from '../lib/services/agent-handoff';
 
 const ADD_MCP_PACKAGE = 'add-mcp';
@@ -7,10 +8,6 @@ const MCP_SERVER_NAME = 'clix';
 interface MCPCommandDependencies {
   runHandoff?: typeof runCommandHandoff;
   exitProcess?: (code: number) => void;
-}
-
-function buildMcpHandoffArgs(): string[] {
-  return [ADD_MCP_PACKAGE, CLIX_MCP_SERVER_PACKAGE, '--name', MCP_SERVER_NAME];
 }
 
 export async function mcpCommand(dependencies: MCPCommandDependencies = {}): Promise<void> {
@@ -23,13 +20,13 @@ export async function mcpCommand(dependencies: MCPCommandDependencies = {}): Pro
   try {
     exitCode = await runHandoff({
       command: 'npx',
-      args: buildMcpHandoffArgs(),
+      args: [ADD_MCP_PACKAGE, CLIX_MCP_SERVER_PACKAGE, '--name', MCP_SERVER_NAME],
       workingDirectory: process.cwd(),
       displayName: 'add-mcp',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to launch add-mcp: ${message}`);
+    throw new AgentError(`Failed to launch add-mcp: ${message}`, 'add-mcp');
   }
 
   exitProcess(exitCode);

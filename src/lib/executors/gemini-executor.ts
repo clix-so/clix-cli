@@ -15,8 +15,6 @@ import type {
 } from './types';
 
 export class GeminiExecutor extends BaseExecutor {
-  private lastTextContent = '';
-
   constructor() {
     super({
       name: 'gemini',

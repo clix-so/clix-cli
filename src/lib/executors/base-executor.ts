@@ -14,6 +14,7 @@ import {
   spawnCLIProcess,
   waitForProcessExit,
 } from './cli-process-manager';
+import { extractCumulativeDelta } from './stream-delta';
 
 /**
  * Stream parser type - determines how to parse CLI output
@@ -54,6 +55,7 @@ export interface StreamContext {
 export abstract class BaseExecutor implements AgentExecutor {
   readonly name: string;
   protected readonly log: Logger;
+  protected lastTextContent = '';
 
   private readonly command: string;
   private readonly notFoundMessage: string;
@@ -121,6 +123,20 @@ export abstract class BaseExecutor implements AgentExecutor {
 
   protected getPreparedPrompt(prompt: string): string {
     return `${CLIX_SYSTEM_PROMPT}\n\n${prompt}`;
+  }
+
+  protected extractTextDelta(textContent: string, metadata: unknown): AgentMessage | null {
+    const delta = extractCumulativeDelta(this.lastTextContent, textContent);
+    this.lastTextContent = textContent;
+    if (!delta) {
+      return null;
+    }
+    return {
+      type: 'text',
+      content: delta,
+      streamMode: 'append',
+      metadata: metadata as Record<string, unknown>,
+    };
   }
 
   async isAvailable(): Promise<boolean> {

@@ -1,3 +1,4 @@
+import { AgentError } from '../lib/errors';
 import { runCommandHandoff } from '../lib/services/agent-handoff';
 
 const DEFAULT_SKILLS_REPOSITORY = 'clix-so/skills';
@@ -23,7 +24,7 @@ export async function skillsCommand(dependencies: SkillsCommandDependencies = {}
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to launch Skills CLI: ${message}`);
+    throw new AgentError(`Failed to launch Skills CLI: ${message}`, 'Skills CLI');
   }
 
   exitProcess(exitCode);

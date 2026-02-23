@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { constants as osConstants } from 'node:os';
 import type { AgentInfo } from '@/lib/agents';
+import { createDefaultOpenCodeEnv } from '@/lib/executors/opencode-executor';
 
 type ProcessWithOptionalExecve = NodeJS.Process & {
   execve?: (file: string, args: string[], env?: NodeJS.ProcessEnv) => never;
@@ -53,17 +54,6 @@ interface HandoffExecutionInvocation {
   workingDirectory: string;
   env?: NodeJS.ProcessEnv;
   displayName: string;
-}
-
-function createDefaultOpenCodeEnv(): NodeJS.ProcessEnv | undefined {
-  if (process.env.OPENCODE_PERMISSION) {
-    return undefined;
-  }
-
-  return {
-    ...process.env,
-    OPENCODE_PERMISSION: '{"*":"allow"}',
-  };
 }
 
 export function buildAgentHandoffInvocation({

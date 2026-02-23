@@ -24,6 +24,7 @@ import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/
 import { detectProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { StatusMessage } from '@/ui/components/StatusMessage';
+import { useCancelInput } from '@/ui/hooks';
 
 type SetupPhase =
   | 'analyzing'
@@ -104,10 +105,6 @@ function promptTerminalInput(message: string, defaultValue?: string): Promise<st
   });
 }
 
-function promptTerminalPassword(message: string): Promise<string> {
-  return promptTerminalInput(message);
-}
-
 function promptTerminalConfirm(message: string): Promise<boolean> {
   return promptTerminalInput(`${message} (y/N)`).then(
     (answer) => answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes',
@@ -140,7 +137,7 @@ async function syncWithPortal(
   try {
     const userAuth = await loginWithUserCredentialsAsync(
       promptTerminalInput,
-      promptTerminalPassword,
+      promptTerminalInput,
       promptTerminalConfirm,
     );
     const context = getRequestContext(userAuth);
@@ -344,6 +341,9 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     updatedFiles,
     errorMessage,
   } = state;
+
+  // Allow ESC/Ctrl+C to cancel during authenticating phase
+  useCancelInput(() => exit(), { isActive: phase === 'authenticating' });
 
   // Handle user input for complete/error phases
   const handleContinue = useCallback(() => {

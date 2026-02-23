@@ -340,7 +340,10 @@ export class GoogleAuthClient {
         // If refresh failed (e.g., invalid_grant), tokens are already cleared
         // Re-throw with indication that re-authentication is needed
         const message = error instanceof Error ? error.message : 'Token refresh failed';
-        throw new Error(`invalid_grant: ${message}`);
+        if (message.includes('invalid_grant')) {
+          throw new Error(`invalid_grant: ${message}`);
+        }
+        throw new Error(`token_refresh_failed: ${message}`);
       }
     }
 

@@ -119,7 +119,7 @@ import {
   PushDetectionTask,
 } from './push-setup/PushSetupTasks';
 
-type PreparationPhase = 'checking' | 'config_missing' | 'status' | 'task' | 'cancelled';
+type PreparationPhase = 'checking' | 'config_missing' | 'status' | 'task';
 
 type InstallLeafTaskId =
   | 'firebase_config_detecting'
@@ -2561,14 +2561,6 @@ export function InstallPreparationUI({
     return <ConfigMissingPhase onCancel={handleCancelPreparation} />;
   }
 
-  if (phase === 'cancelled') {
-    return (
-      <Box marginY={1}>
-        <Text color="yellow">Installation cancelled.</Text>
-      </Box>
-    );
-  }
-
   if (!context) {
     return <CheckingPhase />;
   }
@@ -3129,6 +3121,7 @@ export function InstallPreparationUI({
                       return;
                     }
                     setInstallSkillError(null);
+                    installSkillRunStartedRef.current = false;
                     setActiveLeafTaskId('install_skill_running');
                   }}
                   onCancel={() =>

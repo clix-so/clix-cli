@@ -158,6 +158,7 @@ function createNotificationServiceTargetWithStrictSafeApis(
 ): {
   target: { uuid: string };
   warnings: string[];
+  dependencyAdded?: boolean;
 } {
   if (
     !project.generateUuid ||
@@ -295,9 +296,11 @@ function createNotificationServiceTargetWithStrictSafeApis(
     warnings.push('Created NSE target with fallback path; verify extension embedding in Xcode');
   }
 
+  let dependencyAdded = false;
   if (firstTargetUuid && project.addTargetDependency) {
     try {
       project.addTargetDependency(firstTargetUuid, [targetId]);
+      dependencyAdded = true;
     } catch {
       warnings.push(
         'Created NSE target but could not auto-add target dependency; verify target dependencies in Xcode',
@@ -305,7 +308,7 @@ function createNotificationServiceTargetWithStrictSafeApis(
     }
   }
 
-  return { target: { uuid: targetId }, warnings };
+  return { target: { uuid: targetId }, warnings, dependencyAdded };
 }
 
 function createNotificationServiceTarget(
@@ -321,6 +324,7 @@ function createNotificationServiceTarget(
 ): {
   target: { uuid: string } | null;
   warnings: string[];
+  dependencyAdded?: boolean;
 } {
   try {
     return {
@@ -350,6 +354,7 @@ function createNotificationServiceTarget(
         'Applied strict-mode fallback while creating NSE target',
         ...fallbackResult.warnings,
       ],
+      dependencyAdded: fallbackResult.dependencyAdded,
     };
   }
 }
@@ -970,6 +975,25 @@ export async function ensureMainTargetEntitlementsLink(options: {
   }
 }
 
+function addTargetDependencyToMainApp(
+  project: { addTargetDependency: (targetUuid: string, dependencyUuids: string[]) => void },
+  targetUuid: string,
+  warnings: string[],
+): void {
+  const appTargetUuid = findAppTargetUuid(
+    project as unknown as { pbxNativeTargetSection: () => Record<string, unknown> | null },
+  );
+  if (appTargetUuid && targetUuid) {
+    try {
+      project.addTargetDependency(appTargetUuid, [targetUuid]);
+    } catch {
+      warnings.push('Could not add target dependency, extension may need manual embedding');
+    }
+  } else {
+    warnings.push('Could not find main app target, extension may need manual embedding');
+  }
+}
+
 /**
  * Add Notification Service Extension target to Xcode project.
  */
@@ -1000,8 +1024,9 @@ export async function addNotificationServiceExtension(
 
     // 2. Ensure target exists (create only if missing)
     let targetUuid = findTargetUuidByName(project, options.extensionName);
+    let targetDependencyAlreadyAdded = false;
     if (!targetUuid) {
-      const { target, warnings } = createNotificationServiceTarget(
+      const { target, warnings, dependencyAdded } = createNotificationServiceTarget(
         project as unknown as XcodeProjectWithStrictSafeTargetApis & {
           addTarget: (
             name: string,
@@ -1016,6 +1041,7 @@ export async function addNotificationServiceExtension(
         },
       );
       result.warnings.push(...warnings);
+      targetDependencyAlreadyAdded = dependencyAdded === true;
 
       if (!target) {
         result.error = 'Failed to add target to project';
@@ -1072,20 +1098,9 @@ export async function addNotificationServiceExtension(
     result.warnings.push(...buildSettingsResult.warnings);
 
     // 6. Add target dependency to main app (embed extension)
-    // Find the main app target by productType instead of using getFirstTarget()
-    if (result.targetAdded) {
-      const appTargetUuid = findAppTargetUuid(project);
-      if (appTargetUuid && targetUuid) {
-        try {
-          project.addTargetDependency(appTargetUuid, [targetUuid]);
-        } catch {
-          result.warnings.push(
-            'Could not add target dependency, extension may need manual embedding',
-          );
-        }
-      } else {
-        result.warnings.push('Could not find main app target, extension may need manual embedding');
-      }
+    // Skip if dependency was already added during target creation (strict-safe fallback path)
+    if (result.targetAdded && !targetDependencyAlreadyAdded) {
+      addTargetDependencyToMainApp(project, targetUuid, result.warnings);
     }
 
     // 7. Write changes to project file

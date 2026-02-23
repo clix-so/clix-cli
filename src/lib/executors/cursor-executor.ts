@@ -4,12 +4,9 @@
  */
 import type { AgentMessage, ExecuteOptions } from '../executor';
 import { BaseExecutor, type StreamContext, type StreamParserType } from './base-executor';
-import { extractCumulativeDelta } from './stream-delta';
 import type { CLIContentBlock, CursorCLIMessage } from './types';
 
 export class CursorExecutor extends BaseExecutor {
-  private lastTextContent = '';
-
   constructor() {
     super({
       name: 'cursor',
@@ -46,23 +43,6 @@ export class CursorExecutor extends BaseExecutor {
     }
 
     return args;
-  }
-
-  private extractTextDelta(textContent: string, msg: CursorCLIMessage): AgentMessage | null {
-    const delta = extractCumulativeDelta(this.lastTextContent, textContent);
-
-    this.lastTextContent = textContent;
-
-    if (!delta) {
-      return null;
-    }
-
-    return {
-      type: 'text',
-      content: delta,
-      streamMode: 'append',
-      metadata: msg as unknown as Record<string, unknown>,
-    };
   }
 
   private mapAssistantMessage(msg: CursorCLIMessage): AgentMessage | AgentMessage[] | null {
@@ -138,6 +118,7 @@ export class CursorExecutor extends BaseExecutor {
       return {
         type: 'text',
         content: msg.result,
+        streamMode: 'append',
         metadata: msg as unknown as Record<string, unknown>,
       };
     }

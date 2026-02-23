@@ -2,7 +2,6 @@ import type { AgentInfo } from './agents';
 
 export interface ExecuteOptions {
   workingDirectory?: string;
-  allowedTools?: string[];
   signal?: AbortSignal;
 }
 

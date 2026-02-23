@@ -4,13 +4,9 @@
  */
 import type { AgentMessage, ExecuteOptions } from '../executor';
 import { BaseExecutor, type StreamContext, type StreamParserType } from './base-executor';
-import { extractCumulativeDelta } from './stream-delta';
 import type { CLIContentBlock, ClaudeCLIMessage } from './types';
 
 export class ClaudeExecutor extends BaseExecutor {
-  // Track accumulated text to compute deltas
-  private lastTextContent = '';
-
   constructor() {
     super({
       name: 'claude',
@@ -92,23 +88,6 @@ export class ClaudeExecutor extends BaseExecutor {
     return results.length > 0 ? (results.length === 1 ? results[0] : results) : null;
   }
 
-  private extractTextDelta(textContent: string, msg: ClaudeCLIMessage): AgentMessage | null {
-    const delta = extractCumulativeDelta(this.lastTextContent, textContent);
-
-    this.lastTextContent = textContent;
-
-    if (delta) {
-      return {
-        type: 'text',
-        content: delta,
-        streamMode: 'append',
-        metadata: msg as unknown as Record<string, unknown>,
-      };
-    }
-
-    return null;
-  }
-
   private extractToolUses(msg: ClaudeCLIMessage): AgentMessage[] {
     const toolUses =
       msg.message?.content?.filter(
@@ -158,6 +137,7 @@ export class ClaudeExecutor extends BaseExecutor {
       return {
         type: 'text',
         content: msg.result,
+        streamMode: 'append',
         metadata: msg as unknown as Record<string, unknown>,
       };
     }

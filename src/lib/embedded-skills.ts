@@ -6,19 +6,6 @@
  */
 
 /**
- * Skill metadata interface kept for backward compatibility.
- */
-export interface SkillMetadata {
-  folder: string;
-  name: string;
-  commandName: string;
-  displayName: string;
-  shortDescription: string;
-  description: string;
-  userInvocable: boolean;
-}
-
-/**
  * Embedded prompt content by folder name.
  */
 export const EMBEDDED_SKILLS: Record<string, string> = {
@@ -215,11 +202,6 @@ Use 'clix install' to set up SDK integration if not yet installed.
 `,
 };
 
-/**
- * Package-based metadata is intentionally empty.
- */
-export const EMBEDDED_SKILL_METADATA: SkillMetadata[] = [];
-
 export function hasEmbeddedSkills(): boolean {
   return Object.keys(EMBEDDED_SKILLS).length > 0;
 }
@@ -230,16 +212,4 @@ export function getEmbeddedSkill(skillFolder: string): string | undefined {
 
 export function getEmbeddedSkillFolders(): string[] {
   return Object.keys(EMBEDDED_SKILLS);
-}
-
-export function getEmbeddedSkillMetadata(): SkillMetadata[] {
-  return EMBEDDED_SKILL_METADATA;
-}
-
-export function getSkillMetadataByCommand(_commandName: string): SkillMetadata | undefined {
-  return undefined;
-}
-
-export function getSkillMetadataByFolder(_folder: string): SkillMetadata | undefined {
-  return undefined;
 }

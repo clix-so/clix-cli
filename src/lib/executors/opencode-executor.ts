@@ -13,6 +13,17 @@ import type {
   OpenCodeCLIToolResultEvent,
 } from './types';
 
+export function createDefaultOpenCodeEnv(): NodeJS.ProcessEnv | undefined {
+  if (process.env.OPENCODE_PERMISSION) {
+    return undefined;
+  }
+
+  return {
+    ...process.env,
+    OPENCODE_PERMISSION: '{"*":"allow"}',
+  };
+}
+
 export class OpenCodeExecutor extends BaseExecutor {
   constructor() {
     super({
@@ -28,15 +39,7 @@ export class OpenCodeExecutor extends BaseExecutor {
   }
 
   protected override getSpawnEnv(_options?: ExecuteOptions): NodeJS.ProcessEnv | undefined {
-    if (process.env.OPENCODE_PERMISSION) {
-      return undefined;
-    }
-
-    // Default to allow-all tool permission to avoid interactive approval prompts.
-    return {
-      ...process.env,
-      OPENCODE_PERMISSION: '{"*":"allow"}',
-    };
+    return createDefaultOpenCodeEnv();
   }
 
   protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {

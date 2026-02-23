@@ -66,13 +66,7 @@ Platform-specific configs to verify:
 
 ## Available Slash Commands
 - /install - Install workflow: required setup, project build, and SDK integration
-- /integration - SDK integration guide with step-by-step instructions
-- /event-tracking - Event tracking setup
-- /user-management - User management
-- /personalization - Personalization templates
-- /api-triggered-campaigns - API-triggered campaign setup
 - /doctor - Check SDK integration status
-- /debug - Debug and investigate user-reported problems
 - /mcp - Install Clix MCP Server for AI agents
 
 ## Response Style

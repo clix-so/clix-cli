@@ -4,44 +4,28 @@ import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import type React from 'react';
 import { useCallback, useState } from 'react';
-import {
-  type AndroidApp,
-  type FirebaseDetectionResult,
-  type FirebaseProject,
-  type IosApp,
-  platformNeedsAndroid,
-  platformNeedsIos,
+import type {
+  AndroidApp,
+  FirebaseDetectionResult,
+  FirebaseProject,
+  IosApp,
 } from '@/lib/services/firebase';
 import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 import { useCancelInput } from '@/ui/hooks';
 import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 import { FirebaseStatusDisplay } from './FirebaseStatusDisplay';
 
+export {
+  hasValidFirebaseConfigFiles,
+  platformNeedsAndroidWithUnknown,
+  platformNeedsIosWithUnknown,
+} from './firebase-detection-utils';
+
 export interface NoAppsContext {
   noAndroidApps: boolean;
   noIosApps: boolean;
   needsAndroid: boolean;
   needsIos: boolean;
-}
-
-export function platformNeedsAndroidWithUnknown(
-  platform: FirebaseDetectionResult['platform'],
-): boolean {
-  return platformNeedsAndroid(platform) || platform === 'unknown';
-}
-
-export function platformNeedsIosWithUnknown(
-  platform: FirebaseDetectionResult['platform'],
-): boolean {
-  return platformNeedsIos(platform) || platform === 'unknown';
-}
-
-export function hasValidFirebaseConfigFiles(result: FirebaseDetectionResult): boolean {
-  const needsAndroid = platformNeedsAndroidWithUnknown(result.platform);
-  const needsIos = platformNeedsIosWithUnknown(result.platform);
-  const hasAndroidConfig = !needsAndroid || Boolean(result.android?.valid);
-  const hasIosConfig = !needsIos || Boolean(result.ios?.valid);
-  return hasAndroidConfig && hasIosConfig;
 }
 
 function DetectingPhase(): React.ReactElement {

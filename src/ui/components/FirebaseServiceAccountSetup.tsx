@@ -5,48 +5,14 @@ import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { openBrowser } from '@/lib/auth/browser';
 import {
-  type FirebaseDetectionResult,
   parseServiceAccountJson,
-  platformNeedsAndroid,
-  platformNeedsIos,
   type ServiceAccountJson,
   type ServiceAccountValidationResult,
 } from '@/lib/services/firebase';
 import { useCancelInput } from '@/ui/hooks';
 import { readTextFileFromInputPath } from './file-input-utils';
 
-export function platformNeedsAndroidWithUnknown(
-  platform: FirebaseDetectionResult['platform'],
-): boolean {
-  return platformNeedsAndroid(platform) || platform === 'unknown';
-}
-
-export function platformNeedsIosWithUnknown(
-  platform: FirebaseDetectionResult['platform'],
-): boolean {
-  return platformNeedsIos(platform) || platform === 'unknown';
-}
-
-export function hasValidFirebaseConfigFiles(result: FirebaseDetectionResult): boolean {
-  const needsAndroid = platformNeedsAndroidWithUnknown(result.platform);
-  const needsIos = platformNeedsIosWithUnknown(result.platform);
-  const hasAndroidConfig = !needsAndroid || Boolean(result.android?.valid);
-  const hasIosConfig = !needsIos || Boolean(result.ios?.valid);
-
-  return hasAndroidConfig && hasIosConfig;
-}
-
-export function getProjectIdFromResult(result: FirebaseDetectionResult | null): string | null {
-  if (result?.android?.content && 'project_info' in result.android.content) {
-    return result.android.content.project_info?.project_id ?? null;
-  }
-
-  if (result?.ios?.content && 'PROJECT_ID' in result.ios.content) {
-    return result.ios.content.PROJECT_ID;
-  }
-
-  return null;
-}
+export { hasValidFirebaseConfigFiles } from './firebase-detection-utils';
 
 async function readClipboard(): Promise<string | null> {
   const { execFile } = await import('node:child_process');

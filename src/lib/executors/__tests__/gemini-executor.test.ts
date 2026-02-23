@@ -44,19 +44,6 @@ describe('GeminiExecutor message mapping', () => {
    * These fixtures represent actual Gemini CLI output format (stream-json)
    */
   describe('Gemini CLI message format fixtures', () => {
-    test('init event should have session_id and model', () => {
-      const msg: GeminiCLIMessage = {
-        type: 'init',
-        timestamp: '2025-01-14T00:00:00.000Z',
-        session_id: 'gemini-session-123',
-        model: 'gemini-2.5-pro',
-      };
-
-      expect(msg.type).toBe('init');
-      expect(msg.session_id).toBe('gemini-session-123');
-      expect(msg.model).toBe('gemini-2.5-pro');
-    });
-
     test('message event with assistant role should have correct structure', () => {
       const msg: GeminiCLIMessage = {
         type: 'message',
