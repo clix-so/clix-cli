@@ -4,10 +4,12 @@ const DEFAULT_SKILLS_REPOSITORY = 'clix-so/skills';
 
 interface SkillsCommandDependencies {
   runHandoff?: typeof runCommandHandoff;
+  exitProcess?: (code: number) => void;
 }
 
 export async function skillsCommand(dependencies: SkillsCommandDependencies = {}): Promise<void> {
   const runHandoff = dependencies.runHandoff ?? runCommandHandoff;
+  const exitProcess = dependencies.exitProcess ?? ((code: number) => process.exit(code));
 
   console.log('Adding Clix Skills...');
 
@@ -24,7 +26,5 @@ export async function skillsCommand(dependencies: SkillsCommandDependencies = {}
     throw new Error(`Failed to launch Skills CLI: ${message}`);
   }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+  exitProcess(exitCode);
 }

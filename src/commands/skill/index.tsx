@@ -271,7 +271,5 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     throw new Error(`Failed to launch ${agent.displayName}: ${message}`);
   }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+  process.exit(exitCode);
 }

@@ -6,6 +6,7 @@ const MCP_SERVER_NAME = 'clix';
 
 interface MCPCommandDependencies {
   runHandoff?: typeof runCommandHandoff;
+  exitProcess?: (code: number) => void;
 }
 
 function buildMcpHandoffArgs(): string[] {
@@ -14,6 +15,7 @@ function buildMcpHandoffArgs(): string[] {
 
 export async function mcpCommand(dependencies: MCPCommandDependencies = {}): Promise<void> {
   const runHandoff = dependencies.runHandoff ?? runCommandHandoff;
+  const exitProcess = dependencies.exitProcess ?? ((code: number) => process.exit(code));
 
   console.log('Adding Clix MCP Server...');
 
@@ -30,7 +32,5 @@ export async function mcpCommand(dependencies: MCPCommandDependencies = {}): Pro
     throw new Error(`Failed to launch add-mcp: ${message}`);
   }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+  exitProcess(exitCode);
 }

@@ -213,7 +213,7 @@ function AuthenticatingPhase({
   authUrl?: string | null;
 }): React.ReactElement {
   useCancelInput(onCancel);
-  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, 'Open authentication URL') : null;
+  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, authUrl) : null;
 
   return (
     <Box flexDirection="column">
@@ -247,12 +247,6 @@ function AuthenticatingPhase({
           <Text dimColor>Press Esc/Ctrl+C to cancel</Text>
         </Box>
       </Box>
-      {authUrl ? (
-        <Box marginLeft={2} marginTop={1} flexDirection="column">
-          <Text dimColor>Direct URL:</Text>
-          <Text>{authUrl}</Text>
-        </Box>
-      ) : null}
     </Box>
   );
 }
