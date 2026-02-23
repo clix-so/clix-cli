@@ -44,14 +44,14 @@ See [UNINSTALL.md](UNINSTALL.md) for removal instructions.
 - **Node.js 20+**
 - **One of the following AI agents**:
 
-| Agent | Free Plan | CLI Free Usage |
-|-------|:---------:|----------------|
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Yes | 1,000 requests/day |
-| [GitHub Copilot](https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli) | Yes | 50 premium requests/month |
-| [OpenCode](https://opencode.ai/docs/cli/) | Yes | Unlimited (with your own API keys) |
-| [Cursor](https://cursor.com/cli) | Limited | 50 slow requests/month |
-| [Claude Code](https://code.claude.com/docs) | No | Requires Pro ($20/mo) or API |
-| [Codex](https://developers.openai.com/codex/cli) | No | Requires ChatGPT Plus ($20/mo) or API |
+| Agent                                                                                | Free Plan | CLI Free Usage                        |
+| ------------------------------------------------------------------------------------ | :-------: | ------------------------------------- |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli)                            |    Yes    | 1,000 requests/day                    |
+| [GitHub Copilot](https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli) |    Yes    | 50 premium requests/month             |
+| [OpenCode](https://opencode.ai/docs/cli/)                                            |    Yes    | Unlimited (with your own API keys)    |
+| [Cursor](https://cursor.com/cli)                                                     |  Limited  | 50 slow requests/month                |
+| [Claude Code](https://code.claude.com/docs)                                          |    No     | Requires Pro ($20/mo) or API          |
+| [Codex](https://developers.openai.com/codex/cli)                                     |    No     | Requires ChatGPT Plus ($20/mo) or API |
 
 > **Tip:** If you don't have an active subscription, start with **Gemini CLI** or **GitHub Copilot** which offer generous free tiers.
 
@@ -65,17 +65,17 @@ clix doctor         # Diagnose SDK integration issues
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `clix` / `clix help` | Show help and exit |
-| `clix agent [name]` | List available agents or switch the active agent |
-| `clix install` | Run install preparation, then hand off to agent CLI |
-| `clix doctor` | Run SDK diagnostics via agent handoff |
-| `clix mcp` | Install Clix MCP Server |
-| `clix skills` | Install Clix skill package |
-| `clix update` | Check for and apply CLI updates |
-| `clix login` / `logout` / `whoami` | Account and authentication |
-| `clix uninstall` | Remove Clix CLI from your system |
+| Command                            | Description                                         |
+| ---------------------------------- | --------------------------------------------------- |
+| `clix` / `clix help`               | Show help and exit                                  |
+| `clix agent [name]`                | List available agents or switch the active agent    |
+| `clix install`                     | Run install preparation, then hand off to agent CLI |
+| `clix doctor`                      | Run SDK diagnostics via agent handoff               |
+| `clix mcp`                         | Install Clix MCP Server                             |
+| `clix skills`                      | Install Clix Skills                                 |
+| `clix update`                      | Check for and apply CLI updates                     |
+| `clix login` / `logout` / `whoami` | Account and authentication                          |
+| `clix uninstall`                   | Remove Clix CLI from your system                    |
 
 ### `clix install [--start-task <task>]`
 
@@ -96,7 +96,7 @@ Installs the Clix MCP Server via `npx add-mcp @clix-so/clix-mcp-server@latest --
 
 ### `clix skills`
 
-Installs the Clix skill package via `npx skills add clix-so/skills` and transfers CLI control.
+Installs the Clix Skills via `npx skills add clix-so/skills` and transfers CLI control.
 
 ### `clix update [--dry-run] [--force]`
 

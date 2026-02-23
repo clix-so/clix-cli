@@ -30,7 +30,7 @@ function generateHelpText(): string {
     install           Install Clix SDK (step-by-step setup + interactive agent handoff)
     doctor            Check Clix SDK integration status
     mcp               Install Clix MCP Server
-    skills            Install Clix skill package via skills CLI
+    skills            Install Clix Skills
     uninstall         Uninstall Clix CLI from your system
     update            Check for available updates
 
