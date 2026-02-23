@@ -6,6 +6,8 @@
 
 Clix CLI runs in command mode only. It does not start an interactive chat UI.
 
+Supported AI agents: Claude Code, Codex, Gemini CLI, OpenCode, Cursor, GitHub Copilot.
+
 Primary commands:
 - `clix install`
 - `clix doctor`

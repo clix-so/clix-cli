@@ -199,6 +199,14 @@ export class Logger {
    * @param projectRoot - Project root directory (optional, uses cwd if not provided)
    */
   writeToFile(message: string, data?: unknown, projectRoot?: string): void {
+    const safeStringify = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '[unserializable]';
+      }
+    };
+
     // Try multiple locations to ensure logging works
     const locations = [
       projectRoot,
@@ -214,7 +222,8 @@ export class Logger {
         mkdirSync(clixDir, { recursive: true });
 
         const timestamp = new Date().toISOString();
-        const line = `${timestamp} ${this.namespace} ${message}${data !== undefined ? ` ${JSON.stringify(data)}` : ''}\n`;
+        const serialized = data !== undefined ? safeStringify(data) : '';
+        const line = `${timestamp} ${this.namespace} ${message}${data !== undefined ? ` ${serialized}` : ''}\n`;
         appendFileSync(logFile, line);
         return; // Success, exit loop
       } catch {
@@ -222,7 +231,8 @@ export class Logger {
       }
     }
     // All locations failed, log to stderr as last resort
-    console.error(`[${this.namespace}] ${message}`, data !== undefined ? JSON.stringify(data) : '');
+    const fallback = data !== undefined ? safeStringify(data) : '';
+    console.error(`[${this.namespace}] ${message}`, fallback);
   }
 }
 

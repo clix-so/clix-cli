@@ -84,7 +84,7 @@ export function spawnCLIProcess(options: CLIProcessOptions): CLIProcessResult {
     cwd: workingDirectory,
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: false,
-    env,
+    env: env ? { ...process.env, ...env } : process.env,
   });
 
   // Close stdin immediately - CLI tools like claude/codex need EOF on stdin to start processing

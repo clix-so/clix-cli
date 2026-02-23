@@ -181,7 +181,11 @@ async function runHandoffInvocation(
 ): Promise<number> {
   const execve = getExecve();
   if (execve) {
-    execve(invocation.command, [invocation.command, ...invocation.args], invocation.env);
+    try {
+      execve(invocation.command, [invocation.command, ...invocation.args], invocation.env);
+    } catch {
+      // execve failed (e.g., command not found), fall through to spawn
+    }
   }
 
   return await new Promise((resolve, reject) => {

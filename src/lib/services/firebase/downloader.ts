@@ -335,8 +335,11 @@ export class FirebaseDownloader {
     const clixDir = path.join(projectPath, '.clix');
     const savePath = path.join(clixDir, 'service-account.json');
 
-    await fs.mkdir(clixDir, { recursive: true });
-    await fs.writeFile(savePath, JSON.stringify(serviceAccountJson, null, 2), 'utf-8');
+    await fs.mkdir(clixDir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(savePath, JSON.stringify(serviceAccountJson, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
 
     return savePath;
   }

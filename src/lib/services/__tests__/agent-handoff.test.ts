@@ -87,7 +87,6 @@ describe('buildAgentHandoffInvocation', () => {
 
   test('injects OPENCODE_PERMISSION by default for opencode', () => {
     const previous = process.env.OPENCODE_PERMISSION;
-    process.env.OPENCODE_PERMISSION = '';
     process.env.OPENCODE_PERMISSION = undefined;
 
     const invocation = buildAgentHandoffInvocation({

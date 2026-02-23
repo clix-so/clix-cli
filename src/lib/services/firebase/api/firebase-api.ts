@@ -85,7 +85,7 @@ export class FirebaseApiClient {
             projectId: p.projectId ?? '',
             projectNumber: p.projectNumber ?? '',
             displayName: p.displayName ?? '',
-            state: (p.state as 'ACTIVE' | 'DELETED') ?? 'ACTIVE',
+            state: p.state === 'DELETED' ? 'DELETED' : 'ACTIVE',
           });
         }
         pageToken = res.data.nextPageToken ?? undefined;

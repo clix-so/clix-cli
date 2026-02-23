@@ -53,7 +53,7 @@ export function hasExtensionTarget(iosDir: string, extensionName: string): boole
 
 function extractTargetBlock(content: string, targetName: string): string | null {
   const targetRegex = new RegExp(
-    `target\\s+['"]${escapeRegex(targetName)}['"]\\s+do([\\s\\S]*?)\\nend`,
+    `target\\s+['"]${escapeRegex(targetName)}['"]\\s+do([\\s\\S]*?)\\n\\s*end`,
     'i',
   );
   const match = content.match(targetRegex);

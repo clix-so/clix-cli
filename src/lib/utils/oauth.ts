@@ -272,20 +272,7 @@ export class OAuthCallbackServer {
         // Handle OAuth error
         if (error) {
           const errorMsg = errorDescription ? `${error}: ${errorDescription}` : error;
-
-          // Write debug info to .clix/debug.log
-          oauthLogger.writeToFile(
-            'OAuth callback error',
-            {
-              type: 'oauth_callback_error',
-              error,
-              error_description: errorDescription,
-              full_url: req.url,
-              all_params: Object.fromEntries(url.searchParams.entries()),
-            },
-            findProjectRoot(),
-          );
-
+          this.logOAuthCallbackError(error, errorDescription, req.url);
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml(errorMsg));
           this.rejectPendingCallback(new Error(errorMsg));
@@ -383,5 +370,26 @@ export class OAuthCallbackServer {
     const { resolve } = this.pendingCallback;
     this.clearPendingCallback();
     resolve(result);
+  }
+
+  private logOAuthCallbackError(
+    error: string,
+    errorDescription: string | null,
+    rawUrl: string | undefined,
+  ): void {
+    const sanitizedUrl = (rawUrl ?? '')
+      .replace(/code=[^&]+/g, 'code=[redacted]')
+      .replace(/state=[^&]+/g, 'state=[redacted]');
+
+    oauthLogger.writeToFile(
+      'OAuth callback error',
+      {
+        type: 'oauth_callback_error',
+        error,
+        error_description: errorDescription,
+        full_url: sanitizedUrl,
+      },
+      findProjectRoot(),
+    );
   }
 }

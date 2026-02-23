@@ -20,10 +20,11 @@ export interface FetchOrganizationsWithProjectsOptions {
 }
 
 function normalizeConcurrency(input?: number): number {
-  if (!input || !Number.isFinite(input) || input <= 0) {
+  const normalized = Math.floor(input ?? NaN);
+  if (!Number.isFinite(normalized) || normalized <= 0) {
     return DEFAULT_PROJECT_FETCH_CONCURRENCY;
   }
-  return Math.floor(input);
+  return normalized;
 }
 
 async function mapWithConcurrency<TInput, TOutput>(
