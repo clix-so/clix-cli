@@ -1098,8 +1098,8 @@ export async function addNotificationServiceExtension(
     result.warnings.push(...buildSettingsResult.warnings);
 
     // 6. Add target dependency to main app (embed extension)
-    // Skip if dependency was already added during target creation (strict-safe fallback path)
-    if (result.targetAdded && !targetDependencyAlreadyAdded) {
+    // Skip only if dependency was already added during target creation
+    if (!targetDependencyAlreadyAdded) {
       addTargetDependencyToMainApp(project, targetUuid, result.warnings);
     }
 

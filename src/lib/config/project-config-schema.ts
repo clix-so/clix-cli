@@ -216,6 +216,7 @@ export function ensureLatestVersion(config: ProjectConfig): ProjectConfig {
 
   return {
     ...config,
+    version: CURRENT_PROJECT_CONFIG_VERSION,
     project: {
       id: config.project.id,
       name: config.project.name,

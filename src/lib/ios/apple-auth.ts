@@ -116,16 +116,17 @@ export async function promptAppleIdAsync(
   const lastAppleId = await getCachedUsernameAsync();
 
   if (lastAppleId) {
-    console.log(`› Using cached Apple ID: ${lastAppleId}`);
-    return lastAppleId;
+    console.log(`› Cached Apple ID detected: ${lastAppleId}`);
   }
-
   console.log('› Log in to your Apple Developer account to continue');
 
   let username = '';
   while (!username.trim()) {
-    username = await promptFn('Apple ID:', lastAppleId ?? undefined);
-    username = removeControlCharacters(username);
+    const input = await promptFn('Apple ID:', lastAppleId ?? undefined);
+    username = removeControlCharacters(input);
+    if (!username.trim() && lastAppleId) {
+      username = lastAppleId;
+    }
     if (!username.trim()) {
       console.log(
         '› Apple ID cannot be empty. Enter your Apple ID email or press Ctrl+C to cancel.',

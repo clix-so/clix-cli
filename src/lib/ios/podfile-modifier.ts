@@ -136,8 +136,8 @@ export async function addClixToExtensionTarget(
       }
 
       const updatedBlock = targetBlock.replace(
-        /\nend$/i,
-        `\n  pod '${options.clixPodSpec || 'Clix'}'\nend`,
+        /\n(\s*)end$/i,
+        `\n$1  pod '${options.clixPodSpec || 'Clix'}'\n$1end`,
       );
       content = content.replace(targetBlock, updatedBlock);
 
