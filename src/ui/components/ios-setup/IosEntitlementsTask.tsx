@@ -8,5 +8,5 @@ interface IosEntitlementsTaskProps {
 }
 
 export const IosEntitlementsTask: React.FC<IosEntitlementsTaskProps> = ({ onComplete }) => {
-  return <IosSetupUI options={{ skipPortal: true }} onComplete={onComplete} />;
+  return <IosSetupUI options={{}} onComplete={onComplete} />;
 };

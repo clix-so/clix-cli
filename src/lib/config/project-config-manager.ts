@@ -14,9 +14,7 @@ import {
 /**
  * Comment header for the project config file.
  */
-const CONFIG_HEADER = `// Clix CLI 프로젝트 설정
-// 자동 생성됨 - 수동 수정 시 덮어쓰기될 수 있음
-`;
+const CONFIG_HEADER = '';
 
 /**
  * Gitignore patterns to check for .clix directory.

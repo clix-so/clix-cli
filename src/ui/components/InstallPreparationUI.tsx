@@ -48,6 +48,8 @@ import {
   FirebaseDownloader,
   type FirebaseProject,
   FirebaseService,
+  type GoogleServiceInfoPlist,
+  type GoogleServicesJson,
   type IosApp,
   isOAuthConfigured,
   parseBase64ServiceAccountJson,
@@ -232,6 +234,7 @@ interface FirebaseConfigState {
   downloadingPlatform: 'android' | 'ios' | 'both';
   noAppsContext: FirebaseConfigNoAppsContext | null;
   creatingAppPlatform: 'android' | 'ios';
+  postAuthAction: 'none' | 'create_ios_for_current_bundle' | 'create_android_for_current_package';
   error: string | null;
 }
 
@@ -278,7 +281,7 @@ async function buildNotificationExtensionContext(
   projectPath: string,
   iosBundleId: string | undefined,
   iosAppGroupId: string | undefined,
-  firebaseProjectId: string | undefined,
+  clixProjectId: string | undefined,
   cachedContext: IosGuidedContextCache | null,
 ): Promise<NotificationExtensionSetupContext> {
   if (cachedContext?.projectId) {
@@ -300,9 +303,9 @@ async function buildNotificationExtensionContext(
   const entitlementsPath =
     analysis.project.entitlementsFiles[0] || getEntitlementsPath(iosDir, targetName);
   const appGroupId = iosAppGroupId || generateAppGroupId(bundleId);
-  const projectId = firebaseProjectId || '';
+  const projectId = clixProjectId || '';
   if (!projectId) {
-    throw new Error('Firebase project ID is required for Notification Service Extension setup.');
+    throw new Error('Clix Project ID is required for Notification Service Extension setup.');
   }
 
   return {
@@ -623,6 +626,54 @@ function getTaskMessages(
   return chatMessages.slice(startIndex);
 }
 
+interface FirebaseConfigIdentifierMismatch {
+  ios: boolean;
+  android: boolean;
+}
+
+function extractAndroidPackageNames(detection: FirebaseDetectionResult | null): string[] {
+  if (!detection?.android?.content || !('client' in detection.android.content)) {
+    return [];
+  }
+
+  const clients = (detection.android.content as GoogleServicesJson).client ?? [];
+  return clients
+    .map((client) => client.client_info?.android_client_info?.package_name)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
+function getFirebaseConfigIdentifierMismatch(
+  detection: FirebaseDetectionResult | null,
+  context: PreparationContext | null,
+): FirebaseConfigIdentifierMismatch {
+  if (!detection || !context) {
+    return { ios: false, android: false };
+  }
+
+  let iosMismatch = false;
+  if (detection.ios?.valid && detection.ios.content && 'BUNDLE_ID' in detection.ios.content) {
+    const detectedBundleId = (detection.ios.content as GoogleServiceInfoPlist).BUNDLE_ID;
+    if (detectedBundleId && context.ios.bundleId && detectedBundleId !== context.ios.bundleId) {
+      iosMismatch = true;
+    }
+  }
+
+  let androidMismatch = false;
+  if (detection.android?.valid) {
+    const detectedPackages = extractAndroidPackageNames(detection);
+    const expectedPackage = context.firebase.actualAndroidPackageName;
+    if (
+      expectedPackage &&
+      detectedPackages.length > 0 &&
+      !detectedPackages.includes(expectedPackage)
+    ) {
+      androidMismatch = true;
+    }
+  }
+
+  return { ios: iosMismatch, android: androidMismatch };
+}
+
 function getInitialLeafTaskId(taskId: InstallTaskId): InstallLeafTaskId {
   switch (taskId) {
     case 'firebase_config_files':
@@ -656,6 +707,7 @@ function createInitialFirebaseConfigState(): FirebaseConfigState {
     downloadingPlatform: 'both',
     noAppsContext: null,
     creatingAppPlatform: 'android',
+    postAuthAction: 'none',
     error: null,
   };
 }
@@ -927,10 +979,10 @@ function validateStartTaskOverride({
     };
   }
 
-  if (effectiveStartTaskId === 'notification_service_extension' && !context.firebase.projectId) {
+  if (effectiveStartTaskId === 'notification_service_extension' && !context.config.project.id) {
     return {
       taskId: null,
-      note: 'Task override requires a detected Firebase project ID. Configure Firebase Configuration Files first.',
+      note: 'Task override requires a linked Clix Project ID. Run setup/login first.',
     };
   }
 
@@ -1177,19 +1229,22 @@ export function InstallPreparationUI({
       activeLeafTaskId === 'install_skill_running',
   });
 
-  const getFirebaseConfigNeeds = useCallback((detection: FirebaseDetectionResult | null) => {
-    const platform = detection?.platform ?? 'unknown';
-    const needsAndroid = firebaseConfigNeedsAndroid(platform);
-    const needsIos = firebaseConfigNeedsIos(platform);
-    const needsAndroidConfig = needsAndroid && !detection?.android?.valid;
-    const needsIosConfig = needsIos && !detection?.ios?.valid;
-    const forceDownload = platform === 'unknown';
+  const getFirebaseConfigNeeds = useCallback(
+    (detection: FirebaseDetectionResult | null, mismatch?: FirebaseConfigIdentifierMismatch) => {
+      const platform = detection?.platform ?? 'unknown';
+      const needsAndroid = firebaseConfigNeedsAndroid(platform);
+      const needsIos = firebaseConfigNeedsIos(platform);
+      const needsAndroidConfig = needsAndroid && (!detection?.android?.valid || mismatch?.android);
+      const needsIosConfig = needsIos && (!detection?.ios?.valid || mismatch?.ios);
+      const forceDownload = platform === 'unknown';
 
-    return {
-      shouldFetchAndroid: needsAndroidConfig || (forceDownload && needsAndroid),
-      shouldFetchIos: needsIosConfig || (forceDownload && needsIos),
-    };
-  }, []);
+      return {
+        shouldFetchAndroid: needsAndroidConfig || (forceDownload && needsAndroid),
+        shouldFetchIos: needsIosConfig || (forceDownload && needsIos),
+      };
+    },
+    [],
+  );
 
   const startFirebaseConfigDownload = useCallback(
     async (project: FirebaseProject, androidApp: AndroidApp | null, iosApp: IosApp | null) => {
@@ -1233,7 +1288,12 @@ export function InstallPreparationUI({
         setFirebaseConfigState((prev) => ({ ...prev, service, detection: newDetection }));
 
         if (hasValidFirebaseConfigTaskFiles(newDetection)) {
-          await applyTaskCompletion();
+          const mismatch = getFirebaseConfigIdentifierMismatch(newDetection, context);
+          if (!mismatch.ios && !mismatch.android) {
+            await applyTaskCompletion();
+            return;
+          }
+          setActiveLeafTaskId('firebase_config_status');
           return;
         }
 
@@ -1252,6 +1312,7 @@ export function InstallPreparationUI({
     },
     [
       applyTaskCompletion,
+      context,
       firebaseConfigDownloader,
       firebaseConfigState.projectType,
       firebaseConfigState.service,
@@ -1263,8 +1324,13 @@ export function InstallPreparationUI({
     async (project: FirebaseProject) => {
       setFirebaseConfigState((prev) => ({ ...prev, selectedProject: project, error: null }));
 
+      const configMismatch = getFirebaseConfigIdentifierMismatch(
+        firebaseConfigState.detection,
+        context,
+      );
       const { shouldFetchAndroid, shouldFetchIos } = getFirebaseConfigNeeds(
         firebaseConfigState.detection,
+        configMismatch,
       );
       if (!shouldFetchAndroid && !shouldFetchIos) {
         await applyTaskCompletion();
@@ -1340,6 +1406,7 @@ export function InstallPreparationUI({
     },
     [
       applyTaskCompletion,
+      context,
       firebaseConfigDownloader,
       firebaseConfigState.detection,
       getFirebaseConfigNeeds,
@@ -1357,7 +1424,10 @@ export function InstallPreparationUI({
       }
 
       setFirebaseConfigState((prev) => ({ ...prev, selectedAndroidApp: app }));
-      const { shouldFetchIos } = getFirebaseConfigNeeds(firebaseConfigState.detection);
+      const { shouldFetchIos } = getFirebaseConfigNeeds(
+        firebaseConfigState.detection,
+        getFirebaseConfigIdentifierMismatch(firebaseConfigState.detection, context),
+      );
 
       if (!shouldFetchIos) {
         await startFirebaseConfigDownload(project, app, null);
@@ -1384,6 +1454,7 @@ export function InstallPreparationUI({
       }
     },
     [
+      context,
       firebaseConfigDownloader,
       firebaseConfigState.detection,
       firebaseConfigState.selectedProject,
@@ -1393,15 +1464,26 @@ export function InstallPreparationUI({
   );
 
   const handleFirebaseConfigCreateApp = useCallback(
-    async (platform: 'android' | 'ios', identifier: string, displayName?: string) => {
-      const selectedProject = firebaseConfigState.selectedProject;
+    async (
+      platform: 'android' | 'ios',
+      identifier: string,
+      displayName?: string,
+      projectOverride?: FirebaseProject,
+    ) => {
+      const selectedProject = projectOverride ?? firebaseConfigState.selectedProject;
       if (!selectedProject) {
         setFirebaseConfigState((prev) => ({ ...prev, error: 'No Firebase project selected.' }));
         setActiveLeafTaskId('firebase_config_error');
         return;
       }
 
-      setFirebaseConfigState((prev) => ({ ...prev, creatingAppPlatform: platform }));
+      const normalizedIdentifier = identifier.trim();
+      setFirebaseConfigState((prev) => ({
+        ...prev,
+        selectedProject,
+        creatingAppPlatform: platform,
+        error: null,
+      }));
       setActiveLeafTaskId('firebase_config_creating_app');
 
       try {
@@ -1409,7 +1491,7 @@ export function InstallPreparationUI({
           const androidApp = await firebaseConfigDownloader.createAndroidApp(
             selectedProject.projectId,
             {
-              packageName: identifier,
+              packageName: normalizedIdentifier,
               displayName,
             },
           );
@@ -1420,7 +1502,26 @@ export function InstallPreparationUI({
             selectedAndroidApp: androidApp,
           }));
 
-          const { shouldFetchIos } = getFirebaseConfigNeeds(firebaseConfigState.detection);
+          const detectedProjectType = firebaseConfigState.projectType;
+          if (detectedProjectType) {
+            const paths = firebaseConfigDownloader.getExpectedSavePaths(
+              projectPath,
+              detectedProjectType,
+            );
+            if (paths.android) {
+              // Immediately download config for the newly created Android app.
+              await firebaseConfigDownloader.downloadAndroidConfig(
+                selectedProject.projectId,
+                androidApp.appId,
+                paths.android,
+              );
+            }
+          }
+
+          const { shouldFetchIos } = getFirebaseConfigNeeds(
+            firebaseConfigState.detection,
+            getFirebaseConfigIdentifierMismatch(firebaseConfigState.detection, context),
+          );
           if (!shouldFetchIos) {
             await startFirebaseConfigDownload(selectedProject, androidApp, null);
             return;
@@ -1452,10 +1553,22 @@ export function InstallPreparationUI({
           return;
         }
 
-        const iosApp = await firebaseConfigDownloader.createIosApp(selectedProject.projectId, {
-          bundleId: identifier,
-          displayName,
-        });
+        const iosApps = await firebaseConfigDownloader.listIosApps(selectedProject.projectId);
+        const existingIosApp = firebaseConfigDownloader.findAppByBundleId(
+          iosApps,
+          normalizedIdentifier,
+        );
+        const iosApp =
+          existingIosApp ||
+          (await firebaseConfigDownloader.createIosApp(selectedProject.projectId, {
+            bundleId: normalizedIdentifier,
+            displayName,
+          }));
+
+        setFirebaseConfigState((prev) => ({
+          ...prev,
+          iosApps: existingIosApp ? iosApps : [...iosApps, iosApp],
+        }));
 
         await startFirebaseConfigDownload(
           selectedProject,
@@ -1471,11 +1584,14 @@ export function InstallPreparationUI({
       }
     },
     [
+      context,
       firebaseConfigDownloader,
       firebaseConfigState.detection,
+      firebaseConfigState.projectType,
       firebaseConfigState.selectedAndroidApp,
       firebaseConfigState.selectedProject,
       getFirebaseConfigNeeds,
+      projectPath,
       startFirebaseConfigDownload,
     ],
   );
@@ -1510,8 +1626,11 @@ export function InstallPreparationUI({
         }));
 
         if (hasValidFirebaseConfigTaskFiles(detection)) {
-          await applyTaskCompletion();
-          return;
+          const mismatch = getFirebaseConfigIdentifierMismatch(detection, context);
+          if (!mismatch.ios && !mismatch.android) {
+            await applyTaskCompletion();
+            return;
+          }
         }
 
         setActiveLeafTaskId('firebase_config_status');
@@ -1533,14 +1652,7 @@ export function InstallPreparationUI({
     return () => {
       cancelled = true;
     };
-  }, [
-    activeLeafTaskId,
-    activeTaskId,
-    applyTaskCompletion,
-    context?.projectType,
-    phase,
-    projectPath,
-  ]);
+  }, [activeLeafTaskId, activeTaskId, applyTaskCompletion, context, phase, projectPath]);
 
   useEffect(() => {
     if (
@@ -1586,6 +1698,83 @@ export function InstallPreparationUI({
           return;
         }
 
+        if (firebaseConfigState.postAuthAction !== 'none') {
+          const isCreateIosAction =
+            firebaseConfigState.postAuthAction === 'create_ios_for_current_bundle';
+          const targetIdentifier = isCreateIosAction
+            ? context?.ios.bundleId
+            : context?.firebase.actualAndroidPackageName;
+          if (!targetIdentifier) {
+            setFirebaseConfigState((prev) => ({
+              ...prev,
+              postAuthAction: 'none',
+              error: isCreateIosAction
+                ? 'Current iOS bundle ID could not be detected.'
+                : 'Current Android package name could not be detected.',
+            }));
+            setActiveLeafTaskId('firebase_config_error');
+            return;
+          }
+
+          const projectIdResolution = firebaseConfigState.detection
+            ? resolveFirebaseProjectIdFromDetection(firebaseConfigState.detection)
+            : { projectId: null };
+          if (projectIdResolution.mismatchMessage) {
+            setFirebaseConfigState((prev) => ({
+              ...prev,
+              postAuthAction: 'none',
+              error:
+                projectIdResolution.mismatchMessage ||
+                'Firebase config files use different project IDs.',
+            }));
+            setActiveLeafTaskId('firebase_config_error');
+            return;
+          }
+
+          let targetProject: FirebaseProject | null = null;
+          if (projectIdResolution.projectId) {
+            targetProject =
+              projects.find((project) => project.projectId === projectIdResolution.projectId) ||
+              null;
+            if (!targetProject) {
+              setFirebaseConfigState((prev) => ({
+                ...prev,
+                postAuthAction: 'none',
+                error: `Firebase project "${projectIdResolution.projectId}" from current config was not found in your account.`,
+              }));
+              setActiveLeafTaskId('firebase_config_error');
+              return;
+            }
+          } else if (projects.length === 1) {
+            targetProject = projects[0];
+          }
+
+          if (!targetProject) {
+            setFirebaseConfigState((prev) => ({
+              ...prev,
+              projects,
+              postAuthAction: 'none',
+            }));
+            setActiveLeafTaskId('firebase_config_select_project');
+            return;
+          }
+
+          setFirebaseConfigState((prev) => ({
+            ...prev,
+            projects,
+            selectedProject: targetProject,
+            postAuthAction: 'none',
+            error: null,
+          }));
+          await handleFirebaseConfigCreateApp(
+            isCreateIosAction ? 'ios' : 'android',
+            targetIdentifier,
+            undefined,
+            targetProject,
+          );
+          return;
+        }
+
         setFirebaseConfigState((prev) => ({ ...prev, projects }));
         if (projects.length === 1) {
           await handleFirebaseConfigProjectSelect(projects[0]);
@@ -1617,7 +1806,12 @@ export function InstallPreparationUI({
   }, [
     activeLeafTaskId,
     activeTaskId,
+    context?.ios.bundleId,
+    context?.firebase.actualAndroidPackageName,
     firebaseConfigDownloader,
+    firebaseConfigState.detection,
+    firebaseConfigState.postAuthAction,
+    handleFirebaseConfigCreateApp,
     handleFirebaseConfigProjectSelect,
     phase,
   ]);
@@ -1955,7 +2149,7 @@ export function InstallPreparationUI({
           projectPath,
           context?.ios.bundleId,
           context?.ios.appGroupId,
-          context?.firebase.projectId,
+          context?.config.project.id,
           guidedContextCache,
         );
 
@@ -1985,7 +2179,7 @@ export function InstallPreparationUI({
     activeTaskId,
     context?.ios.appGroupId,
     context?.ios.bundleId,
-    context?.firebase.projectId,
+    context?.config.project.id,
     guidedContextCache,
     handleTaskBackToStatus,
     phase,
@@ -2396,6 +2590,13 @@ export function InstallPreparationUI({
     case 'firebase_config_files': {
       const detection = firebaseConfigState.detection;
       const selectedProject = firebaseConfigState.selectedProject;
+      const identifierMismatch = getFirebaseConfigIdentifierMismatch(detection, context);
+      const canCreateAndroidForCurrentPackage =
+        Boolean(identifierMismatch.android) && Boolean(context?.firebase.actualAndroidPackageName);
+      const canCreateIosForCurrentBundle =
+        Boolean(identifierMismatch.ios) &&
+        !identifierMismatch.android &&
+        Boolean(context?.ios.bundleId);
 
       return (
         <Box flexDirection="column">
@@ -2409,7 +2610,37 @@ export function InstallPreparationUI({
           {activeLeafTaskId === 'firebase_config_status' && detection && (
             <FirebaseConfigStatusTask
               result={detection}
-              onContinue={() => setActiveLeafTaskId('firebase_config_authenticating')}
+              identifierMismatch={identifierMismatch}
+              expectedIdentifiers={{
+                iosBundleId: context?.ios.bundleId,
+                androidPackageName: context?.firebase.actualAndroidPackageName,
+              }}
+              onContinue={() => {
+                setFirebaseConfigState((prev) => ({ ...prev, postAuthAction: 'none' }));
+                setActiveLeafTaskId('firebase_config_authenticating');
+              }}
+              onCreateAndroidForCurrentPackage={
+                canCreateAndroidForCurrentPackage
+                  ? () => {
+                      setFirebaseConfigState((prev) => ({
+                        ...prev,
+                        postAuthAction: 'create_android_for_current_package',
+                      }));
+                      setActiveLeafTaskId('firebase_config_authenticating');
+                    }
+                  : undefined
+              }
+              onCreateIosForCurrentBundle={
+                canCreateIosForCurrentBundle
+                  ? () => {
+                      setFirebaseConfigState((prev) => ({
+                        ...prev,
+                        postAuthAction: 'create_ios_for_current_bundle',
+                      }));
+                      setActiveLeafTaskId('firebase_config_authenticating');
+                    }
+                  : undefined
+              }
               onCancel={() => handleTaskBackToStatus()}
             />
           )}
@@ -2481,6 +2712,7 @@ export function InstallPreparationUI({
           {activeLeafTaskId === 'firebase_config_create_android_app' && (
             <FirebaseConfigCreateAppInputTask
               platform="android"
+              defaultIdentifier={context.firebase.actualAndroidPackageName}
               onSubmit={(identifier, displayName) => {
                 void handleFirebaseConfigCreateApp('android', identifier, displayName);
               }}
@@ -2491,6 +2723,7 @@ export function InstallPreparationUI({
           {activeLeafTaskId === 'firebase_config_create_ios_app' && (
             <FirebaseConfigCreateAppInputTask
               platform="ios"
+              defaultIdentifier={context.ios.bundleId}
               onSubmit={(identifier, displayName) => {
                 void handleFirebaseConfigCreateApp('ios', identifier, displayName);
               }}
@@ -2735,7 +2968,7 @@ export function InstallPreparationUI({
                   appName: result.agentContext.appName,
                   iosDir: result.agentContext.iosDir,
                   xcodeprojPath: result.agentContext.projectPath,
-                  projectId: context.firebase.projectId || '',
+                  projectId: context.config.project.id || '',
                   entitlementsPath: result.agentContext.entitlementsPath,
                 });
               }

@@ -7,6 +7,7 @@
  * @module commands/skill/preparation
  */
 
+import * as path from 'node:path';
 import type { SenderConfig } from '@/lib/api';
 import { getInternalApiClient } from '@/lib/api';
 import {
@@ -33,8 +34,8 @@ import {
 } from '@/lib/ios';
 import { FirebaseService } from '@/lib/services/firebase/firebase-service';
 import { parseBase64ServiceAccountJson } from '@/lib/services/firebase/service-account-validator';
-import type { FirebaseDetectionResult } from '@/lib/services/firebase/types';
-import { detectProjectType } from '@/lib/services/project-detector';
+import type { FirebaseDetectionResult, GoogleServicesJson } from '@/lib/services/firebase/types';
+import { detectAndroidPackageName, detectProjectType } from '@/lib/services/project-detector';
 
 /**
  * Status of Firebase configuration.
@@ -54,11 +55,33 @@ export interface FirebaseStatus {
   projectId?: string;
   /** Whether Firebase setup is needed based on project type */
   needed: boolean;
+  /** BUNDLE_ID detected from GoogleService-Info.plist */
+  detectedIosBundleId?: string;
+  /** Whether plist BUNDLE_ID matches the project's actual bundle ID */
+  iosBundleIdMatched?: boolean;
+  /** package_name detected from google-services.json */
+  detectedAndroidPackageName?: string;
+  /** All package_name values detected from google-services.json clients */
+  detectedAndroidPackageNames?: string[];
+  /** Whether google-services.json package_name matches the project's actual package name */
+  androidPackageNameMatched?: boolean;
+  /** Actual Android package name detected from project files */
+  actualAndroidPackageName?: string;
 }
 
 interface SenderConfigStatus {
   configured: boolean;
   projectMatched: boolean;
+}
+
+function extractAndroidPackageNamesFromDetection(detection: FirebaseDetectionResult): string[] {
+  if (!detection.android?.content || !('client' in detection.android.content)) {
+    return [];
+  }
+
+  return (detection.android.content as GoogleServicesJson).client
+    .map((client) => client.client_info?.android_client_info?.package_name)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
 /**
@@ -392,6 +415,22 @@ export async function checkFirebaseStatus(
     projectId = setup.firebase.projectId;
   }
 
+  // Extract BUNDLE_ID from detected iOS plist for cross-validation
+  let detectedIosBundleId: string | undefined;
+  if (detection.ios?.content && 'BUNDLE_ID' in detection.ios.content) {
+    const bundleId = (detection.ios.content as { BUNDLE_ID?: string }).BUNDLE_ID;
+    if (typeof bundleId === 'string' && bundleId.length > 0) {
+      detectedIosBundleId = bundleId;
+    }
+  }
+
+  // Extract package_name from detected Android google-services.json for cross-validation
+  const detectedAndroidPackageNames = extractAndroidPackageNamesFromDetection(detection);
+  let detectedAndroidPackageName: string | undefined;
+  if (detectedAndroidPackageNames.length > 0) {
+    detectedAndroidPackageName = detectedAndroidPackageNames[0];
+  }
+
   return {
     configured: credentialFilesConfigured && senderConfigConfigured && senderConfigProjectMatched,
     androidConfigured,
@@ -399,6 +438,9 @@ export async function checkFirebaseStatus(
     senderConfigConfigured,
     senderConfigProjectMatched,
     projectId,
+    detectedIosBundleId,
+    detectedAndroidPackageName,
+    detectedAndroidPackageNames,
     needed: true,
   };
 }
@@ -435,10 +477,27 @@ async function detectIosStatusFromFiles(
 
   const project = analysis.project;
   const expectedAppGroupId = generateAppGroupId(project.bundleId);
+  const extensionName = getExtensionName(project.appName);
   let hasEntitlements = false;
   let detectedAppGroupId: string | undefined;
 
-  for (const entitlementsPath of project.entitlementsFiles) {
+  const mainTargetEntitlementsFiles = project.entitlementsFiles.filter((entitlementsPath) => {
+    const normalizedPath = entitlementsPath.toLowerCase();
+    const extensionMarker = extensionName.toLowerCase();
+    if (normalizedPath.includes(extensionMarker)) {
+      return false;
+    }
+
+    const fileName = path.basename(entitlementsPath).toLowerCase();
+    if (fileName === `${project.appName}.entitlements`.toLowerCase()) {
+      return true;
+    }
+
+    const appDirMarker = `${path.sep}${project.appName.toLowerCase()}${path.sep}`;
+    return normalizedPath.includes(appDirMarker);
+  });
+
+  for (const entitlementsPath of mainTargetEntitlementsFiles) {
     try {
       const entitlements = await readEntitlements(entitlementsPath);
       const clixConfig = hasClixConfiguration(entitlements, project.bundleId);
@@ -461,7 +520,6 @@ async function detectIosStatusFromFiles(
   }
 
   const iosDir = getIosProjectDir(projectPath);
-  const extensionName = getExtensionName(project.appName);
   const extensionBundleId = getExtensionBundleId(project.bundleId, project.appName);
 
   const filesComplete = iosDir ? verifyExtensionFiles(iosDir, project.appName).complete : false;
@@ -581,6 +639,56 @@ export async function checkApnsStatus(
   };
 }
 
+function collectMissingItems(firebase: FirebaseStatus, ios: IosStatus, apns: ApnsStatus): string[] {
+  const missing: string[] = [];
+
+  if (apns.needed && firebase.iosConfigured && !apns.registeredWithFirebase) {
+    missing.push('APNS Key for Firebase');
+  }
+
+  if (firebase.needed && !firebase.configured) {
+    if (!firebase.androidConfigured) {
+      if (firebase.androidPackageNameMatched === false) {
+        missing.push(
+          `Firebase Android config package name mismatch: expected "${firebase.actualAndroidPackageName}", got "${firebase.detectedAndroidPackageName}"`,
+        );
+      } else {
+        missing.push('Firebase Android config (google-services.json)');
+      }
+    }
+    if (!firebase.iosConfigured) {
+      if (firebase.iosBundleIdMatched === false) {
+        missing.push(
+          `Firebase iOS config bundle ID mismatch: expected "${ios.bundleId}", got "${firebase.detectedIosBundleId}"`,
+        );
+      } else {
+        missing.push('Firebase iOS config (GoogleService-Info.plist)');
+      }
+    }
+    const senderConfigPrerequisitesMet =
+      firebase.androidConfigured &&
+      firebase.iosConfigured &&
+      (!apns.needed || apns.registeredWithFirebase);
+    if (
+      senderConfigPrerequisitesMet &&
+      (!firebase.senderConfigConfigured || firebase.senderConfigProjectMatched === false)
+    ) {
+      missing.push('Firebase Service Account');
+    }
+  }
+
+  if (ios.needed) {
+    if (!ios.entitlementsConfigured) {
+      missing.push('iOS entitlements');
+    }
+    if (!ios.nseConfigured) {
+      missing.push('Notification Service Extension');
+    }
+  }
+
+  return missing;
+}
+
 /**
  * Gather preparation context without running interactive setup.
  * This checks what's configured and what's missing.
@@ -620,41 +728,42 @@ export async function gatherPreparationContext(
   // Step 5: Check APNS status
   const apns = await checkApnsStatus(projectPath, projectType, updatedConfig.setup);
 
+  // Step 5.5: Cross-validate Firebase config identifiers with project identifiers
+
+  // iOS: plist BUNDLE_ID vs project bundle ID
+  if (
+    firebase.needed &&
+    firebase.iosConfigured &&
+    firebase.detectedIosBundleId &&
+    ios.bundleId &&
+    firebase.detectedIosBundleId !== ios.bundleId
+  ) {
+    firebase.iosConfigured = false;
+    firebase.iosBundleIdMatched = false;
+    firebase.configured = false;
+  }
+
+  // Android: detect actual package name from project files
+  if (firebase.needed) {
+    const actualAndroidPackage = await detectAndroidPackageName(projectPath);
+    if (actualAndroidPackage) {
+      firebase.actualAndroidPackageName = actualAndroidPackage;
+      // Cross-validate with google-services.json package_name
+      if (
+        firebase.androidConfigured &&
+        firebase.detectedAndroidPackageName &&
+        firebase.detectedAndroidPackageNames &&
+        !firebase.detectedAndroidPackageNames.includes(actualAndroidPackage)
+      ) {
+        firebase.androidConfigured = false;
+        firebase.androidPackageNameMatched = false;
+        firebase.configured = false;
+      }
+    }
+  }
+
   // Step 6: Determine what's missing
-  const missing: string[] = [];
-
-  if (apns.needed && firebase.iosConfigured && !apns.registeredWithFirebase) {
-    missing.push('APNS Key for Firebase');
-  }
-
-  if (firebase.needed && !firebase.configured) {
-    if (!firebase.androidConfigured) {
-      missing.push('Firebase Android config (google-services.json)');
-    }
-    if (!firebase.iosConfigured) {
-      missing.push('Firebase iOS config (GoogleService-Info.plist)');
-    }
-    const senderConfigPrerequisitesMet =
-      firebase.androidConfigured &&
-      firebase.iosConfigured &&
-      (!apns.needed || apns.registeredWithFirebase);
-    if (
-      senderConfigPrerequisitesMet &&
-      (!firebase.senderConfigConfigured || firebase.senderConfigProjectMatched === false)
-    ) {
-      missing.push('Firebase Service Account');
-    }
-  }
-
-  if (ios.needed) {
-    if (!ios.entitlementsConfigured) {
-      missing.push('iOS entitlements');
-    }
-    if (!ios.nseConfigured) {
-      missing.push('Notification Service Extension');
-    }
-  }
-
+  const missing = collectMissingItems(firebase, ios, apns);
   const ready = missing.length === 0;
 
   return {

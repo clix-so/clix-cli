@@ -1,3 +1,4 @@
+import { createInterface } from 'node:readline';
 import { Box, Text, useApp, useInput } from 'ink';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -6,19 +7,18 @@ import {
   analyzeIosProject,
   buildAgentContext,
   type CapabilitySyncResult,
-  createAuthContext,
   ensureMainTargetEntitlementsLink,
   generateAppGroupId,
   getAppleApiErrorMessage,
   getEntitlementsPath,
   getIosProjectDir,
   type IosProjectInfo,
-  loadApiKeyFromFile,
   type MainTargetEntitlementsLinkResult,
   readEntitlements,
   syncCapabilities,
   updateEntitlementsForClix,
 } from '@/lib/ios';
+import { getRequestContext, loginWithUserCredentialsAsync } from '@/lib/ios/apple-auth';
 import { FirebaseService } from '@/lib/services/firebase';
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
 import { detectProjectType } from '@/lib/services/project-detector';
@@ -34,16 +34,8 @@ type SetupPhase =
   | 'error';
 
 export interface IosSetupOptions {
-  /** Path to .p8 API Key file */
-  apiKeyPath?: string;
-  /** API Key ID */
-  keyId?: string;
-  /** Issuer ID */
-  issuerId?: string;
   /** Bundle ID (override auto-detection) */
   bundleId?: string;
-  /** Skip Apple Developer Portal sync */
-  skipPortal?: boolean;
   /** Push notification environment */
   pushEnvironment?: 'development' | 'production';
 }
@@ -81,51 +73,93 @@ interface SetupState {
   phase: SetupPhase;
   projectInfo: IosProjectInfo | null;
   portalResult: CapabilitySyncResult | null;
+  portalSkipped: boolean;
+  portalSkipReason: string | null;
+  authStatusMessage: string;
   mainTargetEntitlementsLink: MainTargetEntitlementsLinkResult | null;
   updatedFiles: string[];
   errorMessage: string;
 }
 
+function promptTerminalInput(message: string, defaultValue?: string): Promise<string> {
+  const stdin = process.stdin;
+  const canToggleRawMode = typeof stdin.isTTY === 'boolean' && stdin.isTTY && 'setRawMode' in stdin;
+  const wasRawModeEnabled =
+    canToggleRawMode && typeof stdin.isRaw === 'boolean' ? stdin.isRaw : false;
+
+  if (canToggleRawMode && wasRawModeEnabled) {
+    (stdin as NodeJS.ReadStream).setRawMode(false);
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  return new Promise((resolve) => {
+    const prompt = defaultValue ? `${message} [${defaultValue}] ` : `${message} `;
+    rl.question(prompt, (answer) => {
+      rl.close();
+      if (canToggleRawMode && wasRawModeEnabled) {
+        (stdin as NodeJS.ReadStream).setRawMode(true);
+      }
+      resolve(answer || defaultValue || '');
+    });
+  });
+}
+
+function promptTerminalPassword(message: string): Promise<string> {
+  return promptTerminalInput(message);
+}
+
+function promptTerminalConfirm(message: string): Promise<boolean> {
+  return promptTerminalInput(`${message} (y/N)`).then(
+    (answer) => answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes',
+  );
+}
+
 /**
- * Sync capabilities with Apple Developer Portal
+ * Sync capabilities with Apple Developer Portal via Apple ID login.
+ * If the user cancels login, returns null and portal sync is skipped.
  */
 async function syncWithPortal(
-  options: IosSetupOptions,
   bundleId: string,
   appGroupId: string,
   setPhase: (phase: SetupPhase) => void,
+  setAuthStatusMessage: (message: string) => void,
+  setPortalSkipReason: (message: string | null) => void,
 ): Promise<CapabilitySyncResult | null> {
-  // Check for partial credentials - user provided some but not all
-  const hasAnyCreds = !!(options.apiKeyPath || options.keyId || options.issuerId);
-  const hasAllCreds = !!(options.apiKeyPath && options.keyId && options.issuerId);
-
-  if (!options.skipPortal && hasAnyCreds && !hasAllCreds) {
-    throw new Error(
-      'Incomplete portal credentials. Provide --api-key, --key-id, and --issuer-id together, or use --skip-portal.',
+  const isBundleIdMismatchReason = (message: string): boolean => {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('not available') &&
+      (normalized.includes('identifier') || normalized.includes('bundle id')) &&
+      normalized.includes('apple team')
     );
-  }
-
-  if (options.skipPortal || !hasAllCreds) {
-    return null;
-  }
-
-  // At this point, hasAllCreds is true, so all credentials are defined
-  const { apiKeyPath, keyId, issuerId } = options as Required<
-    Pick<IosSetupOptions, 'apiKeyPath' | 'keyId' | 'issuerId'>
-  >;
+  };
 
   setPhase('authenticating');
-  const keyP8 = loadApiKeyFromFile(apiKeyPath);
-  const authContext = await createAuthContext({
-    apiKey: {
-      keyId,
-      issuerId,
-      keyP8,
-    },
-  });
+  setPortalSkipReason(null);
+  setAuthStatusMessage('Waiting for Apple ID/password input in terminal prompt...');
+  try {
+    const userAuth = await loginWithUserCredentialsAsync(
+      promptTerminalInput,
+      promptTerminalPassword,
+      promptTerminalConfirm,
+    );
+    const context = getRequestContext(userAuth);
 
-  setPhase('syncing');
-  return await syncCapabilities(authContext, bundleId, appGroupId);
+    setPhase('syncing');
+    setAuthStatusMessage('Authenticated. Syncing Apple capabilities...');
+    return await syncCapabilities(context, bundleId, appGroupId);
+  } catch (error) {
+    const reason =
+      error instanceof Error ? getAppleApiErrorMessage(error) : 'Authentication was not completed';
+    if (isBundleIdMismatchReason(reason)) {
+      throw new Error(reason);
+    }
+    setPortalSkipReason(reason);
+    setAuthStatusMessage(`Portal sync skipped: ${reason}`);
+    // Portal sync is best-effort: login cancelled, auth failed, or API error
+    // all result in skipping portal sync and continuing with entitlements.
+    return null;
+  }
 }
 
 interface EntitlementsUpdateResult {
@@ -197,15 +231,19 @@ async function runSetup(
   const bundleId = options.bundleId || project.bundleId;
   const appGroupId = generateAppGroupId(bundleId);
 
-  // Phase 2: Sync with Apple Developer Portal (if not skipped)
-  const syncResult = await syncWithPortal(options, bundleId, appGroupId, (phase) =>
-    setState((s) => ({ ...s, phase })),
+  // Phase 2: Sync with Apple Developer Portal via Apple ID login
+  const syncResult = await syncWithPortal(
+    bundleId,
+    appGroupId,
+    (phase) => setState((s) => ({ ...s, phase })),
+    (message) => setState((s) => ({ ...s, authStatusMessage: message })),
+    (message) => setState((s) => ({ ...s, portalSkipReason: message })),
   );
   if (syncResult) {
     setState((s) => ({ ...s, portalResult: syncResult }));
     result.portalSync = syncResult;
-  }
-  if (options.skipPortal) {
+  } else {
+    setState((s) => ({ ...s, portalSkipped: true }));
     result.changeSummary?.skippedChecks.push('Apple Developer Portal sync');
   }
 
@@ -286,6 +324,9 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     phase: 'analyzing',
     projectInfo: null,
     portalResult: null,
+    portalSkipped: false,
+    portalSkipReason: null,
+    authStatusMessage: '',
     mainTargetEntitlementsLink: null,
     updatedFiles: [],
     errorMessage: '',
@@ -296,6 +337,9 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     phase,
     projectInfo,
     portalResult,
+    portalSkipped,
+    portalSkipReason,
+    authStatusMessage,
     mainTargetEntitlementsLink,
     updatedFiles,
     errorMessage,
@@ -343,7 +387,15 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
       {phase === 'authenticating' && (
         <Box flexDirection="column">
           <ProjectInfoStatus projectInfo={projectInfo} />
-          <StatusMessage type="loading" message="Authenticating with Apple Developer Portal..." />
+          <StatusMessage type="loading" message="Logging in to Apple Developer account..." />
+          {authStatusMessage ? (
+            <Box marginLeft={2}>
+              <Text dimColor>• {authStatusMessage}</Text>
+            </Box>
+          ) : null}
+          <Box marginTop={1} marginLeft={2} flexDirection="column">
+            <Text dimColor>• Press Ctrl+C to cancel</Text>
+          </Box>
         </Box>
       )}
 
@@ -360,7 +412,11 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
       {phase === 'updating_entitlements' && (
         <Box flexDirection="column">
           <ProjectInfoStatus projectInfo={projectInfo} />
-          <PortalSyncStatus portalResult={portalResult} skipPortal={options.skipPortal} />
+          <PortalSyncStatus
+            portalResult={portalResult}
+            portalSkipped={portalSkipped}
+            portalSkipReason={portalSkipReason}
+          />
           <StatusMessage type="loading" message="Updating entitlements files..." />
         </Box>
       )}
@@ -370,9 +426,10 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
         <CompletePhase
           projectInfo={projectInfo}
           portalResult={portalResult}
+          portalSkipped={portalSkipped}
+          portalSkipReason={portalSkipReason}
           mainTargetEntitlementsLink={mainTargetEntitlementsLink}
           updatedFiles={updatedFiles}
-          skipPortal={options.skipPortal}
         />
       )}
 
@@ -404,10 +461,20 @@ const ProjectInfoStatus: React.FC<{ projectInfo: IosProjectInfo | null }> = ({ p
 
 const PortalSyncStatus: React.FC<{
   portalResult: CapabilitySyncResult | null;
-  skipPortal?: boolean;
-}> = ({ portalResult, skipPortal }) => {
-  if (skipPortal) {
-    return <StatusMessage type="info" message="Portal sync skipped" />;
+  portalSkipped: boolean;
+  portalSkipReason: string | null;
+}> = ({ portalResult, portalSkipped, portalSkipReason }) => {
+  if (portalSkipped) {
+    return (
+      <Box flexDirection="column">
+        <StatusMessage type="info" message="Portal sync skipped" />
+        {portalSkipReason ? (
+          <Box marginLeft={2}>
+            <Text dimColor>Reason: {portalSkipReason}</Text>
+          </Box>
+        ) : null}
+      </Box>
+    );
   }
   if (!portalResult) return null;
   return (
@@ -430,10 +497,18 @@ const PortalSyncStatus: React.FC<{
 const CompletePhase: React.FC<{
   projectInfo: IosProjectInfo | null;
   portalResult: CapabilitySyncResult | null;
+  portalSkipped: boolean;
+  portalSkipReason: string | null;
   mainTargetEntitlementsLink: MainTargetEntitlementsLinkResult | null;
   updatedFiles: string[];
-  skipPortal?: boolean;
-}> = ({ projectInfo, portalResult, mainTargetEntitlementsLink, updatedFiles, skipPortal }) => {
+}> = ({
+  projectInfo,
+  portalResult,
+  portalSkipped,
+  portalSkipReason,
+  mainTargetEntitlementsLink,
+  updatedFiles,
+}) => {
   const nextSteps: string[] = [];
 
   if (mainTargetEntitlementsLink?.success) {
@@ -454,18 +529,15 @@ const CompletePhase: React.FC<{
     );
   }
 
-  if (skipPortal) {
+  if (portalSkipped) {
     nextSteps.push(
       'If Xcode cannot enable capabilities (team/permission issue), use Apple Developer Portal: https://developer.apple.com/account/resources/identifiers/list -> Identifiers -> your App ID -> enable Push Notifications/App Groups -> Save.',
     );
-    nextSteps.push(
-      'If signing/profile errors remain, open https://developer.apple.com/account/resources/profiles/list and regenerate profiles. With Automatic Signing, Xcode may refresh them automatically.',
-    );
-  } else {
-    nextSteps.push(
-      'If signing/profile errors remain, open https://developer.apple.com/account/resources/profiles/list and regenerate profiles for this App ID (or let Automatic Signing refresh them).',
-    );
   }
+
+  nextSteps.push(
+    'If signing/profile errors remain, open https://developer.apple.com/account/resources/profiles/list and regenerate profiles for this App ID (or let Automatic Signing refresh them).',
+  );
 
   return (
     <Box flexDirection="column">
@@ -487,8 +559,15 @@ const CompletePhase: React.FC<{
         </Box>
       )}
 
-      {skipPortal && (
-        <StatusMessage type="info" message="Portal sync skipped (use --api-key to enable)" />
+      {portalSkipped && (
+        <Box flexDirection="column">
+          <StatusMessage type="info" message="Portal sync skipped" />
+          {portalSkipReason ? (
+            <Box marginLeft={2}>
+              <Text dimColor>Reason: {portalSkipReason}</Text>
+            </Box>
+          ) : null}
+        </Box>
       )}
 
       <StatusMessage type="success" message="Entitlements files updated" />

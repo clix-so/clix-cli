@@ -69,20 +69,73 @@ function DetectingPhase(): React.ReactElement {
 
 function StatusPhase({
   result,
+  identifierMismatch,
+  expectedIdentifiers,
   onContinue,
+  onCreateAndroidForCurrentPackage,
+  onCreateIosForCurrentBundle,
   onCancel,
 }: {
   result: FirebaseDetectionResult;
+  identifierMismatch?: { ios: boolean; android: boolean };
+  expectedIdentifiers?: { iosBundleId?: string; androidPackageName?: string };
   onContinue: () => void;
+  onCreateAndroidForCurrentPackage?: () => void;
+  onCreateIosForCurrentBundle?: () => void;
   onCancel: () => void;
 }): React.ReactElement {
+  const canCreateAndroidForCurrentPackage = Boolean(
+    onCreateAndroidForCurrentPackage &&
+      identifierMismatch?.android &&
+      expectedIdentifiers?.androidPackageName,
+  );
+  const canCreateIosForCurrentBundle = Boolean(
+    onCreateIosForCurrentBundle && identifierMismatch?.ios && expectedIdentifiers?.iosBundleId,
+  );
+  const hasCreateAction = canCreateAndroidForCurrentPackage || canCreateIosForCurrentBundle;
+
   useInput((_input, key) => {
-    if (key.return) {
+    if (!hasCreateAction && key.return) {
       onContinue();
     }
   });
 
   useCancelInput(onCancel);
+
+  const hasMismatch = identifierMismatch?.ios || identifierMismatch?.android;
+  const detectedIosBundleId =
+    result.ios?.content && 'BUNDLE_ID' in result.ios.content
+      ? (result.ios.content as { BUNDLE_ID?: string }).BUNDLE_ID
+      : undefined;
+  const detectedAndroidPackage =
+    result.android?.content && 'client' in result.android.content
+      ? (
+          result.android.content as {
+            client?: Array<{ client_info?: { android_client_info?: { package_name?: string } } }>;
+          }
+        ).client
+          ?.map((client) => client.client_info?.android_client_info?.package_name)
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+          .join(', ')
+      : undefined;
+
+  const mismatchActionItems: Array<{
+    label: string;
+    value: 'download' | 'create_android' | 'create_ios' | 'cancel';
+  }> = [{ label: '⬇ Download correct files', value: 'download' }];
+  if (canCreateAndroidForCurrentPackage) {
+    mismatchActionItems.push({
+      label: `➕ Create Android app for current package (${expectedIdentifiers?.androidPackageName})`,
+      value: 'create_android',
+    });
+  }
+  if (canCreateIosForCurrentBundle) {
+    mismatchActionItems.push({
+      label: `➕ Create iOS app for current bundle ID (${expectedIdentifiers?.iosBundleId})`,
+      value: 'create_ios',
+    });
+  }
+  mismatchActionItems.push({ label: '← Back', value: 'cancel' });
 
   return (
     <Box
@@ -94,8 +147,59 @@ function StatusPhase({
       marginY={1}
     >
       <FirebaseStatusDisplay result={result} showDetails={true} />
+      {identifierMismatch?.ios && expectedIdentifiers?.iosBundleId && (
+        <Box marginTop={1} flexDirection="column">
+          <Text color="yellow" bold>
+            ⚠ iOS Bundle ID mismatch
+          </Text>
+          <Box marginLeft={2} flexDirection="column">
+            <Text color="yellow">Expected: {expectedIdentifiers.iosBundleId}</Text>
+            <Text color="yellow">Found: {detectedIosBundleId ?? 'unknown'}</Text>
+          </Box>
+        </Box>
+      )}
+      {identifierMismatch?.android && expectedIdentifiers?.androidPackageName && (
+        <Box marginTop={1} flexDirection="column">
+          <Text color="yellow" bold>
+            ⚠ Android package name mismatch
+          </Text>
+          <Box marginLeft={2} flexDirection="column">
+            <Text color="yellow">Expected: {expectedIdentifiers.androidPackageName}</Text>
+            <Text color="yellow">Found: {detectedAndroidPackage ?? 'unknown'}</Text>
+          </Box>
+        </Box>
+      )}
       <Box marginTop={1}>
-        <Text dimColor>Press Enter to download required files, Esc/Ctrl+C to cancel</Text>
+        {hasCreateAction ? (
+          <Box flexDirection="column">
+            <Text dimColor>Choose how to resolve identifier mismatch:</Text>
+            <SelectInput
+              items={mismatchActionItems}
+              onSelect={(item) => {
+                if (item.value === 'download') {
+                  onContinue();
+                  return;
+                }
+                if (item.value === 'create_android') {
+                  onCreateAndroidForCurrentPackage?.();
+                  return;
+                }
+                if (item.value === 'create_ios') {
+                  onCreateIosForCurrentBundle?.();
+                  return;
+                }
+                onCancel();
+              }}
+            />
+            <Text dimColor>↑↓ navigate · Enter select · Esc/Ctrl+C cancel</Text>
+          </Box>
+        ) : (
+          <Text dimColor>
+            {hasMismatch
+              ? 'Press Enter to download correct files, Esc/Ctrl+C to cancel'
+              : 'Press Enter to download required files, Esc/Ctrl+C to cancel'}
+          </Text>
+        )}
       </Box>
     </Box>
   );
@@ -341,14 +445,16 @@ function NoAppsFoundPhase({
 
 function CreateAppInputPhase({
   platform,
+  defaultIdentifier,
   onSubmit,
   onCancel,
 }: {
   platform: 'android' | 'ios';
+  defaultIdentifier?: string;
   onSubmit: (identifier: string, displayName?: string) => void;
   onCancel: () => void;
 }): React.ReactElement {
-  const [identifier, setIdentifier] = useState('');
+  const [identifier, setIdentifier] = useState(defaultIdentifier ?? '');
   const [displayName, setDisplayName] = useState('');
   const [stage, setStage] = useState<'identifier' | 'display_name'>('identifier');
 

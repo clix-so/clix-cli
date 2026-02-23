@@ -34,6 +34,66 @@ export interface CapabilitySyncResult {
   appGroupCreated: boolean;
 }
 
+function isBundleIdentifierUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('identifier') &&
+    (message.includes('not available') || message.includes('invalid value'))
+  );
+}
+
+function extractBundleIdentifier(bundle: unknown): string | null {
+  if (typeof bundle !== 'object' || bundle === null) {
+    return null;
+  }
+  const record = bundle as Record<string, unknown>;
+
+  const directIdentifier = record.identifier;
+  if (typeof directIdentifier === 'string' && directIdentifier.length > 0) {
+    return directIdentifier;
+  }
+
+  const attributes = record.attributes;
+  if (typeof attributes !== 'object' || attributes === null) {
+    return null;
+  }
+
+  const identifier = (attributes as Record<string, unknown>).identifier;
+  if (typeof identifier === 'string' && identifier.length > 0) {
+    return identifier;
+  }
+
+  return null;
+}
+
+async function getTeamBundleIdentifiers(
+  context: RequestContext,
+  maxItems = 10,
+): Promise<{ identifiers: string[]; remainingCount: number }> {
+  try {
+    const bundles = await BundleId.getAsync(context, { query: { limit: 200 } });
+    const identifiers = (bundles ?? [])
+      .map((bundle) => extractBundleIdentifier(bundle))
+      .filter((identifier): identifier is string => Boolean(identifier))
+      .sort((a, b) => a.localeCompare(b));
+
+    if (identifiers.length <= maxItems) {
+      return { identifiers, remainingCount: 0 };
+    }
+
+    return {
+      identifiers: identifiers.slice(0, maxItems),
+      remainingCount: identifiers.length - maxItems,
+    };
+  } catch {
+    return { identifiers: [], remainingCount: 0 };
+  }
+}
+
 /**
  * Create authentication context using API Key
  */
@@ -102,13 +162,41 @@ export async function findOrCreateBundleId(
 
   // Create new Bundle ID
   const displayName = name || bundleIdentifier.split('.').pop() || bundleIdentifier;
-  const newBundleId = await BundleId.createAsync(context, {
-    name: displayName,
-    identifier: bundleIdentifier,
-    platform: BundleIdPlatform.IOS,
-  });
+  try {
+    const newBundleId = await BundleId.createAsync(context, {
+      name: displayName,
+      identifier: bundleIdentifier,
+      platform: BundleIdPlatform.IOS,
+    });
 
-  return newBundleId;
+    return newBundleId;
+  } catch (error) {
+    if (!isBundleIdentifierUnavailableError(error)) {
+      throw error;
+    }
+
+    // Fallback: in some cases create can fail even when the Bundle ID already exists in team.
+    const recheckedBundleId = await BundleId.findAsync(context, {
+      identifier: bundleIdentifier,
+    });
+    if (recheckedBundleId) {
+      return recheckedBundleId;
+    }
+
+    const { identifiers, remainingCount } = await getTeamBundleIdentifiers(context);
+    const bundleListMessage =
+      identifiers.length > 0
+        ? `\nCurrent team Bundle IDs:\n- ${identifiers.join('\n- ')}${
+            remainingCount > 0 ? `\n- ... and ${remainingCount} more` : ''
+          }`
+        : '';
+
+    throw new Error(
+      `Bundle ID "${bundleIdentifier}" is not available for the current Apple Team. ` +
+        'Use a different bundle ID or switch to the Apple Team that owns this App ID.' +
+        bundleListMessage,
+    );
+  }
 }
 
 /**

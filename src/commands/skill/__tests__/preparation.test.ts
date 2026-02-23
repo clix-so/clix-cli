@@ -422,6 +422,34 @@ describe('preparation', () => {
       expect(status.entitlementsConfigured).toBe(true);
       expect(status.nseConfigured).toBe(true);
     });
+
+    test('should not treat extension entitlements as main iOS entitlements', async () => {
+      const projectType: ProjectType = { framework: 'native', target: 'ios' };
+
+      mockIos.analyzeIosProject.mockResolvedValueOnce({
+        success: true,
+        project: {
+          projectPath: '/test/ios/MyApp.xcodeproj',
+          workspacePath: '/test/ios/MyApp.xcworkspace',
+          bundleId: 'com.test.app',
+          appName: 'MyApp',
+          targets: ['MyApp', 'MyAppNotificationServiceExtension'],
+          entitlementsFiles: [
+            '/test/ios/MyAppNotificationServiceExtension/MyAppNotificationServiceExtension.entitlements',
+          ],
+          teamId: 'TEAM123456',
+        },
+      });
+      mockIos.readEntitlements.mockResolvedValueOnce({
+        'aps-environment': 'development',
+        'com.apple.security.application-groups': ['group.clix.com.test.app'],
+      });
+      mockIos.hasClixConfiguration.mockReturnValueOnce({ hasPush: true, hasAppGroup: true });
+
+      const status = await checkIosStatus('/test', projectType);
+
+      expect(status.entitlementsConfigured).toBe(false);
+    });
   });
 
   describe('checkApnsStatus', () => {
