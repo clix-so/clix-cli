@@ -129,9 +129,6 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
         const projectConfigManager = getProjectConfigManager(workspacePath);
         await projectConfigManager.save(config);
 
-        // Ensure .clix is in .gitignore
-        await projectConfigManager.ensureGitignore();
-
         setSavedConfig(config);
         setPhase('complete');
 

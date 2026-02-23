@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { ensureClixGitignore } from '../utils/gitignore';
 import { findProjectRoot } from '../utils/path';
 import { AUTH_ENV_VARS, getAuth0Config } from './config';
 import { AuthError } from './errors';
@@ -70,6 +71,7 @@ export class CredentialsManager {
       await stat(this.stateDirPath);
     } catch {
       await mkdir(this.stateDirPath, { recursive: true, mode: 0o755 });
+      await ensureClixGitignore(dirname(this.stateDirPath));
     }
   }
 

@@ -141,9 +141,6 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         const projectConfigManager = getProjectConfigManager(workspacePath);
         await projectConfigManager.save(projectConfig);
 
-        // Ensure .clix is in .gitignore
-        await projectConfigManager.ensureGitignore();
-
         setSavedConfig(projectConfig);
         setPhase('complete');
         setTimeout(() => {

@@ -1,6 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ConfigError, ERROR_CODES } from '../errors/types';
+import { ensureClixGitignore } from '../utils/gitignore';
 import {
   CURRENT_PROJECT_CONFIG_VERSION,
   ensureLatestVersion,
@@ -15,16 +16,6 @@ import {
  * Comment header for the project config file.
  */
 const CONFIG_HEADER = '';
-
-/**
- * Gitignore patterns to check for .clix directory.
- */
-const GITIGNORE_PATTERNS = ['.clix', '.clix/', '/.clix', '/.clix/'];
-
-/**
- * Gitignore entry to add.
- */
-const GITIGNORE_ENTRY = '\n# Clix CLI local config\n.clix/\n';
 
 /**
  * ProjectConfigManager handles loading and saving project-local configuration.
@@ -94,6 +85,7 @@ export class ProjectConfigManager {
       await stat(this.configDirPath);
     } catch {
       await mkdir(this.configDirPath, { recursive: true, mode: 0o755 });
+      await ensureClixGitignore(this.projectPath);
     }
   }
 
@@ -218,50 +210,6 @@ export class ProjectConfigManager {
       this.cachedConfig = null;
     } catch {
       // File doesn't exist, ignore
-    }
-  }
-
-  /**
-   * Ensure .clix is in .gitignore.
-   * Adds entry if not already present.
-   *
-   * @returns True if gitignore was modified
-   */
-  async ensureGitignore(): Promise<boolean> {
-    const gitignorePath = join(this.projectPath, '.gitignore');
-
-    try {
-      let content = '';
-
-      // Try to read existing .gitignore
-      try {
-        content = await readFile(gitignorePath, 'utf-8');
-      } catch {
-        // File doesn't exist, will create new one
-      }
-
-      // Check if .clix is already ignored
-      const lines = content.split('\n');
-      const hasClixIgnore = lines.some((line) => {
-        const trimmed = line.trim();
-        return GITIGNORE_PATTERNS.includes(trimmed);
-      });
-
-      if (hasClixIgnore) {
-        return false;
-      }
-
-      // Add .clix to gitignore
-      const newContent =
-        content.endsWith('\n') || content === ''
-          ? `${content}${GITIGNORE_ENTRY}`
-          : `${content}\n${GITIGNORE_ENTRY}`;
-
-      await writeFile(gitignorePath, newContent, 'utf-8');
-      return true;
-    } catch {
-      // Non-fatal: log warning but continue
-      return false;
     }
   }
 
