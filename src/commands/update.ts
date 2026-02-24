@@ -5,6 +5,7 @@
  */
 
 import readline from 'node:readline/promises';
+import { setExitCode } from '../lib/exit';
 import {
   executeUpdate,
   planUpdate,
@@ -89,7 +90,8 @@ export async function updateCommand(
     // Check for update-check errors (network/registry failures)
     if (plan.error) {
       console.error(`Failed to check for updates: ${plan.error}`);
-      process.exit(1);
+      setExitCode(1);
+      return;
     }
 
     // No update available
@@ -131,11 +133,12 @@ export async function updateCommand(
     displayUpdateResult(result, plan);
 
     if (!result.success) {
-      process.exit(1);
+      setExitCode(1);
+      return;
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`\nFailed to update: ${errorMessage}\n`);
-    process.exit(1);
+    setExitCode(1);
   }
 }

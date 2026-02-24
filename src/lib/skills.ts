@@ -1,96 +1,55 @@
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import {
-  EMBEDDED_SKILL_METADATA,
-  getEmbeddedSkill,
-  getSkillMetadataByCommand,
-  hasEmbeddedSkills,
-  type SkillMetadata,
-} from './embedded-skills';
+import type { PreparationContext } from '@/commands/skill/preparation';
+import { getEmbeddedSkill, hasEmbeddedSkills } from './embedded-skills';
 import type { AgentExecutor, AgentMessage } from './executor';
-import { getDebugPrompt } from './services/debug-service';
+import { formatProjectType } from './services/project-detector';
 
-/**
- * Skill type - dynamically generated from embedded skills + local skills.
- * Use getAvailableSkillTypes() for runtime access.
- */
 export type SkillType = string;
 
 export interface SkillOptions {
   projectPath?: string;
-  platform?: 'ios' | 'android' | 'react-native' | 'flutter';
   signal?: AbortSignal;
-  /** One-shot mode: disable session persistence (for command-line execution) */
   oneShot?: boolean;
+  preparationContext?: PreparationContext;
 }
 
 export interface SkillInfo {
   type: SkillType;
   name: string;
   description: string;
-  /** Whether this is a local skill (not from @clix-so/clix-agent-skills) */
   isLocal?: boolean;
-  /** Whether this skill uses an AI agent (default: true). Set to false for direct implementation. */
   usesAgent?: boolean;
+  visibility?: 'public' | 'internal';
 }
 
-/**
- * Local skills that are not provided by @clix-so/clix-agent-skills.
- * These are implemented directly in this file.
- */
 const LOCAL_SKILLS: SkillInfo[] = [
   {
     type: 'install',
     name: 'SDK Installation',
-    description: 'Autonomous SDK installation with automatic file modifications',
+    description: 'Autonomous SDK integration with automatic file modifications',
     isLocal: true,
+    visibility: 'public',
   },
   {
     type: 'doctor',
     name: 'SDK Doctor',
     description: 'Check Clix SDK integration status',
     isLocal: true,
+    visibility: 'public',
   },
-  {
-    type: 'debug',
-    name: 'Debug Assistant',
-    description: 'Interactive debugging assistant',
-    isLocal: true,
-  },
-  // NOTE: ios-setup is now a LocalJSXCommand in registry.ts, not a skill
 ];
 
-/**
- * Get all available skills (from embedded metadata + local skills).
- */
 export function getAvailableSkills(): SkillInfo[] {
-  const embeddedSkills: SkillInfo[] = EMBEDDED_SKILL_METADATA.map((meta) => ({
-    type: meta.commandName,
-    name: meta.displayName,
-    description: meta.shortDescription || meta.displayName,
-    isLocal: false,
-  }));
-
-  return [...embeddedSkills, ...LOCAL_SKILLS];
+  return LOCAL_SKILLS;
 }
 
-/**
- * Available skills - for backward compatibility.
- * Prefer using getAvailableSkills() for dynamic access.
- */
 export const AVAILABLE_SKILLS: SkillInfo[] = getAvailableSkills();
 
-/**
- * Get all available skill types (command names).
- */
 export function getAvailableSkillTypes(): string[] {
   return getAvailableSkills().map((s) => s.type);
 }
 
-/**
- * Check if a skill type is valid.
- */
 export function isValidSkillType(type: string): boolean {
   return getAvailableSkillTypes().includes(type);
 }
@@ -99,114 +58,23 @@ export function getSkillInfo(type: SkillType): SkillInfo | undefined {
   return getAvailableSkills().find((skill) => skill.type === type);
 }
 
-/**
- * Get skill metadata by command name.
- */
-function getSkillFolderByCommand(commandName: string): string | null {
-  const meta = getSkillMetadataByCommand(commandName);
-  return meta?.folder ?? null;
-}
-
-/**
- * Check if a skill is a local skill (not from package).
- */
 function isLocalSkill(skillType: SkillType): boolean {
-  return LOCAL_SKILLS.some((s) => s.type === skillType);
+  return getAvailableSkills().some((skill) => skill.type === skillType && skill.isLocal);
 }
 
-function getSkillsPackagePath(): string | null {
-  try {
-    const require = createRequire(import.meta.url);
-    const packagePath = require.resolve('@clix-so/clix-agent-skills/package.json');
-    return dirname(packagePath);
-  } catch {
-    return null;
-  }
-}
-
-function readSkillMarkdown(skillFolder: string): string {
-  // Try external package first (for development)
-  const packagePath = getSkillsPackagePath();
-  if (packagePath) {
-    try {
-      const skillPath = join(packagePath, 'skills', skillFolder, 'SKILL.md');
-      return readFileSync(skillPath, 'utf-8');
-    } catch {
-      // Fall through to embedded skills
-    }
-  }
-
-  // Fall back to embedded skills (for bundled binary)
-  if (hasEmbeddedSkills()) {
-    const embeddedSkill = getEmbeddedSkill(skillFolder);
-    if (embeddedSkill) {
-      return embeddedSkill;
-    }
-  }
-
-  // No skills available
-  throw new Error(
-    `Skill "${skillFolder}" not found. Skills package not installed and no embedded skills available.`,
-  );
-}
-
-/**
- * One-shot mode instruction with explicit file modification permissions.
- * Instructs the agent to actually make changes rather than providing manual steps.
- */
 const ONE_SHOT_INSTRUCTION = `
 IMPORTANT: This is a non-interactive one-shot execution with FULL file modification permissions.
 
 EXECUTION GUIDELINES:
 - You have FULL permission to create, modify, and delete files autonomously
 - DO NOT ask for user input, confirmation, or permission
-- Make reasonable assumptions based on the project structure
-- Choose the most common/recommended approach when multiple options exist
-- PROCEED WITH ALL NECESSARY FILE CHANGES without waiting for user response
-- If critical information is missing, state your assumptions and proceed with changes
-
-FILE OPERATIONS:
-- Create new files as needed for the integration
-- Modify existing configuration files
-- Update source code files with initialization code
-- Add environment variables to config files
-- DO NOT just provide instructions - ACTUALLY MAKE THE CHANGES
-
-COMPLETION CRITERIA:
-- All necessary files must be created or modified
-- Integration must be fully functional without manual intervention
-- Provide a summary of changes made (not what needs to be done manually)
+- Make reasonable assumptions based on project structure and pre-configured setup context
+- PROCEED WITH FILE CHANGES directly; do not only provide instructions
+- Run required commands for dependency resolution and verification
+- If blocked by external constraints (credentials, permissions, unavailable services), report the blocker clearly
 `;
 
-/**
- * Interactive mode instruction for Guided Interactive Workflow.
- * Instructs the agent to follow the Confirm → Propose → Validate → Implement → Verify pattern.
- */
-const INTERACTIVE_MODE_INSTRUCTION = `
-IMPORTANT: This is an interactive conversation session. Follow the Guided Interactive Workflow.
-
-EXECUTION GUIDELINES:
-- ALWAYS follow the workflow steps in order: Confirm → Propose → Validate → Implement → Verify
-- DO NOT skip to implementation without completing earlier steps
-- ASK for required inputs before proceeding (platform, goals, preferences)
-- PROPOSE your plan and wait for user approval before making changes
-- NEVER modify files without explicit user confirmation
-- If information is missing, ASK the user rather than assuming
-
-WORKFLOW ENFORCEMENT:
-- Start by confirming the minimum required inputs from the user
-- Present your proposed plan for review
-- Only proceed to implementation after the user approves the plan
-- Validate before implementing, verify after implementing
-`;
-
-/**
- * Read a local skill prompt from the skills directory.
- * Local skill prompts are stored in src/lib/skills/<skill-name>/SKILL.md
- * For bundled builds, prompts are embedded at build time.
- */
 function readLocalSkillPrompt(skillName: string): string {
-  // Try embedded skills first (for bundled binary)
   if (hasEmbeddedSkills()) {
     const embeddedSkill = getEmbeddedSkill(`local-${skillName}`);
     if (embeddedSkill) {
@@ -214,7 +82,6 @@ function readLocalSkillPrompt(skillName: string): string {
     }
   }
 
-  // Fall back to reading from file system (for development)
   try {
     const skillPath = join(
       dirname(import.meta.url.replace('file://', '')),
@@ -228,119 +95,254 @@ function readLocalSkillPrompt(skillName: string): string {
   }
 }
 
-/**
- * Get prompt for the install skill.
- * Uses the autonomous installation prompt optimized for one-shot execution.
- * Prompt is loaded from src/lib/skills/install/SKILL.md
- */
-function getInstallPrompt(options?: SkillOptions): string {
-  const projectPath = options?.projectPath ?? process.cwd();
-  const platform = options?.platform ?? 'auto-detect';
+function formatSetupStepStatus(required: boolean, configured: boolean): string {
+  if (!required) {
+    return '- not required';
+  }
+  return configured ? '✓ verified' : '✗ missing';
+}
 
-  let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n\n`;
-
-  // Add one-shot instruction for autonomous execution
-  if (options?.oneShot) {
-    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
-
-    // Add explicit directive for autonomous execution
-    prompt += `## EXECUTION MODE: AUTONOMOUS
-
-You are in autonomous one-shot execution mode:
-- ALL file operations are pre-approved
-- Use Write/Edit/Bash tools immediately without asking
-- Complete all integration steps automatically
-- Report what was done, not what should be done
-
-`;
+function formatProjectPublicApiKey(value: unknown): string {
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
   }
 
-  // Load the autonomous installation prompt from external file
-  const installPrompt = readLocalSkillPrompt('install');
-  prompt += installPrompt;
+  if (typeof value === 'object' && value !== null && 'key' in value) {
+    const keyValue = (value as { key: unknown }).key;
+    if (typeof keyValue === 'string' && keyValue.length > 0) {
+      return keyValue;
+    }
+  }
 
+  return 'not configured';
+}
+
+function appendOptionalSection(
+  lines: string[],
+  title: string,
+  rows: string[],
+  enabled: boolean = true,
+): void {
+  if (!enabled) {
+    return;
+  }
+
+  lines.push(`### ${title}`);
+  for (const row of rows) {
+    lines.push(`- ${row}`);
+  }
+  lines.push('');
+}
+
+interface PreparationSectionOptions {
+  verificationTitle?: string;
+  footerLines?: string[];
+}
+
+function buildPreparationSection(
+  context: PreparationContext,
+  options?: PreparationSectionOptions,
+): string {
+  const lines: string[] = ['## Pre-configured Setup', ''];
+  lines.push(`Project: ${context.config.project.name}`);
+  lines.push(`Type: ${formatProjectType(context.projectType)}`);
+  lines.push('');
+
+  const iosTarget =
+    context.projectType.target === 'ios' || context.projectType.target === 'ios-android';
+  const androidTarget =
+    context.projectType.target === 'android' || context.projectType.target === 'ios-android';
+  const firebaseFilesConfigured =
+    !context.firebase.needed ||
+    ((!iosTarget || context.firebase.iosConfigured) &&
+      (!androidTarget || context.firebase.androidConfigured));
+  appendOptionalSection(lines, options?.verificationTitle ?? 'Setup Verification', [
+    'Project linked: ✓ verified',
+    `Firebase Configuration Files: ${formatSetupStepStatus(
+      context.firebase.needed,
+      firebaseFilesConfigured,
+    )}`,
+    `APNS Key for Firebase: ${formatSetupStepStatus(
+      context.apns.needed,
+      context.apns.registeredWithFirebase,
+    )}`,
+    `Firebase Service Account: ${formatSetupStepStatus(
+      context.firebase.needed,
+      context.firebase.senderConfigConfigured &&
+        context.firebase.senderConfigProjectMatched !== false,
+    )}`,
+    `iOS Entitlements: ${formatSetupStepStatus(context.ios.needed, context.ios.entitlementsConfigured)}`,
+    `Notification Service Extension: ${formatSetupStepStatus(
+      context.ios.needed,
+      context.ios.nseConfigured,
+    )}`,
+  ]);
+
+  appendOptionalSection(lines, 'Clix Project', [
+    `Project ID: ${context.config.project.id}`,
+    `Project Public API Key: ${formatProjectPublicApiKey(
+      context.config.project.public_api_key ?? context.config.project.publicKey,
+    )}`,
+  ]);
+
+  appendOptionalSection(
+    lines,
+    'Firebase',
+    [
+      `Project ID: ${context.firebase.projectId || 'not configured'}`,
+      `Android (google-services.json): ${context.firebase.androidConfigured ? '✓ configured' : '✗ missing'}`,
+      `iOS (GoogleService-Info.plist): ${context.firebase.iosConfigured ? '✓ configured' : '✗ missing'}`,
+      `Sender Config (App Push): ${
+        context.firebase.senderConfigConfigured
+          ? context.firebase.senderConfigProjectMatched === false
+            ? '✗ project mismatch'
+            : '✓ configured'
+          : '✗ missing'
+      }`,
+    ],
+    context.firebase.needed,
+  );
+
+  appendOptionalSection(
+    lines,
+    'APNS',
+    [
+      `Key ID: ${context.apns.keyId || 'not configured'}`,
+      `Team ID: ${context.apns.teamId || 'not configured'}`,
+      `Registered with Firebase: ${context.apns.registeredWithFirebase ? '✓ configured' : '✗ missing'}`,
+    ],
+    context.apns.needed,
+  );
+
+  appendOptionalSection(
+    lines,
+    'iOS',
+    [
+      `Bundle ID: ${context.ios.bundleId || 'not detected'}`,
+      `Team ID: ${context.ios.teamId || 'not detected'}`,
+      `App Group: ${context.ios.appGroupId || 'not configured'}`,
+      `Entitlements: ${context.ios.entitlementsConfigured ? '✓ configured' : '✗ not configured'}`,
+      `NSE (Notification Service Extension): ${context.ios.nseConfigured ? '✓ configured' : '✗ not configured'}`,
+    ],
+    context.ios.needed,
+  );
+
+  appendOptionalSection(
+    lines,
+    'Missing Setup (handle before build)',
+    context.missing,
+    context.missing.length > 0,
+  );
+
+  const footer = options?.footerLines ?? [
+    'This context was pre-verified by clix before agent handoff.',
+    'Use these values as ground truth for your analysis.',
+  ];
+  for (const line of footer) {
+    lines.push(line);
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function getInstallPrompt(options?: SkillOptions): string {
+  const projectPath = options?.projectPath ?? process.cwd();
+  const context = options?.preparationContext;
+  const inferredPlatform =
+    context?.projectType.framework === 'flutter'
+      ? 'flutter'
+      : context?.projectType.framework === 'react-native' ||
+          context?.projectType.framework === 'expo'
+        ? 'react-native'
+        : context?.projectType.framework === 'native'
+          ? context.projectType.target === 'ios'
+            ? 'ios'
+            : context.projectType.target === 'android'
+              ? 'android'
+              : undefined
+          : undefined;
+  const platform = inferredPlatform ?? 'auto-detect';
+
+  let prompt = `Project path: ${projectPath}\nTarget platform: ${platform}\n`;
+  if (context) {
+    prompt += `Detected project type: ${formatProjectType(context.projectType)}\n`;
+  }
+  prompt += '\n';
+
+  if (context) {
+    prompt += buildPreparationSection(context, {
+      verificationTitle: 'Install Step Verification',
+      footerLines: [
+        'Treat the above as already executed/validated by clix install preparation.',
+        'Use these pre-configured values when running build and troubleshooting failures.',
+      ],
+    });
+    prompt += '\n';
+  }
+
+  prompt +=
+    'Execution goal: Complete SDK integration workflow using the pre-configured setup context.\n';
+  prompt += 'Use build commands for verification after integration changes.\n\n';
+
+  if (options?.oneShot) {
+    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
+  }
+
+  prompt += readLocalSkillPrompt('install');
   return prompt;
+}
+
+function getDoctorPrompt(options?: SkillOptions): string {
+  const projectPath = options?.projectPath ?? process.cwd();
+  const context = options?.preparationContext;
+
+  let prompt = `Project path: ${projectPath}\n`;
+  if (context) {
+    prompt += `Detected project type: ${formatProjectType(context.projectType)}\n`;
+  }
+  prompt += '\n';
+
+  if (context) {
+    prompt += buildPreparationSection(context, {
+      verificationTitle: 'Pre-verified Status',
+      footerLines: [
+        'This context was pre-verified by clix before agent handoff.',
+        'Use these values as ground truth. Do not re-scan for information already provided above.',
+        'Focus your analysis on SDK integration issues, version checks, and actionable recommendations.',
+      ],
+    });
+    prompt += '\n';
+  }
+
+  if (options?.oneShot) {
+    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
+  }
+
+  prompt += readLocalSkillPrompt('doctor');
+  return prompt;
+}
+
+async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions): Promise<string> {
+  switch (skillType) {
+    case 'install':
+      return getInstallPrompt(options);
+    case 'doctor':
+      return getDoctorPrompt(options);
+    default:
+      throw new Error(`Unknown local skill: ${skillType}`);
+  }
 }
 
 export async function getSkillPrompt(
   skillType: SkillType,
   options?: SkillOptions,
 ): Promise<string> {
-  // Handle local skills
-  if (isLocalSkill(skillType)) {
-    return await getLocalSkillPrompt(skillType, options);
+  if (!isLocalSkill(skillType)) {
+    throw new Error(`Unknown command type: ${skillType}`);
   }
 
-  // Get folder name from metadata
-  const skillFolder = getSkillFolderByCommand(skillType);
-  if (!skillFolder) {
-    throw new Error(`Unknown skill type: ${skillType}`);
-  }
-
-  // Read SKILL.md from @clix-so/clix-agent-skills package
-  const skillMarkdown = readSkillMarkdown(skillFolder);
-
-  const projectPath = options?.projectPath ?? process.cwd();
-  const platform = options?.platform ?? 'auto-detect';
-
-  // Build prompt with context
-  let prompt = `Project path: ${projectPath}
-Target platform: ${platform}
-`;
-
-  // Add mode-specific instruction
-  if (options?.oneShot) {
-    prompt += ONE_SHOT_INSTRUCTION;
-  } else {
-    prompt += INTERACTIVE_MODE_INSTRUCTION;
-  }
-
-  prompt += `\n${skillMarkdown}`;
-
-  return prompt;
-}
-
-/**
- * Get prompt for local skills.
- */
-async function getLocalSkillPrompt(skillType: SkillType, options?: SkillOptions): Promise<string> {
-  switch (skillType) {
-    case 'install':
-      // install uses autonomous installation prompt
-      return getInstallPrompt(options);
-    case 'doctor':
-      return getDoctorPrompt(options);
-    case 'debug':
-      return getDebugPrompt({
-        problemDescription: 'General debugging session',
-        projectPath: options?.projectPath ?? process.cwd(),
-        oneShot: options?.oneShot,
-      });
-    default:
-      throw new Error(`Unknown local skill: ${skillType}`);
-  }
-}
-
-/**
- * Get prompt for the doctor skill.
- * Uses the doctor prompt for SDK integration status analysis.
- * Prompt is loaded from src/lib/skills/doctor/SKILL.md
- */
-function getDoctorPrompt(options?: SkillOptions): string {
-  const projectPath = options?.projectPath ?? process.cwd();
-
-  let prompt = `Project path: ${projectPath}\n\n`;
-
-  // Add one-shot instruction for autonomous execution
-  if (options?.oneShot) {
-    prompt += `${ONE_SHOT_INSTRUCTION}\n\n`;
-  }
-
-  // Load the doctor prompt from external file
-  const doctorPrompt = readLocalSkillPrompt('doctor');
-  prompt += doctorPrompt;
-
-  return prompt;
+  return await getLocalSkillPrompt(skillType, options);
 }
 
 export async function* executeSkill(
@@ -353,13 +355,7 @@ export async function* executeSkill(
   for await (const message of executor.execute(prompt, {
     workingDirectory: options?.projectPath,
     signal: options?.signal,
-    oneShot: options?.oneShot,
   })) {
     yield message;
   }
 }
-
-/**
- * Re-export embedded skill metadata for use in commands.
- */
-export { EMBEDDED_SKILL_METADATA, type SkillMetadata };

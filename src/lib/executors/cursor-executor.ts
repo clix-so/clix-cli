@@ -16,6 +16,11 @@ export class CursorExecutor extends BaseExecutor {
     });
   }
 
+  override async *execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage> {
+    this.lastTextContent = '';
+    yield* super.execute(prompt, options);
+  }
+
   protected getStreamParserType(): StreamParserType {
     return 'jsonl';
   }
@@ -25,11 +30,6 @@ export class CursorExecutor extends BaseExecutor {
 
     // 프롬프트 추가
     args.push(prompt);
-
-    // 세션 재개 (chat mode)
-    if (!options?.oneShot && this.sessionId) {
-      args.push('--resume', this.sessionId);
-    }
 
     // Force mode: 자동 승인
     args.push('-f');
@@ -43,15 +43,6 @@ export class CursorExecutor extends BaseExecutor {
     }
 
     return args;
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as CursorCLIMessage;
-    return msg.session_id ?? null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
   }
 
   private mapAssistantMessage(msg: CursorCLIMessage): AgentMessage | AgentMessage[] | null {
@@ -69,11 +60,10 @@ export class CursorExecutor extends BaseExecutor {
       .join('');
 
     if (textContent) {
-      results.push({
-        type: 'text',
-        content: textContent,
-        metadata: msg as unknown as Record<string, unknown>,
-      });
+      const textMessage = this.extractTextDelta(textContent, msg);
+      if (textMessage) {
+        results.push(textMessage);
+      }
     }
 
     // 도구 호출 추출
@@ -128,6 +118,7 @@ export class CursorExecutor extends BaseExecutor {
       return {
         type: 'text',
         content: msg.result,
+        streamMode: 'append',
         metadata: msg as unknown as Record<string, unknown>,
       };
     }

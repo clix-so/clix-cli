@@ -4,9 +4,9 @@
  */
 import type { AgentMessage, ExecuteOptions } from '../executor';
 import { BaseExecutor, type StreamContext, type StreamParserType } from './base-executor';
+import { extractCumulativeDelta } from './stream-delta';
 import type {
   GeminiCLIErrorEvent,
-  GeminiCLIInitEvent,
   GeminiCLIMessage,
   GeminiCLIMessageEvent,
   GeminiCLIResultEvent,
@@ -28,7 +28,7 @@ export class GeminiExecutor extends BaseExecutor {
     return 'jsonl';
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
     // Use positional argument for prompt (recommended by Gemini CLI)
     const args = [prompt, '-o', 'stream-json'];
 
@@ -40,11 +40,6 @@ export class GeminiExecutor extends BaseExecutor {
       args.push('-d');
     }
 
-    // Session persistence: resume session if available (not in one-shot mode)
-    if (!options?.oneShot && this.sessionId) {
-      args.push('-r', this.sessionId);
-    }
-
     // YOLO mode: auto-approve all tool calls (file edits, shell commands, etc.)
     // Similar to Claude's acceptEdits mode
     args.push('-y');
@@ -52,16 +47,9 @@ export class GeminiExecutor extends BaseExecutor {
     return args;
   }
 
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as GeminiCLIMessage;
-    if (msg.type === 'init') {
-      return (msg as GeminiCLIInitEvent).session_id ?? null;
-    }
-    return null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
+  override async *execute(prompt: string, options?: ExecuteOptions): AsyncGenerator<AgentMessage> {
+    this.lastTextContent = '';
+    yield* super.execute(prompt, options);
   }
 
   protected processStreamData(
@@ -76,9 +64,21 @@ export class GeminiExecutor extends BaseExecutor {
       const messageEvent = msg as GeminiCLIMessageEvent;
       // Only process assistant messages, not user messages
       if (messageEvent.role === 'assistant' && messageEvent.content) {
+        const nextTextContent =
+          messageEvent.delta === true
+            ? `${this.lastTextContent}${messageEvent.content}`
+            : messageEvent.content;
+        const delta = extractCumulativeDelta(this.lastTextContent, nextTextContent);
+        this.lastTextContent = nextTextContent;
+
+        if (!delta) {
+          return null;
+        }
+
         return {
           type: 'text',
-          content: messageEvent.content,
+          content: delta,
+          streamMode: 'append',
           metadata: {
             delta: messageEvent.delta,
             timestamp: messageEvent.timestamp,

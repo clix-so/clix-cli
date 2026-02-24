@@ -44,19 +44,6 @@ describe('GeminiExecutor message mapping', () => {
    * These fixtures represent actual Gemini CLI output format (stream-json)
    */
   describe('Gemini CLI message format fixtures', () => {
-    test('init event should have session_id and model', () => {
-      const msg: GeminiCLIMessage = {
-        type: 'init',
-        timestamp: '2025-01-14T00:00:00.000Z',
-        session_id: 'gemini-session-123',
-        model: 'gemini-2.5-pro',
-      };
-
-      expect(msg.type).toBe('init');
-      expect(msg.session_id).toBe('gemini-session-123');
-      expect(msg.model).toBe('gemini-2.5-pro');
-    });
-
     test('message event with assistant role should have correct structure', () => {
       const msg: GeminiCLIMessage = {
         type: 'message',
@@ -193,5 +180,42 @@ describe('GeminiExecutor message mapping', () => {
       expect(msg.status).toBe('error');
       expect(msg.error?.message).toBe('Request failed');
     });
+  });
+});
+
+describe('GeminiExecutor stream mode mapping', () => {
+  test('maps both snapshot and delta events to append-only cumulative output', () => {
+    const executor = new GeminiExecutor() as unknown as {
+      processStreamData: (
+        data: unknown,
+        context: { hasYieldedText: boolean; assistantContent: string; count: number },
+      ) => { type: string; streamMode?: 'append' | 'replace'; content: string } | null;
+    };
+
+    const fullUpdate = executor.processStreamData(
+      {
+        type: 'message',
+        timestamp: '2025-01-14T00:00:00.000Z',
+        role: 'assistant',
+        content: 'Hello world',
+        delta: false,
+      } satisfies GeminiCLIMessage,
+      { hasYieldedText: false, assistantContent: '', count: 1 },
+    );
+    expect(fullUpdate?.type).toBe('text');
+    expect(fullUpdate?.streamMode).toBe('append');
+
+    const deltaUpdate = executor.processStreamData(
+      {
+        type: 'message',
+        timestamp: '2025-01-14T00:00:00.000Z',
+        role: 'assistant',
+        content: ' world',
+        delta: true,
+      } satisfies GeminiCLIMessage,
+      { hasYieldedText: true, assistantContent: 'Hello', count: 2 },
+    );
+    expect(deltaUpdate?.type).toBe('text');
+    expect(deltaUpdate?.streamMode).toBe('append');
   });
 });

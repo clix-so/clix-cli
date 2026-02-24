@@ -18,10 +18,15 @@ import {
   getProjectConfigManager,
   type ProjectConfig,
 } from '@/lib/config';
+import {
+  fetchOrganizationsWithProjects,
+  type OrgWithProjects,
+} from '@/lib/services/organization-projects';
 import { detectProjectType, formatProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
+import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 
 type LoginPhase =
   | 'checking_existing'
@@ -32,11 +37,6 @@ type LoginPhase =
   | 'selecting_project'
   | 'complete'
   | 'error';
-
-interface OrgWithProjects {
-  org: Organization;
-  projects: Project[];
-}
 
 interface LoginUIProps {
   /** Called when login completes successfully */
@@ -71,22 +71,6 @@ async function fetchUserName(
   }
 }
 
-/** Fetch organizations and their projects */
-async function fetchOrganizationsWithProjects(): Promise<OrgWithProjects[]> {
-  const orgsWithProjects: OrgWithProjects[] = [];
-  try {
-    const apiClient = getInternalApiClient();
-    const orgs = await apiClient.listOrganizations();
-    for (const org of orgs) {
-      const projects = await apiClient.listProjects(org.id);
-      orgsWithProjects.push({ org, projects });
-    }
-  } catch {
-    // Silently ignore org/project fetch errors
-  }
-  return orgsWithProjects;
-}
-
 /** Check if user is already logged in with valid credentials */
 async function checkExistingLogin(): Promise<{ isLoggedIn: boolean; userName: string }> {
   const credentialsManager = getCredentialsManager();
@@ -115,6 +99,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
   const pkceServiceRef = useRef<PKCEFlowService | null>(null);
   const credentialsRef = useRef<ClixCredentials | null>(null);
   const memberRef = useRef<Member | null>(null);
+  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, 'Open authentication URL') : null;
 
   const handleProjectSelect = useCallback(
     async (project: Project, org: Organization) => {
@@ -130,6 +115,8 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         const projectType = await detectProjectType(workspacePath);
 
         // Create project config
+        const projectPublicKey = project.public_api_key ?? project.public_key;
+
         const projectConfig: ProjectConfig = {
           version: CURRENT_PROJECT_CONFIG_VERSION,
           member: {
@@ -144,7 +131,7 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
           project: {
             id: project.id,
             name: project.name,
-            ...(project.public_key && { publicKey: project.public_key }),
+            ...(projectPublicKey && { public_api_key: projectPublicKey }),
           },
           projectType,
           linkedAt: new Date().toISOString(),
@@ -153,9 +140,6 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         // Save to .clix/config.jsonc
         const projectConfigManager = getProjectConfigManager(workspacePath);
         await projectConfigManager.save(projectConfig);
-
-        // Ensure .clix is in .gitignore
-        await projectConfigManager.ensureGitignore();
 
         setSavedConfig(projectConfig);
         setPhase('complete');
@@ -241,14 +225,23 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
         const credentials = createClixCredentials(tokenResponse, issuer, config.audience);
         await credentialsManager.saveClixCredentials(credentials);
 
-        // Verify login
+        // Verify login and fetch data in parallel
         setPhase('verifying');
-        const name = await fetchUserName(pkceService, tokenResponse);
-        setUserName(name);
         credentialsRef.current = credentials;
-
-        // Fetch organizations and projects
-        const orgsData = await fetchOrganizationsWithProjects();
+        const [memberResult, orgsData] = await Promise.all([
+          fetchMember().catch(() => null),
+          fetchOrganizationsWithProjects(),
+        ]);
+        let name: string;
+        if (memberResult) {
+          name = memberResult.name || memberResult.email;
+        } else if (tokenResponse?.id_token) {
+          const userInfo = pkceService.parseIdToken(tokenResponse.id_token);
+          name = userInfo?.name ?? userInfo?.email ?? '';
+        } else {
+          name = '';
+        }
+        setUserName(name);
         setOrganizations(orgsData);
 
         // Check if there are projects to select from
@@ -310,14 +303,18 @@ export const LoginUI: React.FC<LoginUIProps> = ({ onComplete, onError }) => {
             <Box flexDirection="column">
               <Text color="yellow">⚠</Text>
               <Text> Could not open browser automatically.</Text>
-              <Box marginTop={1}>
-                <Text dimColor>Open this URL in your browser:</Text>
-              </Box>
-              <Box marginTop={1}>
-                <Text color="cyan">{authUrl}</Text>
-              </Box>
             </Box>
           )}
+          {authUrl ? (
+            <Box marginTop={1} flexDirection="column">
+              <Text dimColor>If browser was closed, reopen this URL:</Text>
+              <Text color="cyan">{reopenLink}</Text>
+              <Box marginTop={1} flexDirection="column">
+                <Text dimColor>Direct URL:</Text>
+                <Text>{authUrl}</Text>
+              </Box>
+            </Box>
+          ) : null}
           <Box marginTop={2}>
             <Text dimColor>
               <Spinner type="dots" />

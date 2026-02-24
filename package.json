@@ -1,6 +1,6 @@
 {
   "name": "@clix-so/clix-cli",
-  "version": "1.1.2-beta.2",
+  "version": "1.1.2",
   "description": "A CLI tool for integrating and managing the Clix SDK in your mobile projects",
   "type": "module",
   "bin": {
@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "bun run src/cli.tsx",
     "build": "bun run scripts/build.ts",
+    "build:local": "bun run build",
     "build:binary": "bun run scripts/compile.ts",
     "build:binary:checksums": "bun run scripts/compile.ts --checksums",
     "install:local": "bun run scripts/install-local.ts",
@@ -46,9 +47,9 @@
   },
   "homepage": "https://docs.clix.so/clix-cli",
   "dependencies": {
-    "@clix-so/clix-agent-skills": "^0.2.3",
     "@expo/apple-utils": "^2.1.14",
     "@expo/plist": "^0.4.8",
+    "@googleapis/firebase": "^12.0.1",
     "asciify-image": "^0.1.10",
     "google-auth-library": "^10.5.0",
     "ink": "^6.6.0",
@@ -57,7 +58,6 @@
     "ink-text-input": "^6.0.0",
     "keychain": "^1.5.0",
     "meow": "^14.0.0",
-    "open": "^11.0.0",
     "picocolors": "^1.1.1",
     "plist": "^3.1.0",
     "react": "^19.2.3",

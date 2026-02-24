@@ -156,7 +156,8 @@ export const GOOGLE_OAUTH_CONFIG = {
 
   /**
    * OAuth scopes required for Firebase Management API.
-   * Using full firebase scope for listing projects/apps, downloading configs, and creating apps.
+   *
+   * - firebase: List projects/apps, download configs, create apps
    */
   scopes: ['https://www.googleapis.com/auth/firebase'],
 

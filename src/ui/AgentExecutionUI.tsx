@@ -33,7 +33,6 @@ async function loadAgentConfig(
 
   const result = await selectionService.selectAgent({
     mode: 'command',
-    allowPrompt: false,
   });
 
   if (!result.agent) {

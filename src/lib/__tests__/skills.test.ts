@@ -1,193 +1,202 @@
-import { describe, expect, test } from 'bun:test';
-import { EMBEDDED_SKILLS, getEmbeddedSkill, hasEmbeddedSkills } from '../embedded-skills';
-import type { AgentMessage } from '../executor';
+import { describe, expect, mock, test } from 'bun:test';
+import type { PreparationContext } from '@/commands/skill/preparation';
+import type { AgentMessage, ExecuteOptions } from '../executor';
 import {
   AVAILABLE_SKILLS,
   executeSkill,
+  getAvailableSkillTypes,
   getSkillInfo,
   getSkillPrompt,
-  type SkillType,
 } from '../skills';
-import { createMockExecutorWithResponses, FIXTURES } from './test-utils';
+import { createMockExecutor, createMockExecutorWithResponses } from './test-utils';
 
-describe('AVAILABLE_SKILLS', () => {
-  test('should contain at least 5 skills (embedded + local)', () => {
-    // 5 embedded skills from @clix-so/clix-agent-skills + 1 local (doctor)
-    expect(AVAILABLE_SKILLS.length).toBeGreaterThanOrEqual(5);
+describe('skills (command-only)', () => {
+  test('exposes local command skills only', () => {
+    expect(getAvailableSkillTypes()).toEqual(['install', 'doctor']);
+    expect(AVAILABLE_SKILLS.map((s) => s.type)).toEqual(['install', 'doctor']);
+    expect(getSkillInfo('integration')).toBeUndefined();
   });
 
-  test('should have integration skill', () => {
-    const skill = AVAILABLE_SKILLS.find((s) => s.type === 'integration');
+  test('returns install skill metadata', () => {
+    const skill = getSkillInfo('install');
     expect(skill).toBeDefined();
-    expect(skill?.name).toBe('SDK Integration');
-  });
-
-  test('install skill should be a separate local skill', () => {
-    // 'clix install' is now a separate autonomous installation skill
-    const { getAvailableSkillTypes, getSkillInfo } = require('../skills');
-    const skillTypes = getAvailableSkillTypes();
-    expect(skillTypes).toContain('install');
-
-    const installSkill = getSkillInfo('install');
-    expect(installSkill?.isLocal).toBe(true);
-    expect(installSkill?.name).toBe('SDK Installation');
-  });
-
-  test('should have event-tracking skill', () => {
-    const skill = AVAILABLE_SKILLS.find((s) => s.type === 'event-tracking');
-    expect(skill).toBeDefined();
-    expect(skill?.name).toBe('Event Tracking');
-  });
-
-  test('should have user-management skill', () => {
-    const skill = AVAILABLE_SKILLS.find((s) => s.type === 'user-management');
-    expect(skill).toBeDefined();
-    expect(skill?.name).toBe('User Management');
-  });
-
-  test('should have personalization skill', () => {
-    const skill = AVAILABLE_SKILLS.find((s) => s.type === 'personalization');
-    expect(skill).toBeDefined();
-    expect(skill?.name).toBe('Personalization');
-  });
-
-  test('should have doctor skill', () => {
-    const skill = AVAILABLE_SKILLS.find((s) => s.type === 'doctor');
-    expect(skill).toBeDefined();
-    expect(skill?.name).toBe('SDK Doctor');
-  });
-
-  test('each skill should have type, name, and description', () => {
-    for (const skill of AVAILABLE_SKILLS) {
-      expect(skill.type).toBeDefined();
-      expect(skill.name).toBeDefined();
-      expect(skill.description).toBeDefined();
-      expect(typeof skill.type).toBe('string');
-      expect(typeof skill.name).toBe('string');
-      expect(typeof skill.description).toBe('string');
-    }
-  });
-});
-
-describe('getSkillInfo', () => {
-  test('should return skill info for valid skill type', () => {
-    const skill = getSkillInfo('integration');
-    expect(skill).toBeDefined();
-    expect(skill?.type).toBe('integration');
-    expect(skill?.name).toBe('SDK Integration');
-  });
-
-  test('should return undefined for invalid skill type', () => {
-    const skill = getSkillInfo('invalid' as unknown as SkillType);
-    expect(skill).toBeUndefined();
-  });
-
-  test('should return correct info for doctor skill', () => {
-    const skill = getSkillInfo('doctor');
-    expect(skill).toBeDefined();
-    expect(skill?.type).toBe('doctor');
-    expect(skill?.description).toContain('Check');
-  });
-
-  test('should return all skill types correctly', () => {
-    for (const skillType of FIXTURES.skillTypes) {
-      const skill = getSkillInfo(skillType);
-      expect(skill).toBeDefined();
-      expect(skill?.type).toBe(skillType);
-    }
+    expect(skill?.isLocal).toBe(true);
+    expect(skill?.name).toBe('SDK Installation');
   });
 });
 
 describe('getSkillPrompt', () => {
-  describe('doctor skill (local)', () => {
-    test('should return doctor prompt with project path', async () => {
-      const prompt = await getSkillPrompt('doctor', {
-        projectPath: '/test/project',
-      });
+  test('builds doctor prompt with project path', async () => {
+    const prompt = await getSkillPrompt('doctor', { projectPath: '/tmp/project' });
 
-      expect(prompt).toContain('Project path: /test/project');
-      expect(prompt).toContain('analyzing a mobile project for Clix SDK');
-    });
-
-    test('should include diagnostic JSON structure', async () => {
-      const prompt = await getSkillPrompt('doctor');
-
-      expect(prompt).toContain('"platform"');
-      expect(prompt).toContain('"sdkInstalled"');
-      expect(prompt).toContain('"pushConfigured"');
-      expect(prompt).toContain('"issues"');
-      expect(prompt).toContain('"checklist"');
-    });
-
-    test('should include platform detection instructions', async () => {
-      const prompt = await getSkillPrompt('doctor');
-
-      expect(prompt).toContain('package.json');
-      expect(prompt).toContain('pubspec.yaml');
-      expect(prompt).toContain('xcodeproj');
-      expect(prompt).toContain('build.gradle');
-    });
-
-    test('should include SDK installation check instructions', async () => {
-      const prompt = await getSkillPrompt('doctor');
-
-      expect(prompt).toContain('ClixSDK');
-      expect(prompt).toContain('@clix-so/react-native-sdk');
-      expect(prompt).toContain('clix_flutter_sdk');
-    });
-
-    test('should use cwd when projectPath not provided', async () => {
-      const prompt = await getSkillPrompt('doctor');
-      expect(prompt).toContain(`Project path: ${process.cwd()}`);
-    });
+    expect(prompt).toContain('Project path: /tmp/project');
+    expect(prompt).toContain('analyzing a mobile project for Clix SDK');
+    expect(prompt).toContain('Final Result: HEALTHY | ACTION_NEEDED | FAILED');
   });
 
-  describe('skills from @clix-so/clix-agent-skills package', () => {
-    test('integration skill should load from package', async () => {
-      const prompt = await getSkillPrompt('integration', {
-        projectPath: '/test/project',
-        platform: 'ios',
-      });
-
-      expect(prompt).toContain('Project path: /test/project');
-      expect(prompt).toContain('Target platform: ios');
+  test('builds install prompt with integration goal', async () => {
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/tmp/project',
     });
 
-    test('event-tracking skill should load from package', async () => {
-      const prompt = await getSkillPrompt('event-tracking', {
-        projectPath: '/test/project',
-      });
+    expect(prompt).toContain('Project path: /tmp/project');
+    expect(prompt).toContain('Target platform: auto-detect');
+    expect(prompt).toContain(
+      'Execution goal: Complete SDK integration workflow using the pre-configured setup context.',
+    );
+    expect(prompt).toContain('Final Result: SUCCESS | PARTIAL | FAILED');
+    expect(prompt).not.toContain('non-interactive one-shot execution');
+    expect(prompt).not.toContain('Install phase:');
+    expect(prompt).not.toContain('project-build');
+  });
 
-      expect(prompt).toContain('Project path: /test/project');
+  test('includes Project Public API Key in install prompt when available', async () => {
+    const preparationContext: PreparationContext = {
+      projectPath: '/tmp/project',
+      config: {
+        version: 1,
+        member: {
+          id: 'member-1',
+          email: 'member@example.com',
+          name: 'Member',
+        },
+        organization: {
+          id: 'org-1',
+          name: 'Org',
+        },
+        project: {
+          id: 'project-1',
+          name: 'Project',
+          public_api_key: 'pk_test_public_key_123',
+        },
+        linkedAt: '2026-01-01T00:00:00.000Z',
+      },
+      projectType: {
+        framework: 'native',
+        target: 'ios',
+      },
+      firebase: {
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: true,
+        senderConfigProjectMatched: true,
+        projectId: 'firebase-project',
+        needed: true,
+      },
+      ios: {
+        needed: true,
+        bundleId: 'com.example.app',
+        teamId: 'TEAM123456',
+        appGroupId: 'group.clix.com.example.app',
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      apns: {
+        needed: true,
+        keyId: 'KEY1234567',
+        teamId: 'TEAM123456',
+        registeredWithFirebase: true,
+      },
+      ready: true,
+      missing: [],
+    };
+
+    const prompt = await getSkillPrompt('install', {
+      projectPath: '/tmp/project',
+      preparationContext,
     });
 
-    test('user-management skill should load from package', async () => {
-      const prompt = await getSkillPrompt('user-management', {
-        projectPath: '/test/project',
-      });
+    expect(prompt).toContain('Project Public API Key: pk_test_public_key_123');
+  });
 
-      expect(prompt).toContain('Project path: /test/project');
+  test('builds doctor prompt with preparation context', async () => {
+    const preparationContext: PreparationContext = {
+      projectPath: '/tmp/project',
+      config: {
+        version: 1,
+        member: {
+          id: 'member-1',
+          email: 'member@example.com',
+          name: 'Member',
+        },
+        organization: {
+          id: 'org-1',
+          name: 'Org',
+        },
+        project: {
+          id: 'project-1',
+          name: 'Project',
+          public_api_key: 'pk_test_doctor_key_456',
+        },
+        linkedAt: '2026-01-01T00:00:00.000Z',
+      },
+      projectType: {
+        framework: 'react-native',
+        target: 'ios-android',
+      },
+      firebase: {
+        configured: true,
+        androidConfigured: true,
+        iosConfigured: true,
+        senderConfigConfigured: true,
+        senderConfigProjectMatched: true,
+        projectId: 'firebase-project',
+        needed: true,
+      },
+      ios: {
+        needed: true,
+        bundleId: 'com.example.app',
+        teamId: 'TEAM123456',
+        appGroupId: 'group.clix.com.example.app',
+        entitlementsConfigured: true,
+        nseConfigured: true,
+      },
+      apns: {
+        needed: true,
+        keyId: 'KEY1234567',
+        teamId: 'TEAM123456',
+        registeredWithFirebase: true,
+      },
+      ready: true,
+      missing: [],
+    };
+
+    const prompt = await getSkillPrompt('doctor', {
+      projectPath: '/tmp/project',
+      preparationContext,
     });
 
-    test('personalization skill should load from package', async () => {
-      const prompt = await getSkillPrompt('personalization', {
-        projectPath: '/test/project',
-      });
+    expect(prompt).toContain('Pre-verified Status');
+    expect(prompt).toContain('Project: Project');
+    expect(prompt).toContain('react-native');
+    expect(prompt).toContain('firebase-project');
+    expect(prompt).toContain('Project Public API Key: pk_test_doctor_key_456');
+    expect(prompt).toContain('pre-verified by clix before agent handoff');
+    expect(prompt).not.toContain('clix install preparation');
+    expect(prompt).toContain('analyzing a mobile project for Clix SDK');
+    expect(prompt).toContain('Final Result: HEALTHY | ACTION_NEEDED | FAILED');
+  });
 
-      expect(prompt).toContain('Project path: /test/project');
-    });
+  test('builds doctor prompt without context when not provided', async () => {
+    const prompt = await getSkillPrompt('doctor', { projectPath: '/tmp/project' });
 
-    test('should default platform to auto-detect', async () => {
-      const prompt = await getSkillPrompt('integration');
-      expect(prompt).toContain('Target platform: auto-detect');
-    });
+    expect(prompt).not.toContain('## Pre-configured Setup\n');
+    expect(prompt).not.toContain('Detected project type:');
+    expect(prompt).toContain('Project path: /tmp/project');
+    expect(prompt).toContain('analyzing a mobile project for Clix SDK');
+  });
+
+  test('rejects non-local skill types', async () => {
+    await expect(getSkillPrompt('integration')).rejects.toThrow('Unknown command type');
   });
 });
 
 describe('executeSkill', () => {
-  test('should call executor with skill prompt', async () => {
+  test('streams all executor messages', async () => {
     const mockExecutor = createMockExecutorWithResponses([
-      { type: 'text', content: 'Executing skill...' },
+      { type: 'text', content: 'Part 1' },
+      { type: 'text', content: 'Part 2' },
       { type: 'complete', content: '' },
     ]);
 
@@ -196,272 +205,34 @@ describe('executeSkill', () => {
       messages.push(message);
     }
 
-    expect(messages.length).toBe(2);
-    expect(messages[0].type).toBe('text');
-    expect(messages[1].type).toBe('complete');
+    expect(messages.map((m) => m.content)).toEqual(['Part 1', 'Part 2', '']);
   });
 
-  test('should pass options to executor', async () => {
-    const mockExecutor = createMockExecutorWithResponses([
-      { type: 'text', content: 'Done' },
-      { type: 'complete', content: '' },
-    ]);
+  test('passes executor options through', async () => {
+    let capturedOptions: ExecuteOptions | undefined;
+    let capturedPrompt = '';
 
-    const options = {
-      projectPath: '/custom/path',
-      platform: 'ios' as const,
-    };
+    const executor = createMockExecutor({
+      execute: mock(async function* (
+        prompt: string,
+        options?: ExecuteOptions,
+      ): AsyncGenerator<AgentMessage> {
+        capturedPrompt = prompt;
+        capturedOptions = options;
+        yield { type: 'complete', content: '' };
+      }),
+    });
 
-    const messages: AgentMessage[] = [];
-    for await (const message of executeSkill('doctor', mockExecutor, options)) {
-      messages.push(message);
+    for await (const _message of executeSkill('doctor', executor, {
+      projectPath: '/tmp/custom',
+      oneShot: true,
+    })) {
+      // consume stream
     }
 
-    expect(messages.length).toBe(2);
-    // Verify executor was called (we can't easily check the exact parameters without more complex mocking)
-  });
-
-  test('should yield all messages from executor', async () => {
-    const mockExecutor = createMockExecutorWithResponses([
-      { type: 'text', content: 'Part 1' },
-      { type: 'text', content: 'Part 2' },
-      { type: 'text', content: 'Part 3' },
-      { type: 'complete', content: '' },
-    ]);
-
-    const messages: AgentMessage[] = [];
-    for await (const message of executeSkill('integration', mockExecutor)) {
-      messages.push(message);
-    }
-
-    expect(messages.length).toBe(4);
-    expect(messages[0].content).toBe('Part 1');
-    expect(messages[1].content).toBe('Part 2');
-    expect(messages[2].content).toBe('Part 3');
-  });
-});
-
-describe('SkillType', () => {
-  test('should include all expected skill types', () => {
-    const skillTypes: SkillType[] = [
-      'integration',
-      'event-tracking',
-      'user-management',
-      'personalization',
-      'doctor',
-    ];
-
-    for (const type of skillTypes) {
-      const skill = getSkillInfo(type);
-      expect(skill).toBeDefined();
-    }
-  });
-});
-
-describe('SkillOptions', () => {
-  test('should accept all platform types', async () => {
-    for (const platform of FIXTURES.platforms) {
-      const prompt = await getSkillPrompt('integration', { platform });
-      expect(prompt).toContain(`Target platform: ${platform}`);
-    }
-  });
-});
-
-describe('error handling', () => {
-  describe('getSkillPrompt error messages', () => {
-    test('should return clear error message when skills package is missing', async () => {
-      // This test verifies that when getSkillPrompt fails, it throws with a clear message
-      // The actual error would occur in a binary build without @clix-so/clix-agent-skills installed
-      // Here we verify the diagnose skill (local) works correctly as a baseline
-      const prompt = await getSkillPrompt('doctor');
-      expect(prompt).toContain('Project path:');
-    });
-
-    test('error from missing skill should contain installation instructions', async () => {
-      // Simulate the expected error message format
-      const expectedErrorMessage =
-        'Skills package not found. Please install it: npm install -g @clix-so/clix-agent-skills';
-
-      // Verify the error message format matches what we expect in production
-      expect(expectedErrorMessage).toContain('Skills package not found');
-      expect(expectedErrorMessage).toContain('npm install');
-      expect(expectedErrorMessage).toContain('@clix-so/clix-agent-skills');
-    });
-
-    test('error from missing skill file should be descriptive', async () => {
-      // Simulate the expected error message format for missing skill files
-      const skillFolder = 'integration';
-      const expectedErrorMessage = `Failed to read skill file for "${skillFolder}". Ensure @clix-so/clix-agent-skills is installed.`;
-
-      expect(expectedErrorMessage).toContain('Failed to read skill file');
-      expect(expectedErrorMessage).toContain(skillFolder);
-      expect(expectedErrorMessage).toContain('@clix-so/clix-agent-skills');
-    });
-  });
-
-  describe('executeSkill error propagation', () => {
-    test('should propagate errors from executor', async () => {
-      const errorMessage = 'Test execution error';
-      const mockExecutor = createMockExecutorWithResponses([
-        { type: 'error', content: errorMessage },
-      ]);
-
-      const messages: AgentMessage[] = [];
-      for await (const message of executeSkill('doctor', mockExecutor)) {
-        messages.push(message);
-      }
-
-      expect(messages.length).toBe(1);
-      expect(messages[0].type).toBe('error');
-      expect(messages[0].content).toBe(errorMessage);
-    });
-
-    test('should handle executor that throws Error', async () => {
-      const mockExecutor = createMockExecutorWithResponses([]);
-      const originalExecute = mockExecutor.execute.bind(mockExecutor);
-
-      // Override execute to throw an Error
-      // biome-ignore lint/correctness/useYield: Intentionally throws before yielding to test error handling
-      mockExecutor.execute = async function* () {
-        throw new Error('Executor threw an error');
-      };
-
-      try {
-        const messages: AgentMessage[] = [];
-        for await (const message of executeSkill('doctor', mockExecutor)) {
-          messages.push(message);
-        }
-        // Should not reach here
-        expect(true).toBe(false);
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Executor threw an error');
-      }
-
-      // Restore original execute
-      mockExecutor.execute = originalExecute;
-    });
-
-    test('should handle executor that throws non-Error', async () => {
-      const mockExecutor = createMockExecutorWithResponses([]);
-
-      // Override execute to throw a string
-      // biome-ignore lint/correctness/useYield: Intentionally throws before yielding to test error handling
-      mockExecutor.execute = async function* () {
-        throw 'String error thrown';
-      };
-
-      try {
-        const messages: AgentMessage[] = [];
-        for await (const message of executeSkill('doctor', mockExecutor)) {
-          messages.push(message);
-        }
-        // Should not reach here
-        expect(true).toBe(false);
-      } catch (error) {
-        expect(error).toBe('String error thrown');
-      }
-    });
-  });
-});
-
-describe('embedded skills fallback', () => {
-  /**
-   * These tests verify that embedded skills are available as a fallback
-   * when the external @clix-so/clix-agent-skills package is not installed.
-   * This is critical for the binary distribution to work standalone.
-   */
-
-  const SKILL_FOLDER_MAP = {
-    integration: 'integration',
-    'event-tracking': 'event-tracking',
-    'user-management': 'user-management',
-    personalization: 'personalization',
-  };
-
-  describe('embedded skills are present', () => {
-    test('hasEmbeddedSkills should return true', () => {
-      expect(hasEmbeddedSkills()).toBe(true);
-    });
-
-    test('all required skill folders should be embedded', () => {
-      for (const folder of Object.values(SKILL_FOLDER_MAP)) {
-        const skill = getEmbeddedSkill(folder);
-        expect(skill).toBeDefined();
-        expect(typeof skill).toBe('string');
-        expect(skill?.length).toBeGreaterThan(100); // Skills should have substantial content
-      }
-    });
-
-    test('EMBEDDED_SKILLS should have at least 4 skills', () => {
-      // At minimum: integration, event-tracking, user-management, personalization
-      expect(Object.keys(EMBEDDED_SKILLS).length).toBeGreaterThanOrEqual(4);
-    });
-  });
-
-  describe('embedded skills content validation', () => {
-    test('integration skill should contain SDK integration instructions', () => {
-      const skill = getEmbeddedSkill('integration');
-      expect(skill).toContain('clix-integration');
-      expect(skill).toContain('SDK');
-    });
-
-    test('event-tracking skill should contain trackEvent instructions', () => {
-      const skill = getEmbeddedSkill('event-tracking');
-      expect(skill).toContain('clix-event-tracking');
-      expect(skill).toContain('trackEvent');
-    });
-
-    test('user-management skill should contain setUserId instructions', () => {
-      const skill = getEmbeddedSkill('user-management');
-      expect(skill).toContain('clix-user-management');
-      expect(skill).toContain('setUserId');
-    });
-
-    test('personalization skill should contain personalization instructions', () => {
-      const skill = getEmbeddedSkill('personalization');
-      expect(skill).toContain('clix-personalization');
-    });
-  });
-
-  describe('skill loading matches embedded skills', () => {
-    /**
-     * Verify that getSkillPrompt returns content that matches embedded skills.
-     * In dev environment, external package is preferred, but embedded skills
-     * should have the same content (from the same source).
-     */
-    test('integration skill prompt should match embedded content structure', async () => {
-      const prompt = await getSkillPrompt('integration');
-      const embedded = getEmbeddedSkill('integration');
-
-      // Both should contain the same skill marker
-      expect(embedded).toContain('clix-integration');
-      // Prompt includes project path prefix, but should contain skill content
-      expect(prompt).toContain('Project path:');
-    });
-
-    test('event-tracking skill prompt should match embedded content structure', async () => {
-      const prompt = await getSkillPrompt('event-tracking');
-      const embedded = getEmbeddedSkill('event-tracking');
-
-      expect(embedded).toContain('clix-event-tracking');
-      expect(prompt).toContain('Project path:');
-    });
-
-    test('user-management skill prompt should match embedded content structure', async () => {
-      const prompt = await getSkillPrompt('user-management');
-      const embedded = getEmbeddedSkill('user-management');
-
-      expect(embedded).toContain('clix-user-management');
-      expect(prompt).toContain('Project path:');
-    });
-
-    test('personalization skill prompt should match embedded content structure', async () => {
-      const prompt = await getSkillPrompt('personalization');
-      const embedded = getEmbeddedSkill('personalization');
-
-      expect(embedded).toContain('clix-personalization');
-      expect(prompt).toContain('Project path:');
+    expect(capturedPrompt).toContain('Project path: /tmp/custom');
+    expect(capturedOptions).toMatchObject({
+      workingDirectory: '/tmp/custom',
     });
   });
 });

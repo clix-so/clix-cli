@@ -1,9 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { getAgentByName, type SUPPORTED_AGENTS } from '../agents';
-import { formatPath } from '../utils/path';
 
 /**
  * MCPTargetAgent is derived from SUPPORTED_AGENTS to ensure consistency.
@@ -21,54 +17,76 @@ export interface MCPAgentConfig {
   name: MCPTargetAgent;
   displayName: string;
   description: string;
-  installMethod: 'cli' | 'json' | 'toml';
+  addMcpAgentId: string;
 }
 
-const MCP_PACKAGE = '@clix-so/clix-mcp-server@latest';
+export interface MCPInstallProcess {
+  stdout?: NodeJS.ReadableStream | null;
+  stderr?: NodeJS.ReadableStream | null;
+  on(event: 'close', listener: (code: number | null) => void): this;
+  on(event: 'error', listener: (error: Error) => void): this;
+}
+
+export interface MCPInstallSpawnOptions {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  shell: false;
+  stdio: 'pipe';
+}
+
+export type MCPInstallSpawner = (
+  command: string,
+  args: string[],
+  options: MCPInstallSpawnOptions,
+) => MCPInstallProcess;
+
+const CLIX_MCP_SERVER_REPO = 'https://github.com/clix-so/clix-mcp-server';
 const MCP_SERVER_NAME = 'clix-mcp-server';
+const ADD_MCP_PACKAGE = 'add-mcp';
 
 /**
  * MCP configuration for each agent.
- * Maps agent names to their MCP installation method and config details.
  */
 const MCP_AGENT_CONFIGS: MCPAgentConfig[] = [
   {
     name: 'claude',
     displayName: 'Claude Code',
-    description: 'Install via claude mcp add command',
-    installMethod: 'cli',
+    description: 'Install via add-mcp --agent claude-code',
+    addMcpAgentId: 'claude-code',
   },
   {
     name: 'codex',
     displayName: 'Codex',
-    description: 'Install via codex mcp add command',
-    installMethod: 'cli',
+    description: 'Install via add-mcp --agent codex',
+    addMcpAgentId: 'codex',
   },
   {
     name: 'gemini',
     displayName: 'Gemini CLI',
-    description: 'Configure ~/.gemini/settings.json',
-    installMethod: 'json',
+    description: 'Install via add-mcp --agent gemini-cli',
+    addMcpAgentId: 'gemini-cli',
   },
   {
     name: 'opencode',
     displayName: 'OpenCode',
-    description: 'Configure ~/.config/opencode/config.json',
-    installMethod: 'json',
+    description: 'Install via add-mcp --agent opencode',
+    addMcpAgentId: 'opencode',
   },
   {
     name: 'cursor',
     displayName: 'Cursor',
-    description: 'Configure ~/.cursor/mcp.json',
-    installMethod: 'json',
+    description: 'Install via add-mcp --agent cursor',
+    addMcpAgentId: 'cursor',
   },
   {
     name: 'copilot',
-    displayName: 'GitHub Copilot',
-    description: 'Configure ~/.config/github-copilot/mcp.json',
-    installMethod: 'json',
+    displayName: 'GitHub Copilot CLI',
+    description: 'Install via add-mcp --agent github-copilot-cli',
+    addMcpAgentId: 'github-copilot-cli',
   },
 ];
+
+const defaultSpawner: MCPInstallSpawner = (command, args, options) => spawn(command, args, options);
 
 /**
  * Get MCP agent configs for all supported agents.
@@ -91,302 +109,131 @@ export function isValidMCPAgent(agent: string): agent is MCPTargetAgent {
   return getValidMCPAgents().includes(agent);
 }
 
+function resolveAddMcpAgentId(agent: MCPTargetAgent): string | null {
+  const config = MCP_AGENT_CONFIGS.find((candidate) => candidate.name === agent);
+  return config?.addMcpAgentId ?? null;
+}
+
+function buildAddMcpArgs(addMcpAgentId: string): string[] {
+  return [
+    '-y',
+    ADD_MCP_PACKAGE,
+    `npx -y ${CLIX_MCP_SERVER_REPO}`,
+    '--name',
+    MCP_SERVER_NAME,
+    '--agent',
+    addMcpAgentId,
+    '--global',
+    '--yes',
+  ];
+}
+
+function isAlreadyConfiguredOutput(output: string): boolean {
+  const normalized = output.toLowerCase();
+  const mentionsAlready = normalized.includes('already');
+  const mentionsExistingState =
+    normalized.includes('exist') ||
+    normalized.includes('configured') ||
+    normalized.includes('registered');
+
+  return mentionsAlready && mentionsExistingState;
+}
+
 /**
- * Install Clix MCP Server for Claude Code using CLI command
+ * Install Clix MCP Server for the specified agent via add-mcp.
  */
-async function installForClaude(): Promise<MCPInstallResult> {
-  return new Promise((resolve) => {
-    const child = spawn(
-      'claude',
-      ['mcp', 'add', '--transport', 'stdio', MCP_SERVER_NAME, '--', 'npx', '-y', MCP_PACKAGE],
-      {
+export async function installMCPServer(
+  agent: MCPTargetAgent,
+  spawnProcess: MCPInstallSpawner = defaultSpawner,
+): Promise<MCPInstallResult> {
+  const addMcpAgentId = resolveAddMcpAgentId(agent);
+  if (!addMcpAgentId) {
+    return {
+      success: false,
+      message: `Unknown agent: ${agent}`,
+    };
+  }
+
+  const displayName = getMCPAgentDisplayName(agent);
+
+  return await new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let child: MCPInstallProcess;
+
+    try {
+      child = spawnProcess('npx', buildAddMcpArgs(addMcpAgentId), {
+        cwd: process.cwd(),
+        env: process.env,
+        shell: false,
         stdio: 'pipe',
-      },
-    );
+      });
+    } catch (error) {
+      resolve({
+        success: false,
+        message: `Failed to run add-mcp for ${displayName}.`,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
 
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout?.on('data', (data) => {
-      stdout += data.toString();
+    child.stdout?.on('data', (data: unknown) => {
+      stdout += String(data);
     });
 
-    child.stderr?.on('data', (data) => {
-      stderr += data.toString();
+    child.stderr?.on('data', (data: unknown) => {
+      stderr += String(data);
     });
 
     child.on('close', (code) => {
+      const output = [stderr, stdout]
+        .filter((value) => value.trim().length > 0)
+        .join('\n')
+        .trim();
+
       if (code === 0) {
         resolve({
           success: true,
-          message: `Clix MCP Server installed for Claude Code.\nRestart Claude Code to activate.`,
+          message: `Clix MCP Server installed for ${displayName} using add-mcp.`,
         });
-      } else {
-        resolve({
-          success: false,
-          message: 'Failed to install MCP for Claude Code.',
-          error: stderr || stdout || `Exit code: ${code}`,
-        });
+        return;
       }
+
+      if (isAlreadyConfiguredOutput(output)) {
+        resolve({
+          success: true,
+          message: `Clix MCP Server is already configured for ${displayName}.`,
+        });
+        return;
+      }
+
+      resolve({
+        success: false,
+        message: `Failed to install Clix MCP Server for ${displayName}.`,
+        error: output || `Exit code: ${code ?? 'unknown'}`,
+      });
     });
 
     child.on('error', (error) => {
       resolve({
         success: false,
-        message: 'Failed to run claude command.',
+        message: `Failed to run add-mcp for ${displayName}.`,
         error: error.message,
       });
     });
   });
-}
-
-/**
- * Install Clix MCP Server for Codex using CLI command
- */
-async function installForCodex(): Promise<MCPInstallResult> {
-  return new Promise((resolve) => {
-    // codex mcp add <server-name> -- <command>
-    const child = spawn('codex', ['mcp', 'add', 'clix', '--', 'npx', '-y', MCP_PACKAGE], {
-      stdio: 'pipe',
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout?.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr?.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve({
-          success: true,
-          message: `Clix MCP Server installed for Codex.\nRestart Codex to activate.`,
-        });
-      } else {
-        // Check if already configured
-        if (stderr.includes('already') || stdout.includes('already')) {
-          resolve({
-            success: true,
-            message: 'Clix MCP Server is already configured for Codex.',
-          });
-        } else {
-          resolve({
-            success: false,
-            message: 'Failed to install MCP for Codex.',
-            error: stderr || stdout || `Exit code: ${code}`,
-          });
-        }
-      }
-    });
-
-    child.on('error', (error) => {
-      resolve({
-        success: false,
-        message: 'Failed to run codex command.',
-        error: error.message,
-      });
-    });
-  });
-}
-
-/**
- * Install MCP Server using JSON config file
- */
-async function installWithJsonConfig(
-  agentName: string,
-  displayName: string,
-  configDir: string,
-  configFileName: string,
-): Promise<MCPInstallResult> {
-  try {
-    const configPath = join(configDir, configFileName);
-
-    // Ensure config directory exists
-    if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true });
-    }
-
-    // Read existing config or create new
-    let config: { mcpServers?: Record<string, unknown> } = {};
-    if (existsSync(configPath)) {
-      try {
-        const content = readFileSync(configPath, 'utf-8');
-        config = JSON.parse(content) as { mcpServers?: Record<string, unknown> };
-      } catch {
-        // If parsing fails, start with empty config
-        config = {};
-      }
-    }
-
-    // Check if clix MCP is already configured
-    if (config.mcpServers?.clix) {
-      return {
-        success: true,
-        message: `Clix MCP Server is already configured for ${displayName}.`,
-      };
-    }
-
-    // Add MCP configuration
-    if (!config.mcpServers) {
-      config.mcpServers = {};
-    }
-    config.mcpServers.clix = {
-      command: 'npx',
-      args: ['-y', MCP_PACKAGE],
-    };
-
-    writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    return {
-      success: true,
-      message: `Clix MCP Server configured for ${displayName}.\nConfig: ${formatPath(configPath)}\nRestart ${displayName} to activate.`,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: `Failed to configure MCP for ${agentName}.`,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-/**
- * Install MCP Server using OpenCode config schema.
- */
-async function installWithOpenCodeConfig(
-  agentName: string,
-  displayName: string,
-  configDir: string,
-  configFileName: string,
-): Promise<MCPInstallResult> {
-  try {
-    const configPath = join(configDir, configFileName);
-
-    if (!existsSync(configDir)) {
-      mkdirSync(configDir, { recursive: true });
-    }
-
-    let config: Record<string, unknown> = {};
-    if (existsSync(configPath)) {
-      try {
-        const content = readFileSync(configPath, 'utf-8');
-        config = JSON.parse(content) as Record<string, unknown>;
-      } catch {
-        config = {};
-      }
-    }
-
-    const mcp = (config.mcp as Record<string, unknown> | undefined) ?? {};
-
-    if (mcp[MCP_SERVER_NAME]) {
-      return {
-        success: true,
-        message: `Clix MCP Server is already configured for ${displayName}.`,
-      };
-    }
-
-    mcp[MCP_SERVER_NAME] = {
-      type: 'local',
-      command: ['npx', '-y', MCP_PACKAGE],
-      enabled: true,
-    };
-
-    config.mcp = mcp;
-
-    if ('mcpServers' in config) {
-      (config as { mcpServers?: unknown }).mcpServers = undefined;
-    }
-
-    writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-    return {
-      success: true,
-      message: `Clix MCP Server configured for ${displayName}.\nConfig: ${formatPath(configPath)}\nRestart ${displayName} to activate.`,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: `Failed to configure MCP for ${agentName}.`,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-/**
- * Install Clix MCP Server for Gemini CLI
- */
-async function installForGemini(): Promise<MCPInstallResult> {
-  const configDir = join(homedir(), '.gemini');
-  return installWithJsonConfig('gemini', 'Gemini CLI', configDir, 'settings.json');
-}
-
-/**
- * Install Clix MCP Server for OpenCode
- */
-async function installForOpenCode(): Promise<MCPInstallResult> {
-  const configDir = join(homedir(), '.config', 'opencode');
-  return installWithOpenCodeConfig('opencode', 'OpenCode', configDir, 'config.json');
-}
-
-/**
- * Install Clix MCP Server for Cursor
- */
-async function installForCursor(): Promise<MCPInstallResult> {
-  const configDir = join(homedir(), '.cursor');
-  return installWithJsonConfig('cursor', 'Cursor', configDir, 'mcp.json');
-}
-
-/**
- * Install Clix MCP Server for GitHub Copilot
- */
-async function installForCopilot(): Promise<MCPInstallResult> {
-  const configDir = join(homedir(), '.config', 'github-copilot');
-  return installWithJsonConfig('copilot', 'GitHub Copilot', configDir, 'mcp.json');
-}
-
-/**
- * Install Clix MCP Server for the specified agent
- */
-export async function installMCPServer(agent: MCPTargetAgent): Promise<MCPInstallResult> {
-  switch (agent) {
-    case 'claude':
-      return installForClaude();
-    case 'codex':
-      return installForCodex();
-    case 'gemini':
-      return installForGemini();
-    case 'opencode':
-      return installForOpenCode();
-    case 'cursor':
-      return installForCursor();
-    case 'copilot':
-      return installForCopilot();
-    default:
-      return {
-        success: false,
-        message: `Unknown agent: ${agent}`,
-      };
-  }
 }
 
 /**
  * Get display name for MCP target agent.
- * Uses agent info from agents.ts if available, falls back to MCP config.
  */
 export function getMCPAgentDisplayName(agent: MCPTargetAgent): string {
-  // First try to get from agents.ts (the source of truth)
   const agentInfo = getAgentByName(agent);
   if (agentInfo) {
     return agentInfo.displayName;
   }
 
-  // Fallback to MCP config
-  const mcpConfig = MCP_AGENT_CONFIGS.find((c) => c.name === agent);
+  const mcpConfig = MCP_AGENT_CONFIGS.find((candidate) => candidate.name === agent);
   if (mcpConfig) {
     return mcpConfig.displayName;
   }

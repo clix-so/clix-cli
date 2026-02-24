@@ -31,8 +31,9 @@ describe('CLI E2E Tests', () => {
       expect(result.stdout).toContain('agent');
       expect(result.stdout).toContain('install');
       expect(result.stdout).toContain('doctor');
-      expect(result.stdout).toContain('debug');
-      expect(result.stdout).toContain('install-mcp');
+      expect(result.stdout).not.toContain('debug <problem>');
+      expect(result.stdout).toContain('mcp');
+      expect(result.stdout).toContain('skills');
 
       // Skills should NOT be in CLI help (they are chat-only)
       expect(result.stdout).not.toContain('integration   ');
@@ -44,8 +45,7 @@ describe('CLI E2E Tests', () => {
 
       expect(result.stdout).toContain('--help');
       expect(result.stdout).toContain('--version');
-      expect(result.stdout).toContain('--platform');
-      expect(result.stdout).toContain('ios, android, react-native, flutter');
+      expect(result.stdout).not.toContain('--platform');
     });
 
     test('should show examples', async () => {
@@ -53,7 +53,8 @@ describe('CLI E2E Tests', () => {
 
       expect(result.stdout).toContain('Examples');
       expect(result.stdout).toContain('$ clix agent claude');
-      expect(result.stdout).toContain('$ clix install-mcp');
+      expect(result.stdout).toContain('$ clix mcp');
+      expect(result.stdout).toContain('$ clix skills');
     });
 
     test('should NOT show chat commands', async () => {
@@ -130,11 +131,10 @@ describe('CLI Help Output Formatting', () => {
     const result = await rig.run(['--help']);
 
     // Check command descriptions
-    expect(result.stdout).toContain('Start interactive chat');
+    expect(result.stdout).toContain('Show this help message');
     expect(result.stdout).toContain('List or switch AI agents');
-    expect(result.stdout).toContain('Autonomous SDK installation');
+    expect(result.stdout).toContain('Install Clix SDK');
     expect(result.stdout).toContain('doctor');
-    expect(result.stdout).toContain('Interactive debugging assistant');
     expect(result.stdout).toContain('Install Clix MCP Server');
   });
 
@@ -143,6 +143,6 @@ describe('CLI Help Output Formatting', () => {
 
     // install command should be listed
     expect(result.stdout).toContain('install');
-    expect(result.stdout).toContain('Autonomous SDK installation');
+    expect(result.stdout).toContain('Install Clix SDK');
   });
 });

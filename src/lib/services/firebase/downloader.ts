@@ -15,10 +15,16 @@ import type {
   CreateIosAppRequest,
   FirebaseProject,
   IosApp,
+  ServiceAccountJson,
+  UpdateIosAppRequest,
 } from './api';
-import { FirebaseApiClient } from './api';
+import { type ApiClientCredentials, FirebaseApiClient } from './api';
 import { getExpectedPaths } from './detector';
-import { GoogleAuthClient } from './oauth';
+import { GoogleAuthClient, getOAuthCredentials } from './oauth';
+import {
+  parseServiceAccountJson,
+  type ServiceAccountValidationResult,
+} from './service-account-validator';
 import { type Platform, platformNeedsAndroid, platformNeedsIos } from './types';
 
 /**
@@ -62,6 +68,7 @@ export interface DownloadResult {
 export class FirebaseDownloader {
   private authClient: GoogleAuthClient;
   private apiClient: FirebaseApiClient | null = null;
+  private credentials: ApiClientCredentials | null = null;
 
   constructor() {
     this.authClient = new GoogleAuthClient();
@@ -90,19 +97,48 @@ export class FirebaseDownloader {
   async authenticate(
     openBrowser: (url: string) => void,
   ): Promise<{ success: boolean; error?: string }> {
+    if (await this.authClient.isAuthenticated()) {
+      return { success: true };
+    }
+
     const result = await this.authClient.authenticate(openBrowser);
     if (result.success) {
-      this.apiClient = new FirebaseApiClient(() => this.authClient.getAccessToken());
+      // Fetch and store credentials for API clients
+      const creds = await getOAuthCredentials();
+      if (creds) {
+        this.credentials = { clientId: creds.clientId, clientSecret: creds.clientSecret };
+      }
+      this.apiClient = new FirebaseApiClient(
+        () => this.authClient.getAccessToken(),
+        this.credentials ?? undefined,
+      );
     }
     return result;
   }
 
   /**
+   * Cancel in-flight Firebase OAuth authentication.
+   */
+  cancelAuthentication(reason = 'Firebase authentication cancelled'): void {
+    this.authClient.cancelAuthentication(reason);
+  }
+
+  /**
    * Ensure API client is initialized.
    */
-  private ensureApiClient(): FirebaseApiClient {
+  private async ensureApiClient(): Promise<FirebaseApiClient> {
     if (!this.apiClient) {
-      this.apiClient = new FirebaseApiClient(() => this.authClient.getAccessToken());
+      // Fetch credentials if not already cached
+      if (!this.credentials) {
+        const creds = await getOAuthCredentials();
+        if (creds) {
+          this.credentials = { clientId: creds.clientId, clientSecret: creds.clientSecret };
+        }
+      }
+      this.apiClient = new FirebaseApiClient(
+        () => this.authClient.getAccessToken(),
+        this.credentials ?? undefined,
+      );
     }
     return this.apiClient;
   }
@@ -114,7 +150,7 @@ export class FirebaseDownloader {
     if (!(await this.isAuthenticated())) {
       throw new Error('Not authenticated. Run OAuth flow first.');
     }
-    const api = this.ensureApiClient();
+    const api = await this.ensureApiClient();
     return api.listProjects();
   }
 
@@ -125,7 +161,7 @@ export class FirebaseDownloader {
     if (!(await this.isAuthenticated())) {
       throw new Error('Not authenticated. Run OAuth flow first.');
     }
-    const api = this.ensureApiClient();
+    const api = await this.ensureApiClient();
     return api.listAndroidApps(projectId);
   }
 
@@ -136,7 +172,7 @@ export class FirebaseDownloader {
     if (!(await this.isAuthenticated())) {
       throw new Error('Not authenticated. Run OAuth flow first.');
     }
-    const api = this.ensureApiClient();
+    const api = await this.ensureApiClient();
     return api.listIosApps(projectId);
   }
 
@@ -165,7 +201,7 @@ export class FirebaseDownloader {
     if (!(await this.isAuthenticated())) {
       throw new Error('Not authenticated. Run OAuth flow first.');
     }
-    const api = this.ensureApiClient();
+    const api = await this.ensureApiClient();
     return api.createAndroidApp(projectId, request);
   }
 
@@ -180,8 +216,28 @@ export class FirebaseDownloader {
     if (!(await this.isAuthenticated())) {
       throw new Error('Not authenticated. Run OAuth flow first.');
     }
-    const api = this.ensureApiClient();
+    const api = await this.ensureApiClient();
     return api.createIosApp(projectId, request);
+  }
+
+  /**
+   * Update an existing iOS app in a Firebase project.
+   *
+   * @param projectId - Firebase project ID
+   * @param appId - iOS app ID
+   * @param request - Fields to update (teamId, appStoreId, displayName)
+   * @returns Updated iOS app
+   */
+  async patchIosApp(
+    projectId: string,
+    appId: string,
+    request: UpdateIosAppRequest,
+  ): Promise<IosApp> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
+    const api = await this.ensureApiClient();
+    return api.patchIosApp(projectId, appId, request);
   }
 
   /**
@@ -195,7 +251,7 @@ export class FirebaseDownloader {
     if (!(await this.isAuthenticated())) {
       throw new Error('Not authenticated. Run OAuth flow first.');
     }
-    const api = this.ensureApiClient();
+    const api = await this.ensureApiClient();
     const config = await api.getAndroidConfig(projectId, appId);
 
     const dir = path.dirname(savePath);
@@ -214,7 +270,7 @@ export class FirebaseDownloader {
     if (!(await this.isAuthenticated())) {
       throw new Error('Not authenticated. Run OAuth flow first.');
     }
-    const api = this.ensureApiClient();
+    const api = await this.ensureApiClient();
     const config = await api.getIosConfig(projectId, appId);
 
     const dir = path.dirname(savePath);
@@ -270,5 +326,60 @@ export class FirebaseDownloader {
   async logout(): Promise<void> {
     await this.authClient.logout();
     this.apiClient = null;
+  }
+
+  // ============================================================================
+  // Service Account Management
+  // ============================================================================
+
+  /**
+   * Validate a Service Account JSON string.
+   *
+   * @param jsonString - JSON string to validate
+   * @returns Validation result
+   */
+  validateServiceAccountJson(jsonString: string): ServiceAccountValidationResult {
+    return parseServiceAccountJson(jsonString);
+  }
+
+  /**
+   * Save a Service Account JSON to the project's .clix directory.
+   *
+   * @param projectPath - Project root path
+   * @param serviceAccountJson - Service Account JSON data
+   * @returns Path where the file was saved
+   */
+  async saveServiceAccountJson(
+    projectPath: string,
+    serviceAccountJson: ServiceAccountJson,
+  ): Promise<string> {
+    const clixDir = path.join(projectPath, '.clix');
+    const savePath = path.join(clixDir, 'service-account.json');
+
+    await fs.mkdir(clixDir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(savePath, JSON.stringify(serviceAccountJson, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
+
+    return savePath;
+  }
+
+  /**
+   * Load existing Service Account JSON from the project's .clix directory.
+   *
+   * @param projectPath - Project root path
+   * @returns Service Account JSON or null if not found
+   */
+  async loadServiceAccountJson(projectPath: string): Promise<ServiceAccountJson | null> {
+    const savePath = path.join(projectPath, '.clix', 'service-account.json');
+
+    try {
+      const content = await fs.readFile(savePath, 'utf-8');
+      const result = parseServiceAccountJson(content);
+      return result.valid && result.data ? result.data : null;
+    } catch {
+      return null;
+    }
   }
 }

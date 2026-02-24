@@ -1,419 +1,141 @@
 # Clix CLI
 
-An interactive AI-powered assistant for Clix SDK development. Built with React and Ink, Clix CLI provides a chat interface with AI agents to help you integrate, debug, and manage the Clix Mobile SDK in your projects.
+Command-mode AI assistant for Clix SDK installation and diagnostics.
 
 ## Features
 
-- **Interactive Chat Interface**: Natural conversation with AI agents using streaming responses
-- **Multiple AI Agents**: Support for Claude, Codex, Gemini, OpenCode, Cursor, and GitHub Copilot
-- **Slash Commands**: Quick actions for common tasks and workflows
-- **Skills System**: Pre-built workflows for SDK integration, event tracking, user management, and personalization
-- **Debug Assistant**: Interactive problem diagnosis and root cause analysis
-- **Session Transfer**: Save and continue conversations in native agent CLIs
-- **Agent Switching**: Switch between agents mid-conversation with full history preservation
-- **Context Management**: Real-time tracking with automatic history compaction at 90% threshold
-- **MCP Server Integration**: Built-in installer for Clix MCP Server
+- Command-only workflow — no interactive chat mode
+- Step-based `install` preparation flow for Firebase and iOS push setup
+- Interactive agent handoff for `install` and `doctor` commands
+- Built-in MCP server installer (`mcp`)
+- Built-in skills installer (`skills`)
 
 ## Installation
 
-### Install via npm (Recommended)
+### npm
 
 ```bash
 npm install -g @clix-so/clix-cli
 ```
 
-### Install via Bun
+### Bun
 
 ```bash
 bun add -g @clix-so/clix-cli
 ```
 
-### Install via Script
+### Script
 
 ```bash
 curl -fsSL https://clix.sh/install | bash
 ```
 
-### Install via Homebrew (macOS)
+### Homebrew (macOS)
 
 ```bash
 brew tap clix-so/clix-cli
 brew install clix
 ```
 
-### Uninstallation
-
-See [UNINSTALL.md](UNINSTALL.md) for instructions on how to remove Clix CLI.
+See [UNINSTALL.md](UNINSTALL.md) for removal instructions.
 
 ## Prerequisites
 
-- **Node.js 20+** (Bun v1.0+ is optional for faster development)
+- **Node.js 20+**
 - **One of the following AI agents**:
 
-| Agent | Free Plan | CLI Free Usage |
-|-------|:---------:|----------------|
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ | 1,000 requests/day |
-| [GitHub Copilot](https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli) | ✅ | 50 premium requests/month |
-| [OpenCode](https://opencode.ai/docs/cli/) | ✅ | Unlimited (with your own API keys) |
-| [Cursor](https://cursor.com/cli) | ⚠️ | 50 slow requests/month |
-| [Claude Code](https://code.claude.com/docs) | ❌ | Requires Pro ($20/mo) or API |
-| [Codex](https://developers.openai.com/codex/cli) | ❌ | Requires ChatGPT Plus ($20/mo) or API |
+| Agent                                                                                | Free Plan | CLI Free Usage                        |
+| ------------------------------------------------------------------------------------ | :-------: | ------------------------------------- |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli)                            |    Yes    | 1,000 requests/day                    |
+| [GitHub Copilot](https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli) |    Yes    | 50 premium requests/month             |
+| [OpenCode](https://opencode.ai/docs/cli/)                                            |    Yes    | Unlimited (with your own API keys)    |
+| [Cursor](https://cursor.com/cli)                                                     |  Limited  | 50 slow requests/month                |
+| [Claude Code](https://code.claude.com/docs)                                          |    No     | Requires Pro ($20/mo) or API          |
+| [Codex](https://developers.openai.com/codex/cli)                                     |    No     | Requires ChatGPT Plus ($20/mo) or API |
 
-> **💡 Tip:** If you don't have an active subscription, we recommend starting with **Gemini CLI** or **GitHub Copilot** which offer generous free tiers.
+> **Tip:** If you don't have an active subscription, start with **Gemini CLI** or **GitHub Copilot** which offer generous free tiers.
 
 ## Quick Start
 
-1. **Start interactive chat**:
-
 ```bash
-clix
-```
-
-2. **Select your AI agent** (if multiple are available):
-
-```bash
-clix agent claude
-```
-
-3. **Use natural language or slash commands**:
-
-```
-> How do I integrate Clix SDK into my iOS project?
-> /debug
-> /integration
+clix agent          # Select an AI agent
+clix install        # Install Clix SDK into your project
+clix doctor         # Diagnose SDK integration issues
 ```
 
 ## Commands
 
-### `clix` (default)
+| Command                            | Description                                         |
+| ---------------------------------- | --------------------------------------------------- |
+| `clix` / `clix help`               | Show help and exit                                  |
+| `clix agent [name]`                | List available agents or switch the active agent    |
+| `clix install`                     | Run install preparation, then hand off to agent CLI |
+| `clix doctor`                      | Run SDK diagnostics via agent handoff               |
+| `clix mcp`                         | Install Clix MCP Server                             |
+| `clix skills`                      | Install Clix Skills                                 |
+| `clix update`                      | Check for and apply CLI updates                     |
+| `clix login` / `logout` / `whoami` | Account and authentication                          |
+| `clix uninstall`                   | Remove Clix CLI from your system                    |
 
-Start an interactive chat session with your configured AI agent.
+### `clix install [--start-task <task>]`
 
-```bash
-clix
-```
+Runs a two-phase install pipeline:
 
-**Features:**
+1. **Preparation UI** — guided step-by-step setup for Firebase, APNS, and iOS configuration
+2. **Agent handoff** — launches the selected AI agent CLI with the install prompt
 
-- Natural language conversation
-- Real-time streaming responses
-- Slash commands for quick actions
-- Context tracking with usage indicators
-- History navigation (↑/↓ arrows)
-- Press Escape to cancel streaming
-
-**Shortcuts:**
-
-- `/help` - Show all available commands
-- `/debug` - Interactive debugging assistant
-- `/install` - Autonomous SDK installation
-- `/doctor` - SDK health check
-- `/integration` - Interactive SDK integration guide
-- `/agent` - Switch AI agents
-- `/transfer` - Transfer session to native CLI
-- `/exit` - Exit chat
-
-### `clix agent [name]`
-
-List available AI agents or switch to a specific agent.
-
-```bash
-# List available agents
-clix agent
-
-# Switch to Claude
-clix agent claude
-
-# Switch to Codex
-clix agent codex
-```
-
-Detects available agents (Claude, Codex, Gemini, OpenCode, Cursor, GitHub Copilot) on your system. Your selection is saved to `~/.config/clix/config.json`.
-
-### `clix install`
-
-Autonomous SDK installation with automatic file modifications. The AI agent will detect your platform, install dependencies, create initialization files, and integrate the SDK without manual intervention.
-
-```bash
-clix install
-
-# Specify target platform
-clix install --platform react-native
-clix install --platform ios
-```
-
-**Options:**
-
-- `--platform <platform>` - Target platform (ios, android, react-native, flutter)
-
-**iOS Dependency Managers:**
-
-The install command automatically detects and supports both Swift Package Manager (SPM) and CocoaPods:
-- **SPM (Recommended)**: Detected via `Package.swift` or Xcode project with SPM packages
-- **CocoaPods**: Detected via `Podfile`
+The `--start-task` flag is development-only and requires `CLIX_DEV_ENABLE_TASK_OVERRIDE=1`.
 
 ### `clix doctor`
 
-Analyze SDK integration status in your project.
+Hands off to the selected AI agent CLI with a diagnostic prompt. The agent analyzes SDK integration status, dependency health, and configuration issues.
 
-```bash
-clix doctor
-```
+### `clix mcp`
 
-### `clix ios-setup`
+Installs the Clix MCP Server via `npx add-mcp @clix-so/clix-mcp-server@latest --name clix`.
 
-Configure iOS capabilities, Notification Service Extension (NSE), and APNS key for the Clix SDK.
+### `clix skills`
 
-```bash
-clix ios-setup
-```
+Installs the Clix Skills via `npx skills add clix-so/skills` and transfers CLI control.
 
-**What it does:**
-1. **Phase 1 - Capabilities & Entitlements (Automatic):**
-   - Analyzes your iOS project structure
-   - Syncs capabilities with Apple Developer Portal (Push Notifications, App Groups)
-   - Creates/modifies entitlements files
+### `clix update [--dry-run] [--force]`
 
-2. **Phase 2 - Extension Setup (Guided):**
-   - Auto-generates NSE files:
-     - `NotificationService.swift` with `ClixNotificationServiceExtension`
-     - `Info.plist` for extension
-     - Extension entitlements file
-   - Step-by-step guide for Xcode configuration:
-     - Creating extension target in Xcode
-     - Configuring build settings (`ENABLE_USER_SCRIPT_SANDBOXING` for Xcode 15+)
-     - Adding CocoaPods/SPM dependencies
+Checks for CLI updates and applies them. Use `--dry-run` to preview without applying, `--force` to skip confirmation.
 
-3. **Phase 3 - APNS Key Setup (Optional):**
-   - APNS authentication key (.p8 file) creation guide
-   - Firebase Console upload for push notification delivery
+### `clix uninstall [--keep-config] [--keep-state] [--dry-run] [--force]`
 
-**Note:** Phase 2 & 3 require manual action in Xcode, Apple Developer Portal, and Firebase Console.
+Removes Clix CLI. Use `--keep-config` or `--keep-state` to preserve local data.
 
-### `clix update`
+## Install Preparation Tasks
 
-Check for and install CLI updates.
+`clix install` enforces the following order for required preparation tasks:
 
-```bash
-# Check for updates and install with confirmation
-clix update
+1. Firebase Configuration Files
+2. Firebase Service Account
+3. APNS Key for Firebase
+4. iOS Entitlements
+5. Notification Service Extension
 
-# Preview update without executing
-clix update --dry-run
-
-# Skip confirmation prompt
-clix update --force
-```
-
-**Options:**
-
-- `--dry-run` - Preview update without executing
-- `--force` - Skip confirmation prompt
-
-### Interactive Skills (Chat Mode Only)
-
-The following skills require step-by-step guidance and are only available in chat mode. Run `clix` to start interactive chat, then use `/<skill>` commands.
-
-#### `integration`
-
-SDK integration guide with step-by-step instructions. Unlike `clix install`, this provides interactive guidance for manual integration.
-
-```
-> clix
-> /integration
-```
-
-#### `event-tracking`
-
-Event tracking setup with `Clix.trackEvent()`.
-
-```
-> clix
-> /event-tracking
-```
-
-#### `user-management`
-
-User management and identification setup.
-
-```
-> clix
-> /user-management
-```
-
-#### `personalization`
-
-Personalization templates setup.
-
-```
-> clix
-> /personalization
-```
-
-#### `api-triggered-campaigns`
-
-API-triggered campaign setup.
-
-```
-> clix
-> /api-triggered-campaigns
-```
-
-### `clix debug <problem>`
-
-Interactive debugging assistant for troubleshooting issues.
-
-```bash
-clix debug "Push notifications not working on iOS"
-```
-
-### `clix install-mcp [agent]`
-
-Install Clix MCP Server for enhanced AI assistance.
-
-```bash
-# Auto-detect agent
-clix install-mcp
-
-# Install for specific agent
-clix install-mcp claude
-clix install-mcp codex
-```
-
-## Slash Commands
-
-Use these commands within the interactive chat (`clix`):
-
-### Autonomous Commands
-
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `/install` | | Autonomous SDK installation |
-| `/doctor` | | Check SDK integration status |
-| `/debug` | | Interactive debugging assistant |
-| `/ios-setup` | `/capabilities`, `/ios-capabilities` | Configure iOS capabilities and NSE |
-
-### Interactive Skills
-
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `/integration` | | SDK integration guide |
-| `/event-tracking` | | Event tracking setup |
-| `/user-management` | | User management setup |
-| `/personalization` | | Personalization templates |
-| `/api-triggered-campaigns` | | API-triggered campaign setup |
-
-### System
-
-| Command | Aliases | Description |
-|---------|---------|-------------|
-| `/help` | /?, /h | Show available commands |
-| `/new` | /clear | Start a new session |
-| `/compact` | /c | Compress conversation history |
-| `/agent` | /a | List or switch agents |
-| `/firebase` | | Check and configure Firebase credentials |
-| `/transfer` | /t | Transfer to agent CLI |
-| `/resume` | | Resume a previous session |
-| `/install-mcp` | /mcp | Install Clix MCP Server |
-| `/update` | /upgrade | Check for available updates |
-| `/exit` | /quit, /q | Exit the chat |
-
-## Interactive Features
-
-### Debug Assistant
-
-The `/debug` command provides interactive problem diagnosis:
-
-1. Type `/debug` in chat
-2. Describe your problem (e.g., "Push notifications not working on iOS")
-3. AI investigates your project structure and code
-4. Receive root cause analysis and recommended fixes
-
-```
-> /debug
-Describe the problem: Events not appearing in Clix dashboard
-[AI explores project, identifies issue, provides fixes]
-```
-
-### Session Transfer
-
-Transfer your conversation to continue in the native agent CLI:
-
-```
-> /transfer claude
-✅ Session saved to .clix/sessions/session-1234567890.md
-
-To continue in Claude Code:
-claude "$(cat .clix/sessions/session-1234567890.md)"
-```
-
-This preserves your entire conversation history and allows you to continue seamlessly in the agent's native interface.
-
-### Agent Switching
-
-Switch between agents without losing your conversation:
-
-```
-> /agent gemini
-Switching to Gemini...
-[Conversation history preserved]
-```
-
-### Skills
-
-Pre-built workflows for common SDK tasks. Skills automatically detect your platform (iOS, Android, React Native, Flutter) and follow Clix SDK best practices.
-
-- **Autonomous Commands** (`/install`, `/doctor`, `/debug`): Can be run from command-line (`clix install`) or chat mode
-- **Interactive Skills** (`/integration`, `/event-tracking`, `/user-management`, `/personalization`, `/api-triggered-campaigns`): Require step-by-step guidance, available only in chat mode
+Runtime SDK installation executes only after all required preparation steps are complete.
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guide.
-
-### Quick Start
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 
 ```bash
-# Clone the repository
-git clone https://github.com/clix-so/clix-cli.git
-cd clix-cli
-
-# Install dependencies
-bun install
-
-# Run in development mode
-bun run dev
-
-# Build
-bun run build
-
-# Compile binaries
-bun run build:binary
-
-# Run tests
-bun test
+bun install          # Install dependencies
+bun run dev          # Run CLI from source
+bun run build        # Bundle for distribution
+bun test             # Run all tests
+bun run check        # Lint + typecheck
 ```
 
-## Contributing
+## Links
 
-Pull requests and issues are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
-
-- Development setup and workflow
-- Code contribution process
-- Testing guidelines
-- Release process
+- [Clix SDK Documentation](https://clix.so)
+- [Issue Tracker](https://github.com/clix-so/clix-cli/issues)
+- [LLMs.txt](llms.txt) — Documentation for AI assistants
 
 ## License
 
 MIT
-
-## Links
-
-- [GitHub Repository](https://github.com/clix-so/clix-cli)
-- [Issue Tracker](https://github.com/clix-so/clix-cli/issues)
-- [Homebrew Tap](https://github.com/clix-so/homebrew-clix-cli)
-- [Clix SDK Documentation](https://clix.so)
-- [LLMs.txt](llms.txt) - Detailed documentation for AI assistants
-
----
-
-Made with love by the Clix team

@@ -19,39 +19,13 @@ export class CodexExecutor extends BaseExecutor {
     return 'jsonl';
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
-    // Permission handling: always use workspace-write sandbox mode
-    // This allows file operations while maintaining safety boundaries
-    // Both one-shot (command-line) and chat modes use the same permission level
-    const baseArgs = ['--json', '--skip-git-repo-check', '--sandbox', 'workspace-write'];
-
-    // Codex CLI does not support log-level flags
-
-    // Session persistence: disable for one-shot, enable for chat
-    if (options?.oneShot) {
-      // One-shot mode: no session persistence
-      return ['exec', prompt, ...baseArgs];
-    }
-
-    // Chat mode: resume session if available
-    if (this.sessionId) {
-      return ['exec', 'resume', this.sessionId, prompt, ...baseArgs];
-    }
-
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
+    const baseArgs = [
+      '--json',
+      '--skip-git-repo-check',
+      '--dangerously-bypass-approvals-and-sandbox',
+    ];
     return ['exec', prompt, ...baseArgs];
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as CodexCLIMessage;
-    // Extract thread_id from thread.started message
-    if (msg.type === 'thread.started' && msg.thread_id) {
-      return msg.thread_id;
-    }
-    return null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
   }
 
   protected processStreamData(
@@ -69,6 +43,7 @@ export class CodexExecutor extends BaseExecutor {
         return {
           type: 'text',
           content: item.text,
+          streamMode: 'append',
           metadata: msg as unknown as Record<string, unknown>,
         };
       }

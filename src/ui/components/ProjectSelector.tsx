@@ -3,15 +3,23 @@ import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Organization, Project } from '@/lib/api';
 
-interface OrgWithProjects {
+export interface OrgWithProjects {
   org: Organization;
   projects: Project[];
 }
 
-interface FlattenedProject {
+export interface FlattenedProject {
   project: Project;
   org: Organization;
 }
+
+const PROJECT_SORTER: Intl.Collator = new Intl.Collator(undefined, { sensitivity: 'base' });
+const FALLBACK_TERMINAL_ROWS = 24;
+const COMPACT_TERMINAL_ROWS = 34;
+const MEDIUM_TERMINAL_ROWS = 42;
+const COMPACT_MAX_VISIBLE_ITEMS = 5;
+const MEDIUM_MAX_VISIBLE_ITEMS = 7;
+const LARGE_MAX_VISIBLE_ITEMS = 10;
 
 export interface ProjectSelectorProps {
   organizations: OrgWithProjects[];
@@ -35,6 +43,63 @@ function flattenProjects(organizations: OrgWithProjects[]): FlattenedProject[] {
   return flattened;
 }
 
+function compareProjectsAsc(a: FlattenedProject, b: FlattenedProject): number {
+  const byProjectName = PROJECT_SORTER.compare(a.project.name, b.project.name);
+  if (byProjectName !== 0) return byProjectName;
+
+  const byOrgName = PROJECT_SORTER.compare(a.org.name, b.org.name);
+  if (byOrgName !== 0) return byOrgName;
+
+  return PROJECT_SORTER.compare(a.project.id, b.project.id);
+}
+
+export function getSortedProjects(organizations: OrgWithProjects[]): FlattenedProject[] {
+  return flattenProjects(organizations).sort(compareProjectsAsc);
+}
+
+export function filterProjectsByQuery(
+  projects: FlattenedProject[],
+  query: string,
+): FlattenedProject[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return projects;
+
+  return projects.filter((item) => item.project.name.toLowerCase().includes(normalizedQuery));
+}
+
+export function getProjectSelectorMaxVisible(rows = process.stdout.rows): number {
+  const terminalRows =
+    typeof rows === 'number' && Number.isFinite(rows) && rows > 0 ? rows : FALLBACK_TERMINAL_ROWS;
+
+  if (terminalRows <= COMPACT_TERMINAL_ROWS) {
+    return COMPACT_MAX_VISIBLE_ITEMS;
+  }
+  if (terminalRows <= MEDIUM_TERMINAL_ROWS) {
+    return MEDIUM_MAX_VISIBLE_ITEMS;
+  }
+  return LARGE_MAX_VISIBLE_ITEMS;
+}
+
+function applySearchInput(
+  input: string,
+  key: { backspace?: boolean; delete?: boolean; space?: boolean },
+  setSearchQuery: React.Dispatch<React.SetStateAction<string>>,
+): boolean {
+  if (key.backspace || key.delete) {
+    setSearchQuery((prev) => prev.slice(0, -1));
+    return true;
+  }
+  if (key.space) {
+    setSearchQuery((prev) => `${prev} `);
+    return true;
+  }
+  if (input && !input.startsWith('\u001b')) {
+    setSearchQuery((prev) => `${prev}${input}`);
+    return true;
+  }
+  return false;
+}
+
 export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   organizations,
   onSelect,
@@ -42,22 +107,18 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   workspacePath,
   showSkip = true,
 }) => {
-  const flattenedProjects = useMemo(() => flattenProjects(organizations), [organizations]);
+  const sortedProjects = useMemo(() => getSortedProjects(organizations), [organizations]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredProjects = useMemo(
+    () => filterProjectsByQuery(sortedProjects, searchQuery),
+    [sortedProjects, searchQuery],
+  );
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Calculate visible window for scrolling (show max 10 items)
-  const maxVisible = 10;
-  const totalItems = flattenedProjects.length;
+  // Calculate visible window for scrolling based on terminal height.
+  const maxVisible = getProjectSelectorMaxVisible();
+  const totalItems = filteredProjects.length;
   const halfWindow = Math.floor(maxVisible / 2);
-
-  // Clamp selectedIndex when list changes
-  useEffect(() => {
-    setSelectedIndex((prev) => {
-      if (totalItems <= 0) return 0;
-      if (prev >= totalItems) return totalItems - 1;
-      return prev;
-    });
-  }, [totalItems]);
 
   let startIndex = 0;
   let endIndex = maxVisible;
@@ -77,32 +138,54 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     endIndex = totalItems;
   }
 
-  const visibleProjects = flattenedProjects.slice(startIndex, endIndex);
+  const visibleProjects = filteredProjects.slice(startIndex, endIndex);
 
-  useInput((_input, key) => {
-    // Handle empty list - only Enter/Esc work
+  useInput((input, key) => {
+    // Handle empty state differently for no projects vs no search matches.
     if (totalItems === 0) {
-      if (key.return || (showSkip && key.escape)) {
+      if (sortedProjects.length === 0 && (key.return || (showSkip && key.escape))) {
         onSkip();
+        return;
       }
+      if (showSkip && key.escape) {
+        onSkip();
+        return;
+      }
+      applySearchInput(input, key, setSearchQuery);
       return;
     }
 
     if (key.upArrow) {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
-    } else if (key.downArrow) {
+      return;
+    }
+    if (key.downArrow) {
       setSelectedIndex((prev) => (prev < totalItems - 1 ? prev + 1 : 0));
-    } else if (key.return) {
-      const selected = flattenedProjects[selectedIndex];
+      return;
+    }
+    if (key.return) {
+      const selected = filteredProjects[selectedIndex];
       if (selected) {
         onSelect(selected.project, selected.org);
       }
-    } else if (showSkip && key.escape) {
-      onSkip();
+      return;
     }
+    if (showSkip && key.escape) {
+      onSkip();
+      return;
+    }
+    applySearchInput(input, key, setSearchQuery);
   });
 
-  if (flattenedProjects.length === 0) {
+  useEffect(() => {
+    setSelectedIndex((prev) => {
+      if (totalItems <= 0) return 0;
+      if (prev >= totalItems) return 0;
+      return prev;
+    });
+  }, [totalItems]);
+
+  if (sortedProjects.length === 0) {
     return (
       <Box flexDirection="column" marginTop={1}>
         <Text dimColor>No projects available to link.</Text>
@@ -115,6 +198,29 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     );
   }
 
+  if (filteredProjects.length === 0) {
+    return (
+      <Box flexDirection="column" marginTop={1}>
+        <Box marginBottom={1}>
+          <Text bold>Select a project to link to this workspace:</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text dimColor>{workspacePath}</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text dimColor>Search: </Text>
+          <Text color="cyan">{searchQuery || '(type to search)'}</Text>
+        </Box>
+        <Text dimColor>No matching projects found.</Text>
+        <Box marginTop={1}>
+          <Text dimColor>
+            Type to search · Backspace to clear{showSkip ? ' · Esc to skip' : ''}
+          </Text>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box marginBottom={1}>
@@ -122,6 +228,10 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       </Box>
       <Box marginBottom={1}>
         <Text dimColor>{workspacePath}</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text dimColor>Search: </Text>
+        <Text color="cyan">{searchQuery || '(type to search)'}</Text>
       </Box>
 
       {startIndex > 0 && (
@@ -151,7 +261,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>↑↓ to navigate · Enter to select{showSkip ? ' · Esc to skip' : ''}</Text>
+        <Text dimColor>
+          Type to search · ↑↓ to navigate · Enter to select{showSkip ? ' · Esc to skip' : ''}
+        </Text>
       </Box>
     </Box>
   );

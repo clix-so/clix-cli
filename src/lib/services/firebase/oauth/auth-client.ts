@@ -7,6 +7,7 @@
  * @module services/firebase/oauth/auth-client
  */
 
+import { oauthLogger } from '@/lib/debug/logger';
 import {
   generateCodeChallenge,
   generateCodeVerifier,
@@ -14,6 +15,7 @@ import {
   OAUTH_CALLBACK_CONFIG,
   OAuthCallbackServer,
 } from '@/lib/utils/oauth';
+import { findProjectRoot } from '@/lib/utils/path';
 import { GOOGLE_OAUTH_CONFIG, getOAuthCredentials, isOAuthConfigured } from './config';
 import { TokenStore } from './token-store';
 import type { AuthResult, OAuthCallbackResult, OAuthTokens } from './types';
@@ -90,13 +92,19 @@ export class GoogleAuthClient {
 
     const authUrl = `${GOOGLE_OAUTH_CONFIG.authorizationEndpoint}?${params.toString()}`;
 
-    // Debug: Log PKCE parameters
-    if (process.env.DEBUG) {
-      console.error('[OAuth Debug] Authorization request:');
-      console.error('  code_challenge:', codeChallenge);
-      console.error('  code_challenge_method: S256');
-      console.error('  PKCE enabled: true');
-    }
+    // Always log OAuth request parameters to debug.log
+    oauthLogger.writeToFile(
+      'OAuth authorization URL generated',
+      {
+        type: 'auth_url_generated',
+        client_id: `${clientId.substring(0, 20)}...`,
+        redirect_uri: GOOGLE_OAUTH_CONFIG.redirectUri,
+        scopes: GOOGLE_OAUTH_CONFIG.scopes,
+        has_code_challenge: !!codeChallenge,
+        has_state: !!this.oauthState,
+      },
+      findProjectRoot(),
+    );
 
     return authUrl;
   }
@@ -118,11 +126,10 @@ export class GoogleAuthClient {
 
     try {
       const result = await this.callbackServer.waitForCallback();
-      this.oauthState = null;
       return result;
-    } catch (error) {
+    } finally {
       this.oauthState = null;
-      throw error;
+      this.callbackServer = null;
     }
   }
 
@@ -179,10 +186,22 @@ export class GoogleAuthClient {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
 
-      // Debug: Log error response
-      if (process.env.DEBUG) {
-        console.error('[OAuth Debug] Token exchange error:', JSON.stringify(errorData, null, 2));
-      }
+      // Write debug info to .clix/debug.log
+      oauthLogger.writeToFile(
+        'Token exchange failed',
+        {
+          type: 'token_exchange_error',
+          error: errorData,
+          params: {
+            client_id: `${clientId.substring(0, 20)}...`,
+            redirect_uri: GOOGLE_OAUTH_CONFIG.redirectUri,
+            has_code: !!code,
+            has_code_verifier: !!this.codeVerifier,
+            has_client_secret: !!clientSecret,
+          },
+        },
+        findProjectRoot(),
+      );
 
       const errorMessage =
         (errorData as { error_description?: string; error?: string }).error_description ||
@@ -246,9 +265,36 @@ export class GoogleAuthClient {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      const errorCode = (errorData as { error?: string }).error;
+
+      // Write debug info to .clix/debug.log
+      oauthLogger.writeToFile(
+        'Token refresh failed',
+        {
+          type: 'token_refresh_error',
+          error: errorData,
+          params: {
+            client_id: `${clientId.substring(0, 20)}...`,
+            has_refresh_token: !!refreshToken,
+            has_client_secret: !!clientSecret,
+          },
+        },
+        findProjectRoot(),
+      );
+
+      // If invalid_grant, clear stored tokens so user can re-authenticate
+      if (errorCode === 'invalid_grant') {
+        oauthLogger.writeToFile(
+          'Clearing stored tokens due to invalid_grant',
+          { type: 'tokens_cleared' },
+          findProjectRoot(),
+        );
+        await this.tokenStore.clear();
+      }
+
       const errorMessage =
         (errorData as { error_description?: string; error?: string }).error_description ||
-        (errorData as { error?: string }).error ||
+        errorCode ||
         `Token refresh failed: ${response.status}`;
       throw new Error(errorMessage);
     }
@@ -277,6 +323,7 @@ export class GoogleAuthClient {
    * Automatically refreshes if expired.
    *
    * @returns Access token string
+   * @throws Error with 'invalid_grant' if tokens are invalid and need re-authentication
    */
   async getAccessToken(): Promise<string> {
     let tokens = await this.tokenStore.load();
@@ -287,7 +334,17 @@ export class GoogleAuthClient {
 
     // Check if token is expired and we have a refresh token
     if (this.tokenStore.isExpired(tokens) && tokens.refresh_token) {
-      tokens = await this.refreshAccessToken(tokens.refresh_token);
+      try {
+        tokens = await this.refreshAccessToken(tokens.refresh_token);
+      } catch (error) {
+        // If refresh failed (e.g., invalid_grant), tokens are already cleared
+        // Re-throw with indication that re-authentication is needed
+        const message = error instanceof Error ? error.message : 'Token refresh failed';
+        if (message.includes('invalid_grant')) {
+          throw new Error(`invalid_grant: ${message}`);
+        }
+        throw new Error(`token_refresh_failed: ${message}`);
+      }
     }
 
     if (!tokens.access_token) {
@@ -305,19 +362,61 @@ export class GoogleAuthClient {
    */
   async authenticate(openBrowser: (url: string) => void): Promise<AuthResult> {
     try {
+      oauthLogger.writeToFile(
+        'Starting OAuth authentication flow',
+        { type: 'auth_start' },
+        findProjectRoot(),
+      );
+
       const authUrl = await this.generateAuthUrl();
       openBrowser(authUrl);
 
+      oauthLogger.writeToFile(
+        'Waiting for OAuth callback',
+        { type: 'waiting_callback' },
+        findProjectRoot(),
+      );
+
       const { code } = await this.waitForCallback();
+
+      oauthLogger.writeToFile(
+        'OAuth callback received, exchanging code',
+        { type: 'callback_received', has_code: !!code },
+        findProjectRoot(),
+      );
+
       await this.exchangeCode(code);
+
+      oauthLogger.writeToFile(
+        'OAuth authentication successful',
+        { type: 'auth_success' },
+        findProjectRoot(),
+      );
 
       return { success: true };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      oauthLogger.writeToFile(
+        'OAuth authentication failed',
+        { type: 'auth_failed', error: errorMessage },
+        findProjectRoot(),
+      );
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       };
     }
+  }
+
+  /**
+   * Cancel in-flight OAuth authentication.
+   */
+  cancelAuthentication(reason = 'OAuth authentication cancelled'): void {
+    this.callbackServer?.cancel(reason);
+    this.callbackServer = null;
+    this.oauthState = null;
+    this.codeVerifier = null;
   }
 
   /**

@@ -7,9 +7,6 @@ import { BaseExecutor, type StreamContext, type StreamParserType } from './base-
 import type { CLIContentBlock, ClaudeCLIMessage } from './types';
 
 export class ClaudeExecutor extends BaseExecutor {
-  // Track accumulated text to compute deltas
-  private lastTextContent = '';
-
   constructor() {
     super({
       name: 'claude',
@@ -29,32 +26,18 @@ export class ClaudeExecutor extends BaseExecutor {
     return 'jsonl';
   }
 
-  protected buildArgs(prompt: string, options?: ExecuteOptions): string[] {
+  protected buildArgs(prompt: string, _options?: ExecuteOptions): string[] {
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
 
-    // Permission handling: always use acceptEdits mode
-    // This allows file operations while maintaining safety boundaries
-    // Both one-shot (command-line) and chat modes use the same permission level
-    args.push('--permission-mode', 'acceptEdits');
+    // Permission handling: fully auto-approve tool execution.
+    // Required for non-interactive /install build steps (xcodebuild, xcrun, etc.).
+    args.push('--allow-dangerously-skip-permissions');
+    args.push('--permission-mode', 'bypassPermissions');
 
-    // Session persistence: disable for one-shot, enable for chat
-    if (options?.oneShot) {
-      args.push('--no-session-persistence');
-    } else if (this.sessionId) {
-      // Resume session if available (use --resume instead of --session-id)
-      args.push('--resume', this.sessionId);
-    }
+    // Always disable session persistence for command-only execution.
+    args.push('--no-session-persistence');
 
     return args;
-  }
-
-  protected override extractSessionId(data: unknown): string | null {
-    const msg = data as ClaudeCLIMessage;
-    return msg.session_id ?? null;
-  }
-
-  protected override onCompactionComplete(): void {
-    this.sessionId = null;
   }
 
   protected processStreamData(
@@ -103,24 +86,6 @@ export class ClaudeExecutor extends BaseExecutor {
     results.push(...toolMessages);
 
     return results.length > 0 ? (results.length === 1 ? results[0] : results) : null;
-  }
-
-  private extractTextDelta(textContent: string, msg: ClaudeCLIMessage): AgentMessage | null {
-    const delta = textContent.startsWith(this.lastTextContent)
-      ? textContent.slice(this.lastTextContent.length)
-      : textContent;
-
-    this.lastTextContent = textContent;
-
-    if (delta) {
-      return {
-        type: 'text',
-        content: delta,
-        metadata: msg as unknown as Record<string, unknown>,
-      };
-    }
-
-    return null;
   }
 
   private extractToolUses(msg: ClaudeCLIMessage): AgentMessage[] {
@@ -172,6 +137,7 @@ export class ClaudeExecutor extends BaseExecutor {
       return {
         type: 'text',
         content: msg.result,
+        streamMode: 'append',
         metadata: msg as unknown as Record<string, unknown>,
       };
     }

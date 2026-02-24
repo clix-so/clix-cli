@@ -214,6 +214,7 @@ export interface FirebaseRecommendation {
 export const FIREBASE_HELP_URLS = {
   androidSetup: 'https://firebase.google.com/docs/android/setup',
   iosSetup: 'https://firebase.google.com/docs/ios/setup',
+  createProject: 'https://console.firebase.google.com/',
   console: 'https://console.firebase.google.com/',
   downloadConfig: 'https://support.google.com/firebase/answer/7015592',
   reactNativeSetup: 'https://rnfirebase.io/',
@@ -221,24 +222,7 @@ export const FIREBASE_HELP_URLS = {
 } as const;
 
 /**
- * Credential action types for the wizard menu.
- */
-export type CredentialAction =
-  | { type: 'redetect' }
-  | { type: 'redetect_platform'; platform: 'android' | 'ios' }
-  | { type: 'validate'; platform: 'android' | 'ios' }
-  | { type: 'help'; topic: keyof typeof FIREBASE_HELP_URLS }
-  | { type: 'download' }
-  | { type: 'skip' }
-  | { type: 'done' };
-
-/**
- * Wizard phase states.
- */
-export type WizardPhase = 'detecting' | 'status' | 'menu' | 'validating' | 'error' | 'complete';
-
-/**
- * Result from Firebase setup wizard.
+ * Result from Firebase setup flow.
  */
 export interface FirebaseSetupResult {
   /** Whether setup was completed */

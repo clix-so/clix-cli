@@ -31,17 +31,18 @@ export const APNS_KEY_CREATION_STEPS = [
   'Click "Continue" then "Register"',
   'Download the .p8 file (you can only download once!)',
   'Note the Key ID shown on the page',
-  'Copy the .p8 file to this project directory',
+  'Copy the .p8 file to your project .clix directory',
 ] as const;
 
 /**
  * Firebase upload steps.
  */
 export const FIREBASE_UPLOAD_STEPS = [
-  'Go to "iOS app configuration" section',
-  'Click "Upload" under APNs Authentication Key',
+  'Go to Project settings -> Your apps',
+  'In Apple apps, select your iOS app',
+  'Open the Cloud Messaging tab',
+  'Under APNs Authentication Key, click Upload',
   'Select your .p8 file',
-  'Enter the Key ID',
-  'Enter your Team ID',
+  'Enter the Key ID and Team ID',
   'Click "Upload"',
 ] as const;

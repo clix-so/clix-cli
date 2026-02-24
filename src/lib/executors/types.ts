@@ -69,13 +69,6 @@ export type GeminiCLIEventType =
   | 'error'
   | 'result';
 
-export interface GeminiCLIInitEvent {
-  type: 'init';
-  timestamp: string;
-  session_id: string;
-  model: string;
-}
-
 export interface GeminiCLIMessageEvent {
   type: 'message';
   timestamp: string;
@@ -131,7 +124,6 @@ export interface GeminiCLIResultEvent {
 }
 
 export type GeminiCLIMessage =
-  | GeminiCLIInitEvent
   | GeminiCLIMessageEvent
   | GeminiCLIToolUseEvent
   | GeminiCLIToolResultEvent
@@ -160,12 +152,6 @@ export interface OpenCodeCLIBaseEvent {
   type: OpenCodeCLIEventType;
   timestamp: number;
   sessionID?: string;
-}
-
-export interface OpenCodeCLISessionEvent extends OpenCodeCLIBaseEvent {
-  type: 'session' | 'start';
-  sessionID: string;
-  model?: string;
 }
 
 export interface OpenCodeCLIMessageEvent extends OpenCodeCLIBaseEvent {
@@ -257,7 +243,6 @@ export interface OpenCodeCLICompleteEvent extends OpenCodeCLIBaseEvent {
 }
 
 export type OpenCodeCLIMessage =
-  | OpenCodeCLISessionEvent
   | OpenCodeCLIStepStartEvent
   | OpenCodeCLIMessageEvent
   | OpenCodeCLITextEvent

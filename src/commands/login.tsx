@@ -1,3 +1,4 @@
+import { setExitCode } from '../lib/exit';
 import { LoginUI } from '../ui/LoginUI';
 import { printFinalOutput } from '../ui/utils/finalOutput';
 import { safeRender } from '../ui/utils/safeRender';
@@ -27,7 +28,7 @@ export async function loginCommand(): Promise<void> {
             title: 'Login failed',
             message: error.message,
           });
-          process.exitCode = 1;
+          setExitCode(1);
           resolve();
         }}
       />,

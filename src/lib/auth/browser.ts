@@ -5,15 +5,7 @@
  * @returns true if browser was opened, false otherwise
  */
 export async function openBrowser(url: string): Promise<boolean> {
-  try {
-    // Dynamic import to avoid bundling issues
-    const open = await import('open');
-    await open.default(url);
-    return true;
-  } catch {
-    // Fallback: try platform-specific commands
-    return openBrowserFallback(url);
-  }
+  return openBrowserFallback(url);
 }
 
 /**

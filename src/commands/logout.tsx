@@ -1,3 +1,4 @@
+import { setExitCode } from '../lib/exit';
 import { LogoutUI } from '../ui/LogoutUI';
 import { printFinalOutput } from '../ui/utils/finalOutput';
 import { safeRender } from '../ui/utils/safeRender';
@@ -25,7 +26,7 @@ export async function logoutCommand(): Promise<void> {
               title: 'Logout failed',
               message: 'Failed to remove credentials',
             });
-            process.exitCode = 1;
+            setExitCode(1);
           }
           resolve();
         }}

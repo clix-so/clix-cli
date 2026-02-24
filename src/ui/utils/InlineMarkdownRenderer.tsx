@@ -3,7 +3,7 @@ import React from 'react';
 
 // Constants for Markdown parsing
 const BOLD_MARKER_LENGTH = 2; // For "**"
-const ITALIC_MARKER_LENGTH = 1; // For "*" or "_"
+const ITALIC_MARKER_LENGTH = 1; // For "*"
 const STRIKETHROUGH_MARKER_LENGTH = 2; // For "~~"
 const UNDERLINE_TAG_START_LENGTH = 3; // For "<u>"
 const UNDERLINE_TAG_END_LENGTH = 4; // For "</u>"
@@ -78,7 +78,7 @@ function renderUrl(match: string, key: string): React.ReactNode {
   );
 }
 
-function isItalicMatch(
+export function isItalicMatch(
   fullMatch: string,
   text: string,
   matchIndex: number,
@@ -91,8 +91,8 @@ function isItalicMatch(
 
   return (
     fullMatch.length > ITALIC_MARKER_LENGTH * 2 &&
-    ((fullMatch.startsWith('*') && fullMatch.endsWith('*')) ||
-      (fullMatch.startsWith('_') && fullMatch.endsWith('_'))) &&
+    fullMatch.startsWith('*') &&
+    fullMatch.endsWith('*') &&
     !/\w/.test(prevChar) &&
     !/\w/.test(nextChar) &&
     !/\S[./\\]/.test(prevTwoChars) &&
@@ -148,7 +148,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text, defaultColor 
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
   const inlineRegex =
-    /(\*\*.*?\*\*|\*.*?\*|_.*?_|~~.*?~~|\[.*?\]\(.*?\)|`+.+?`+|<u>.*?<\/u>|https?:\/\/\S+)/g;
+    /(\*\*.*?\*\*|\*.*?\*|~~.*?~~|\[.*?\]\(.*?\)|`+.+?`+|<u>.*?<\/u>|https?:\/\/\S+)/g;
   let match: RegExpExecArray | null = inlineRegex.exec(text);
 
   while (match !== null) {

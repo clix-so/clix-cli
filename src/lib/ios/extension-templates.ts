@@ -12,7 +12,6 @@ import Clix
 class NotificationService: ClixNotificationServiceExtension {
     override init() {
         super.init()
-        // Register with Clix (replace with your project ID from https://console.clix.so/)
         register(projectId: "YOUR_PROJECT_ID")
     }
 

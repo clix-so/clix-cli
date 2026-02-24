@@ -15,26 +15,6 @@ describe('Command Mode Output Persistence', () => {
     }
   });
 
-  describe('Debug command help', () => {
-    test('should show help and leave output in terminal', async () => {
-      const result = await rig.run(['debug']);
-
-      // Should display help message
-      expect(result.stdout).toContain('Usage: clix debug <problem>');
-      expect(result.stdout).toContain('Description:');
-      expect(result.stdout).toContain('Interactive debugging assistant');
-      expect(result.stdout).toContain('Examples:');
-
-      // Output should be captured (proving it persists)
-      expect(result.stdout.length).toBeGreaterThan(0);
-    });
-
-    test('should exit successfully after showing help', async () => {
-      const result = await rig.run(['debug']);
-      expect(result.exitCode).toBe(0);
-    });
-  });
-
   describe('Help command', () => {
     test('should show main help output', async () => {
       const result = await rig.run(['--help']);
@@ -54,7 +34,8 @@ describe('Command Mode Output Persistence', () => {
       // Verify that command mode commands are listed
       expect(result.stdout).toContain('install');
       expect(result.stdout).toContain('doctor');
-      expect(result.stdout).toContain('debug');
+      expect(result.stdout).toContain('skills');
+      expect(result.stdout).not.toContain('debug <problem>');
     });
   });
 
@@ -77,12 +58,11 @@ describe('Final Output Format Verification', () => {
 
     // Verify commands that support final output are listed
     expect(result.stdout).toContain('install');
-    expect(result.stdout).toContain('debug');
     expect(result.stdout).toContain('doctor');
     // Note: config is not shown in help (interactive command)
 
     // These commands should now persist their output
-    expect(result.stdout).toContain('Autonomous SDK installation');
-    expect(result.stdout).toContain('Interactive debugging assistant');
+    expect(result.stdout).toContain('Install Clix SDK');
+    expect(result.stdout).toContain('Check Clix SDK integration status');
   });
 });

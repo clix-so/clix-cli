@@ -36,34 +36,22 @@ describe('ClaudeExecutor', () => {
       expect(mockCommandExists).toHaveBeenCalledWith('claude');
     });
   });
-});
 
-describe('ClaudeExecutor session management', () => {
-  describe('session ID preservation on abort', () => {
-    test('should preserve session ID when execution is aborted', async () => {
-      const executor = new ClaudeExecutor();
-      const testSessionId = 'test-session-123';
+  describe('buildArgs', () => {
+    test('should enable bypass permission mode and dangerous skip permissions', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+      const args = (executor as any).buildArgs('test prompt');
 
-      // Set up executor with a session ID (simulating a previous execution)
-      executor.setSessionId(testSessionId);
+      expect(args).toContain('--allow-dangerously-skip-permissions');
+      expect(args).toContain('--permission-mode');
+      expect(args).toContain('bypassPermissions');
+    });
 
-      // Verify session ID is set
-      expect(executor.getSessionId()).toBe(testSessionId);
+    test('should always include no-session-persistence', () => {
+      // biome-ignore lint/suspicious/noExplicitAny: Testing protected method
+      const args = (executor as any).buildArgs('test prompt');
 
-      // Create an already-aborted AbortController
-      const abortController = new AbortController();
-      abortController.abort();
-
-      // Execute with aborted signal
-      const messages: unknown[] = [];
-      for await (const message of executor.execute('test prompt', {
-        signal: abortController.signal,
-      })) {
-        messages.push(message);
-      }
-
-      // Session ID should be preserved after abort (not reset to null)
-      expect(executor.getSessionId()).toBe(testSessionId);
+      expect(args).toContain('--no-session-persistence');
     });
   });
 });
@@ -161,5 +149,39 @@ describe('ClaudeExecutor message mapping', () => {
       expect(msg.type).toBe('system');
       expect(msg.session_id).toBe('abc-123-def');
     });
+  });
+});
+
+describe('ClaudeExecutor stream mode mapping', () => {
+  test('emits append-only cumulative deltas, including rewritten snapshots', () => {
+    const executor = new ClaudeExecutor() as unknown as {
+      extractTextDelta: (
+        textContent: string,
+        msg: ClaudeCLIMessage,
+      ) => {
+        type: string;
+        content: string;
+        streamMode?: 'append' | 'replace';
+      } | null;
+    };
+
+    const msg: ClaudeCLIMessage = {
+      type: 'assistant',
+      message: {
+        content: [{ type: 'text', text: 'placeholder' }],
+      },
+    };
+
+    const first = executor.extractTextDelta('Hello', msg);
+    expect(first?.content).toBe('Hello');
+    expect(first?.streamMode).toBe('append');
+
+    const second = executor.extractTextDelta('Hello world', msg);
+    expect(second?.content).toBe(' world');
+    expect(second?.streamMode).toBe('append');
+
+    const rewrite = executor.extractTextDelta('Rewritten output', msg);
+    expect(rewrite?.content).toBe('\nRewritten output');
+    expect(rewrite?.streamMode).toBe('append');
   });
 });

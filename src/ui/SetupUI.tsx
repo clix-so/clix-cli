@@ -17,10 +17,15 @@ import {
   getProjectConfigManager,
   type ProjectConfig,
 } from '@/lib/config';
+import {
+  fetchOrganizationsWithProjects,
+  type OrgWithProjects,
+} from '@/lib/services/organization-projects';
 import { detectProjectType } from '@/lib/services/project-detector';
 import { Header } from '@/ui/components/Header';
 import { ProjectSelector } from '@/ui/components/ProjectSelector';
 import { StatusMessage } from '@/ui/components/StatusMessage';
+import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 
 type SetupPhase =
   | 'checking_auth'
@@ -32,11 +37,6 @@ type SetupPhase =
   | 'saving_config'
   | 'complete'
   | 'error';
-
-interface OrgWithProjects {
-  org: Organization;
-  projects: Project[];
-}
 
 interface SetupUIProps {
   /** Called when setup completes successfully */
@@ -73,22 +73,6 @@ async function fetchUserName(
   }
 }
 
-/** Fetch organizations and their projects */
-async function fetchOrganizationsWithProjects(): Promise<OrgWithProjects[]> {
-  const orgsWithProjects: OrgWithProjects[] = [];
-  try {
-    const apiClient = getInternalApiClient();
-    const orgs = await apiClient.listOrganizations();
-    for (const org of orgs) {
-      const projects = await apiClient.listProjects(org.id);
-      orgsWithProjects.push({ org, projects });
-    }
-  } catch {
-    // Silently ignore org/project fetch errors
-  }
-  return orgsWithProjects;
-}
-
 export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPath }) => {
   const { exit } = useApp();
   const [phase, setPhase] = useState<SetupPhase>('checking_auth');
@@ -101,6 +85,7 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
   const [workspacePath] = useState(() => projectPath ?? process.cwd());
   const pkceServiceRef = useRef<PKCEFlowService | null>(null);
   const memberRef = useRef<Member | null>(null);
+  const reopenLink = authUrl ? formatTerminalHyperlink(authUrl, 'Open authentication URL') : null;
 
   const handleProjectSelect = useCallback(
     async (project: Project, org: Organization) => {
@@ -118,6 +103,8 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
         const projectType = await detectProjectType(workspacePath);
 
         // Create project config
+        const projectPublicKey = project.public_api_key ?? project.public_key;
+
         const config: ProjectConfig = {
           version: CURRENT_PROJECT_CONFIG_VERSION,
           member: {
@@ -132,7 +119,7 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
           project: {
             id: project.id,
             name: project.name,
-            ...(project.public_key && { publicKey: project.public_key }),
+            ...(projectPublicKey && { public_api_key: projectPublicKey }),
           },
           projectType,
           linkedAt: new Date().toISOString(),
@@ -141,9 +128,6 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
         // Save to .clix/config.jsonc
         const projectConfigManager = getProjectConfigManager(workspacePath);
         await projectConfigManager.save(config);
-
-        // Ensure .clix is in .gitignore
-        await projectConfigManager.ensureGitignore();
 
         setSavedConfig(config);
         setPhase('complete');
@@ -185,15 +169,15 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
         const isAuthenticated = await credentialsManager.isAuthenticated();
 
         if (isAuthenticated) {
-          // Already logged in, fetch data
+          // Already logged in, fetch data in parallel
           setPhase('fetching_data');
-          const name = await fetchUserName(pkceService);
+          const [member, orgsData] = await Promise.all([
+            fetchMember(),
+            fetchOrganizationsWithProjects(),
+          ]);
+          const name = member.name || member.email;
           setUserName(name);
-
-          const member = await fetchMember();
           memberRef.current = member;
-
-          const orgsData = await fetchOrganizationsWithProjects();
           setOrganizations(orgsData);
 
           // Check if there are projects to select from
@@ -293,14 +277,18 @@ export const SetupUI: React.FC<SetupUIProps> = ({ onComplete, onError, projectPa
             <Box flexDirection="column">
               <Text color="yellow">⚠</Text>
               <Text> Could not open browser automatically.</Text>
-              <Box marginTop={1}>
-                <Text dimColor>Open this URL in your browser:</Text>
-              </Box>
-              <Box marginTop={1}>
-                <Text color="cyan">{authUrl}</Text>
-              </Box>
             </Box>
           )}
+          {authUrl ? (
+            <Box marginTop={1} flexDirection="column">
+              <Text dimColor>If browser was closed, reopen this URL:</Text>
+              <Text color="cyan">{reopenLink}</Text>
+              <Box marginTop={1} flexDirection="column">
+                <Text dimColor>Direct URL:</Text>
+                <Text>{authUrl}</Text>
+              </Box>
+            </Box>
+          ) : null}
           <Box marginTop={2}>
             <Text dimColor>
               <Spinner type="dots" />

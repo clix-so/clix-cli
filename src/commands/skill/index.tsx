@@ -1,121 +1,281 @@
-import type { AgentExecutor, AgentMessage } from '../../lib/executor';
+import { Box, Text } from 'ink';
+import type React from 'react';
+import { useCallback } from 'react';
+import type { AgentInfo } from '../../lib/agents';
+import { getConfigManager } from '../../lib/config/index';
+import { setExitCode } from '../../lib/exit';
+import { buildAgentHandoffInvocation, runAgentHandoff } from '../../lib/services/agent-handoff';
+import { AgentSelectionService } from '../../lib/services/agent-selection-service';
+import { getSkillPrompt } from '../../lib/skills';
+import { GenericSelector, type SelectorItem } from '../../ui/components/GenericSelector';
 import {
-  executeSkill,
-  getAvailableSkills,
-  getAvailableSkillTypes,
-  getSkillInfo,
-  type SkillType,
-} from '../../lib/skills';
-import { AgentExecutionUI } from '../../ui/AgentExecutionUI';
-import { printFinalOutput } from '../../ui/utils/finalOutput';
+  getStatusLayoutPolicy,
+  getStatusRows,
+  InstallPreparationUI,
+  StatusLine,
+} from '../../ui/components/InstallPreparationUI';
+import {
+  INSTALL_TASK_LABELS,
+  type InstallTaskId,
+} from '../../ui/components/install-preparation-tasks';
 import { safeRender } from '../../ui/utils/safeRender';
+import { gatherPreparationContext, type PreparationContext } from './preparation';
 
 interface SkillCommandOptions {
   action?: string;
-  platform?: 'ios' | 'android' | 'react-native' | 'flutter';
+  startTask?: string;
 }
 
-/**
- * Generate help text dynamically from available skills.
- */
+type CommandSkillType = 'install' | 'doctor';
+
+function isCommandSkillType(action: string): action is CommandSkillType {
+  return action === 'install' || action === 'doctor';
+}
+
 function generateHelpText(): string {
-  const skills = getAvailableSkills();
-  const localSkills = skills.filter((s) => s.isLocal);
-  const packageSkills = skills.filter((s) => !s.isLocal);
-
-  const localSkillsText = localSkills
-    .map((s) => `  ${s.type.padEnd(25)} ${s.description}`)
-    .join('\n');
-
-  const packageSkillsText = packageSkills
-    .map((s) => `  ${s.type.padEnd(25)} ${s.description} (interactive)`)
-    .join('\n');
-
-  const exampleSkill = localSkills[0]?.type ?? 'install';
-
   return `
-Usage: clix <skill> [options]
+Usage: clix <command> [options]
 
-Available skills (command-line mode):
-${localSkillsText}
-
-Additional skills (chat mode only):
-${packageSkillsText}
+Supported commands:
+  install                    Autonomous SDK integration with step-by-step preparation
+  doctor                     Check Clix SDK integration status
 
 Options:
-  --platform      Target platform (ios, android, react-native, flutter)
-
-Note: Interactive skills require step-by-step guidance.
-      Run 'clix' to start chat mode and use /<skill> commands.
+  --start-task               Development-only install task override
 
 Examples:
-  $ clix ${exampleSkill}
+  $ clix install
   $ clix doctor
 `;
 }
 
-export async function skillCommand(options: SkillCommandOptions): Promise<void> {
-  const { action, platform } = options;
-
-  if (!action || !isValidSkillType(action)) {
-    console.log(generateHelpText());
-    return;
-  }
-
-  // Check if skill supports command-line execution
-  const skillInfo = getSkillInfo(action as SkillType);
-  if (!skillInfo) {
-    console.error(`Skill not found: ${action}`);
-    process.exit(1);
-  }
-
-  if (!skillInfo.isLocal) {
-    console.error(`Skill '${action}' requires interactive mode.`);
-    console.error(`Please run 'clix' to start chat mode and use /${action}`);
-    process.exit(1);
-  }
-
-  // Check if skill uses direct implementation (not agent-based)
-  if (skillInfo.usesAgent === false) {
-    console.error(`Skill '${action}' uses direct implementation.`);
-    console.error(`Please run 'clix ${action}' directly instead.`);
-    process.exit(1);
-  }
-
-  const skillType = action as SkillType;
-
-  // Create execute function that wraps executeSkill
-  async function* executeCommand(executor: AgentExecutor): AsyncGenerator<AgentMessage> {
-    yield* executeSkill(skillType, executor, {
-      projectPath: process.cwd(),
-      platform,
-      oneShot: true,
-    });
-  }
-
-  // Wrapper to match AgentExecutionUI interface (ignores agent param)
-  async function* execute(executor: AgentExecutor, _agent: unknown): AsyncGenerator<AgentMessage> {
-    yield* executeCommand(executor);
-  }
-
+async function runInstallPreparation(
+  projectPath: string,
+  startTaskId?: InstallTaskId,
+): Promise<PreparationContext | null> {
   return new Promise((resolve) => {
     const { unmount } = safeRender(
-      <AgentExecutionUI
-        title={skillInfo.name}
-        description={skillInfo.description}
-        execute={execute}
-        onComplete={(result) => {
+      <InstallPreparationUI
+        projectPath={projectPath}
+        startTaskId={startTaskId}
+        mode="command-prep-only"
+        onRunInstallSkill={async () => ({
+          success: false,
+          error: 'install_skill is disabled in command preparation mode.',
+        })}
+        onComplete={(context) => {
           unmount();
-          if (result) {
-            printFinalOutput(result);
-          }
-          resolve();
+          resolve(context);
+        }}
+        onCancel={() => {
+          unmount();
+          resolve(null);
         }}
       />,
     );
   });
 }
 
-function isValidSkillType(action: string): action is SkillType {
-  return getAvailableSkillTypes().includes(action);
+interface DoctorActionItem extends SelectorItem {
+  action: 'diagnose' | 'exit';
+}
+
+function DoctorStatusDisplay({
+  context,
+  onAccept,
+  onCancel,
+}: {
+  context: PreparationContext;
+  onAccept?: () => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const layoutPolicy = getStatusLayoutPolicy();
+  const statusRows = getStatusRows(context, layoutPolicy, {}, false);
+
+  const items: DoctorActionItem[] = [
+    { id: 'diagnose', label: 'Run AI diagnosis', action: 'diagnose' },
+    { id: 'exit', label: 'Exit', action: 'exit' },
+  ];
+
+  const handleSelect = useCallback(
+    (item: DoctorActionItem) => {
+      if (item.action === 'diagnose') {
+        onAccept?.();
+      } else {
+        onCancel();
+      }
+    },
+    [onAccept, onCancel],
+  );
+
+  return (
+    <Box flexDirection="column" marginY={1}>
+      <Text bold>Clix SDK Doctor — Pre-check Status</Text>
+      <Box marginY={1} flexDirection="column">
+        {statusRows.map((row) => (
+          <StatusLine key={row.label} label={row.label} status={row.status} detail={row.detail} />
+        ))}
+      </Box>
+
+      {!context.ready && (
+        <>
+          <Box marginBottom={1} flexDirection="column">
+            <Text color="yellow">Missing setup:</Text>
+            {context.missing.map((item) => (
+              <Text key={item} color="gray">
+                {'  '}• {item}
+              </Text>
+            ))}
+          </Box>
+          <Text>
+            Run "<Text color="cyan">clix install</Text>" to complete the required setup before
+            running doctor.
+          </Text>
+        </>
+      )}
+
+      {context.ready && onAccept && (
+        <>
+          <Text color="gray">
+            Additional SDK integration issues can be diagnosed with an AI agent.
+          </Text>
+          <GenericSelector items={items} title="" onSelect={handleSelect} onCancel={onCancel} />
+        </>
+      )}
+    </Box>
+  );
+}
+
+async function runDoctorPrecheck(context: PreparationContext): Promise<'accepted' | 'cancelled'> {
+  return new Promise((resolve) => {
+    const { unmount } = safeRender(
+      <DoctorStatusDisplay
+        context={context}
+        onAccept={
+          context.ready
+            ? () => {
+                unmount();
+                resolve('accepted');
+              }
+            : undefined
+        }
+        onCancel={() => {
+          unmount();
+          resolve('cancelled');
+        }}
+      />,
+    );
+
+    if (!context.ready) {
+      setTimeout(() => {
+        unmount();
+        resolve('cancelled');
+      }, 0);
+    }
+  });
+}
+
+async function loadCommandAgent(): Promise<AgentInfo | null> {
+  const configManager = getConfigManager();
+  const selectionService = new AgentSelectionService(configManager);
+  const result = await selectionService.selectAgent({ mode: 'command' });
+
+  if (!result.agent) {
+    return null;
+  }
+
+  if (result.source === 'auto') {
+    await selectionService.saveSelection(result.agent);
+  }
+
+  return result.agent;
+}
+
+export async function skillCommand(options: SkillCommandOptions): Promise<void> {
+  const { action, startTask } = options;
+
+  if (!action || !isCommandSkillType(action)) {
+    console.log(generateHelpText());
+    return;
+  }
+
+  const skillType: CommandSkillType = action;
+  const projectPath = process.cwd();
+  let startTaskId: InstallTaskId | undefined;
+
+  if (startTask) {
+    const installTaskIds = Object.keys(INSTALL_TASK_LABELS) as InstallTaskId[];
+    if (!installTaskIds.includes(startTask as InstallTaskId)) {
+      console.error(`Invalid --start-task value: ${startTask}`);
+      console.error(`Allowed values: ${installTaskIds.join(', ')}`);
+      setExitCode(1);
+      return;
+    }
+
+    if (skillType !== 'install') {
+      console.error('--start-task is only supported with the install command.');
+      setExitCode(1);
+      return;
+    }
+
+    if (process.env.CLIX_DEV_ENABLE_TASK_OVERRIDE !== '1') {
+      console.error('--start-task is a development-only option.');
+      console.error('Set CLIX_DEV_ENABLE_TASK_OVERRIDE=1 to enable task override.');
+      setExitCode(1);
+      return;
+    }
+
+    startTaskId = startTask as InstallTaskId;
+  }
+
+  let preparationContext: PreparationContext | undefined;
+  if (skillType === 'install') {
+    const context = await runInstallPreparation(projectPath, startTaskId);
+    if (!context) {
+      return;
+    }
+    preparationContext = context;
+  } else if (skillType === 'doctor') {
+    const context = await gatherPreparationContext(projectPath);
+    if (!context) {
+      console.error('Project not linked. Run "clix login" first.');
+      setExitCode(1);
+      return;
+    }
+    const result = await runDoctorPrecheck(context);
+    if (result === 'cancelled') {
+      setExitCode(context.ready ? 0 : 1);
+      return;
+    }
+    preparationContext = context;
+  }
+
+  const agent = await loadCommandAgent();
+  if (!agent) {
+    throw new Error(
+      'No AI agent is available. Install an agent CLI and run "clix agent" to select one.',
+    );
+  }
+
+  const prompt = await getSkillPrompt(skillType, {
+    projectPath,
+    preparationContext,
+  });
+
+  console.log(`Launching ${agent.displayName}...`);
+  const invocation = buildAgentHandoffInvocation({
+    agent,
+    prompt,
+    workingDirectory: projectPath,
+  });
+
+  let exitCode = 1;
+  try {
+    exitCode = await runAgentHandoff(invocation);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to launch ${agent.displayName}: ${message}`);
+  }
+
+  setExitCode(exitCode);
 }

@@ -10,19 +10,22 @@
  */
 
 import { Auth } from '@expo/apple-utils';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useStdin } from 'ink';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  APPLE_KEYS_TOO_MANY_ERROR,
   createPushKeyAsync,
   downloadPushKeyAsync,
+  isAppleKeysTooManyErrorMessage,
   listPushKeysAsync,
   loginWithUserCredentialsAsync,
   type PushKey,
   type PushKeyStoreInfo,
+  revokePushKeysAsync,
   type UserAuthContext,
 } from '@/lib/ios';
 import { useCancelInput } from '@/ui/hooks';
@@ -36,6 +39,8 @@ type AppleLoginPhase =
   | 'loading_keys'
   | 'key_selection'
   | 'creating_key'
+  | 'key_limit_reached'
+  | 'revoking_key'
   | 'downloading_key'
   | 'success'
   | 'error';
@@ -58,8 +63,31 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
 
   const [authContext, setAuthContext] = useState<UserAuthContext | null>(null);
   const [existingKeys, setExistingKeys] = useState<PushKeyStoreInfo[]>([]);
+  const [keyToRevokeId, setKeyToRevokeId] = useState<string | null>(null);
+  const { isRawModeSupported, setRawMode } = useStdin();
 
   useCancelInput(onCancel);
+
+  useEffect(() => {
+    if (!isRawModeSupported) {
+      return;
+    }
+
+    const requiresKeyboardInput =
+      phase === 'prompt_login' ||
+      phase === 'apple_id_input' ||
+      phase === 'password_input' ||
+      phase === 'key_selection' ||
+      phase === 'key_limit_reached' ||
+      phase === 'error';
+    if (!requiresKeyboardInput) {
+      return;
+    }
+
+    // expo/apple-utils auth flow can leave stdin in cooked mode.
+    // Re-enable raw mode so Ink selectors receive arrow keys properly.
+    setRawMode(true);
+  }, [isRawModeSupported, phase, setRawMode]);
 
   const handleStartLogin = useCallback(() => {
     setPhase('apple_id_input');
@@ -149,23 +177,6 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
     }
   }, [appleId, password, onCancel]);
 
-  const handleCreateNewKey = useCallback(async () => {
-    if (!authContext) return;
-
-    setPhase('creating_key');
-    setStatusMessage('Creating new APNS key...');
-
-    try {
-      const pushKey = await createPushKeyAsync(authContext);
-      setPhase('success');
-      onSuccess({ authContext, pushKey });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create key';
-      setError(message);
-      setPhase('error');
-    }
-  }, [authContext, onSuccess]);
-
   const handleDownloadKey = useCallback(
     async (keyId: string) => {
       if (!authContext) return;
@@ -186,13 +197,98 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
     [authContext, onSuccess],
   );
 
+  const handleKeyLimitReached = useCallback(
+    async (message: string) => {
+      if (!authContext) {
+        setError(message);
+        setPhase('error');
+        return;
+      }
+
+      try {
+        setStatusMessage('Loading existing APNS keys...');
+        const keys = await listPushKeysAsync(authContext);
+        setExistingKeys(keys);
+        setError(message);
+        setPhase('key_limit_reached');
+      } catch (listErr) {
+        const listMessage =
+          listErr instanceof Error ? listErr.message : 'Failed to load existing APNS keys';
+        setError(`${message}\n\nAdditionally failed to load keys: ${listMessage}`);
+        setPhase('error');
+      }
+    },
+    [authContext],
+  );
+
+  const handleRevokeKeyAndRetryCreate = useCallback(
+    async (keyId: string) => {
+      if (!authContext) {
+        setError('Authentication context missing. Please login again.');
+        setPhase('error');
+        return;
+      }
+
+      setKeyToRevokeId(keyId);
+      setStatusMessage(`Revoking APNS key ${keyId}...`);
+      setPhase('revoking_key');
+
+      try {
+        await revokePushKeysAsync(authContext, [keyId]);
+        const refreshedKeys = await listPushKeysAsync(authContext);
+        setExistingKeys(refreshedKeys);
+        setStatusMessage('Creating new APNS key...');
+
+        const pushKey = await createPushKeyAsync(authContext);
+        setPhase('success');
+        onSuccess({ authContext, pushKey });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to revoke APNS key';
+        if (isAppleKeysTooManyErrorMessage(message)) {
+          await handleKeyLimitReached(message);
+          return;
+        }
+        setError(message);
+        setPhase('error');
+      }
+    },
+    [authContext, handleKeyLimitReached, onSuccess],
+  );
+
+  const handleCreateNewKey = useCallback(async () => {
+    if (!authContext) return;
+
+    setPhase('creating_key');
+    setStatusMessage('Creating new APNS key...');
+
+    try {
+      const pushKey = await createPushKeyAsync(authContext);
+      setPhase('success');
+      onSuccess({ authContext, pushKey });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create key';
+      if (isAppleKeysTooManyErrorMessage(message)) {
+        await handleKeyLimitReached(message);
+        return;
+      }
+      setError(message);
+      setPhase('error');
+    }
+  }, [authContext, handleKeyLimitReached, onSuccess]);
+
   const handleRetry = useCallback(() => {
     setError(null);
     setPassword('');
+    setKeyToRevokeId(null);
     setPhase('apple_id_input');
   }, []);
 
   if (phase === 'prompt_login') {
+    const promptItems: Array<{ label: string; value: 'login' | 'manual' }> = [
+      { label: 'Log in with Apple Account', value: 'login' },
+      { label: 'Manual setup (create key in browser)', value: 'manual' },
+    ];
+
     return (
       <Box
         flexDirection="column"
@@ -203,7 +299,7 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
         marginY={1}
       >
         <Box marginBottom={1}>
-          <Text bold>Create APNS Key with Apple Account</Text>
+          <Text bold>Choose APNS Key Creation Method</Text>
         </Box>
         <Box marginBottom={1}>
           <Text dimColor>
@@ -219,21 +315,21 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
             • Your password is only used for authentication and stored locally in Keychain
           </Text>
         </Box>
-        <Box marginTop={1} flexDirection="column">
-          <Box>
-            <Text color="cyan">{'[L]'}</Text>
-            <Text> Log in with Apple Account</Text>
-          </Box>
-          <Box>
-            <Text color="yellow">{'[M]'}</Text>
-            <Text> Manual setup (create key in browser)</Text>
-          </Box>
-          <Box>
-            <Text dimColor>{'[Esc]'}</Text>
-            <Text dimColor> Cancel</Text>
-          </Box>
+        <Box marginTop={1} marginBottom={1}>
+          <SelectInput
+            items={promptItems}
+            onSelect={(item) => {
+              if (item.value === 'login') {
+                handleStartLogin();
+              } else {
+                handleManualSetup();
+              }
+            }}
+          />
         </Box>
-        <AppleLoginPromptInput onLogin={handleStartLogin} onManual={handleManualSetup} />
+        <Box marginTop={1}>
+          <Text dimColor>↑↓ to navigate · Enter to select · Esc/Ctrl+C to cancel</Text>
+        </Box>
       </Box>
     );
   }
@@ -382,6 +478,112 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
     );
   }
 
+  if (phase === 'key_limit_reached' && authContext) {
+    const revocableKeys = existingKeys.filter((key) => key.canRevoke);
+    const nonRevocableKeys = existingKeys.filter((key) => !key.canRevoke);
+    const keyLimitItems: Array<{ label: string; value: string }> = [
+      ...revocableKeys.map((key) => ({
+        label: `Delete key: ${key.name} (${key.id})`,
+        value: `revoke:${key.id}`,
+      })),
+      { label: 'Back to key options', value: 'back' },
+      { label: 'Manual setup (create key in browser)', value: 'manual' },
+    ];
+
+    return (
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor="yellow"
+        paddingX={1}
+        marginX={1}
+        marginY={1}
+      >
+        <Box marginBottom={1}>
+          <Text bold color="yellow">
+            APNS Key Limit Reached
+          </Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text color="yellow">✗ {error || APPLE_KEYS_TOO_MANY_ERROR.trim()}</Text>
+        </Box>
+        <Box marginBottom={1} flexDirection="column">
+          <Text dimColor>Apple account key count: {existingKeys.length}</Text>
+          {existingKeys.map((key) => (
+            <Text key={key.id} dimColor>
+              • {key.name} ({key.id}){key.canRevoke ? ' [deletable]' : ' [not deletable]'}
+            </Text>
+          ))}
+        </Box>
+        {revocableKeys.length === 0 && (
+          <Box marginBottom={1}>
+            <Text color="yellow">No revocable keys available. Use manual setup or go back.</Text>
+          </Box>
+        )}
+        <Box marginBottom={1}>
+          <Text bold>Select an option:</Text>
+        </Box>
+        <SelectInput
+          items={keyLimitItems}
+          onSelect={(item) => {
+            if (item.value === 'manual') {
+              handleManualSetup();
+              return;
+            }
+            if (item.value === 'back') {
+              setError(null);
+              setKeyToRevokeId(null);
+              setPhase('key_selection');
+              return;
+            }
+            if (item.value.startsWith('revoke:')) {
+              const keyId = item.value.slice('revoke:'.length);
+              void handleRevokeKeyAndRetryCreate(keyId);
+            }
+          }}
+        />
+        {nonRevocableKeys.length > 0 && (
+          <Box marginTop={1}>
+            <Text dimColor>
+              Note: some keys may require manual cleanup in Apple Developer portal.
+            </Text>
+          </Box>
+        )}
+        <Box marginTop={1}>
+          <Text dimColor>↑↓ to navigate · Enter to select · Esc/Ctrl+C to cancel</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  if (phase === 'revoking_key') {
+    return (
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor="blue"
+        paddingX={1}
+        marginX={1}
+        marginY={1}
+      >
+        <Box marginBottom={1}>
+          <Text bold>Apple Developer Account</Text>
+        </Box>
+        <Box>
+          <Text color="cyan">
+            <Spinner type="dots" />
+          </Text>
+          <Text> {statusMessage}</Text>
+        </Box>
+        {keyToRevokeId && (
+          <Box marginTop={1}>
+            <Text dimColor>Revoking key: {keyToRevokeId}</Text>
+          </Box>
+        )}
+      </Box>
+    );
+  }
+
   if (phase === 'creating_key' || phase === 'downloading_key') {
     return (
       <Box
@@ -429,6 +631,11 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
   }
 
   if (phase === 'error') {
+    const errorItems: Array<{ label: string; value: 'retry' | 'manual' }> = [
+      { label: 'Retry login', value: 'retry' },
+      { label: 'Manual setup instead', value: 'manual' },
+    ];
+
     return (
       <Box
         flexDirection="column"
@@ -446,21 +653,21 @@ export const AppleLoginUI: React.FC<AppleLoginUIProps> = ({ onSuccess, onCancel,
         <Box marginBottom={1}>
           <Text color="red">✗ {error}</Text>
         </Box>
-        <Box marginTop={1} flexDirection="column">
-          <Box>
-            <Text color="cyan">{'[R]'}</Text>
-            <Text> Retry login</Text>
-          </Box>
-          <Box>
-            <Text color="yellow">{'[M]'}</Text>
-            <Text> Manual setup instead</Text>
-          </Box>
-          <Box>
-            <Text dimColor>{'[Esc]'}</Text>
-            <Text dimColor> Cancel</Text>
-          </Box>
+        <Box marginTop={1} marginBottom={1}>
+          <SelectInput
+            items={errorItems}
+            onSelect={(item) => {
+              if (item.value === 'retry') {
+                handleRetry();
+              } else {
+                handleManualSetup();
+              }
+            }}
+          />
         </Box>
-        <AppleLoginErrorInput onRetry={handleRetry} onManual={handleManualSetup} />
+        <Box marginTop={1}>
+          <Text dimColor>↑↓ to navigate · Enter to select · Esc/Ctrl+C to cancel</Text>
+        </Box>
       </Box>
     );
   }
@@ -548,7 +755,7 @@ const KeySelectionPhase: React.FC<{
       <SelectInput items={items} onSelect={handleSelect} />
 
       <Box marginTop={1}>
-        <Text dimColor>Esc to cancel</Text>
+        <Text dimColor>↑↓ to navigate · Enter to select · Esc/Ctrl+C to cancel</Text>
       </Box>
     </Box>
   );
@@ -588,37 +795,3 @@ async function buildAuthContextFromSession(
     fastlaneSession,
   };
 }
-
-/**
- * Helper component for prompt_login phase input handling.
- */
-const AppleLoginPromptInput: React.FC<{
-  onLogin: () => void;
-  onManual: () => void;
-}> = ({ onLogin, onManual }) => {
-  useInput((input) => {
-    if (input.toLowerCase() === 'l') {
-      onLogin();
-    } else if (input.toLowerCase() === 'm') {
-      onManual();
-    }
-  });
-  return null;
-};
-
-/**
- * Helper component for error phase input handling.
- */
-const AppleLoginErrorInput: React.FC<{
-  onRetry: () => void;
-  onManual: () => void;
-}> = ({ onRetry, onManual }) => {
-  useInput((input) => {
-    if (input.toLowerCase() === 'r') {
-      onRetry();
-    } else if (input.toLowerCase() === 'm') {
-      onManual();
-    }
-  });
-  return null;
-};

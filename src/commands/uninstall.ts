@@ -5,6 +5,7 @@
  */
 
 import readline from 'node:readline/promises';
+import { setExitCode } from '../lib/exit';
 import {
   executeUninstall,
   planUninstall,
@@ -183,11 +184,12 @@ export async function uninstallCommand(options: UninstallOptions): Promise<void>
     displayUninstallResult(result, plan);
 
     if (!result.success) {
-      process.exit(1);
+      setExitCode(1);
+      return;
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error(`\nFailed to uninstall: ${errorMessage}\n`);
-    process.exit(1);
+    setExitCode(1);
   }
 }

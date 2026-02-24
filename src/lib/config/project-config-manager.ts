@@ -1,29 +1,21 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ConfigError, ERROR_CODES } from '../errors/types';
+import { ensureClixGitignore } from '../utils/gitignore';
 import {
+  CURRENT_PROJECT_CONFIG_VERSION,
+  ensureLatestVersion,
   PROJECT_CONFIG_DIR,
   PROJECT_CONFIG_FILENAME,
   type ProjectConfig,
+  type SetupStatus,
   safeValidateProjectConfig,
 } from './project-config-schema';
 
 /**
  * Comment header for the project config file.
  */
-const CONFIG_HEADER = `// Clix CLI 프로젝트 설정
-// 자동 생성됨 - 수동 수정 시 덮어쓰기될 수 있음
-`;
-
-/**
- * Gitignore patterns to check for .clix directory.
- */
-const GITIGNORE_PATTERNS = ['.clix', '.clix/', '/.clix', '/.clix/'];
-
-/**
- * Gitignore entry to add.
- */
-const GITIGNORE_ENTRY = '\n# Clix CLI local config\n.clix/\n';
+const CONFIG_HEADER = '';
 
 /**
  * ProjectConfigManager handles loading and saving project-local configuration.
@@ -93,12 +85,14 @@ export class ProjectConfigManager {
       await stat(this.configDirPath);
     } catch {
       await mkdir(this.configDirPath, { recursive: true, mode: 0o755 });
+      await ensureClixGitignore(this.projectPath);
     }
   }
 
   /**
    * Load project configuration from disk.
    * Returns null if config doesn't exist.
+   * Automatically migrates older versions to latest.
    *
    * @returns ProjectConfig or null if not found
    */
@@ -126,8 +120,18 @@ export class ProjectConfigManager {
         );
       }
 
-      this.cachedConfig = validatedConfig;
-      return validatedConfig;
+      // Migrate to latest version if needed
+      const migratedConfig = ensureLatestVersion(validatedConfig);
+      const migratedConfigChanged =
+        JSON.stringify(validatedConfig) !== JSON.stringify(migratedConfig);
+
+      // Save migrated config if version changed
+      if (validatedConfig.version !== CURRENT_PROJECT_CONFIG_VERSION || migratedConfigChanged) {
+        await this.save(migratedConfig);
+      }
+
+      this.cachedConfig = migratedConfig;
+      return migratedConfig;
     } catch (error) {
       // File doesn't exist - return null
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
@@ -150,6 +154,33 @@ export class ProjectConfigManager {
 
       throw error;
     }
+  }
+
+  /**
+   * Update the setup status in config.
+   * Creates setup object if it doesn't exist.
+   *
+   * @param updates - Partial setup status to merge
+   */
+  async updateSetup(updates: Partial<SetupStatus>): Promise<void> {
+    const config = await this.load();
+    if (!config) {
+      throw new ConfigError(
+        'Project config not found. Run "clix login" first.',
+        ERROR_CODES.PROJECT_CONFIG_NOT_FOUND,
+        this.configFilePath,
+      );
+    }
+
+    const updatedConfig: ProjectConfig = {
+      ...config,
+      setup: {
+        ...config.setup,
+        ...updates,
+      },
+    };
+
+    await this.save(updatedConfig);
   }
 
   /**
@@ -179,50 +210,6 @@ export class ProjectConfigManager {
       this.cachedConfig = null;
     } catch {
       // File doesn't exist, ignore
-    }
-  }
-
-  /**
-   * Ensure .clix is in .gitignore.
-   * Adds entry if not already present.
-   *
-   * @returns True if gitignore was modified
-   */
-  async ensureGitignore(): Promise<boolean> {
-    const gitignorePath = join(this.projectPath, '.gitignore');
-
-    try {
-      let content = '';
-
-      // Try to read existing .gitignore
-      try {
-        content = await readFile(gitignorePath, 'utf-8');
-      } catch {
-        // File doesn't exist, will create new one
-      }
-
-      // Check if .clix is already ignored
-      const lines = content.split('\n');
-      const hasClixIgnore = lines.some((line) => {
-        const trimmed = line.trim();
-        return GITIGNORE_PATTERNS.includes(trimmed);
-      });
-
-      if (hasClixIgnore) {
-        return false;
-      }
-
-      // Add .clix to gitignore
-      const newContent =
-        content.endsWith('\n') || content === ''
-          ? `${content}${GITIGNORE_ENTRY}`
-          : `${content}\n${GITIGNORE_ENTRY}`;
-
-      await writeFile(gitignorePath, newContent, 'utf-8');
-      return true;
-    } catch {
-      // Non-fatal: log warning but continue
-      return false;
     }
   }
 

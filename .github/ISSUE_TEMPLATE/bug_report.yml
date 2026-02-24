@@ -31,7 +31,7 @@ body:
       label: What happened?
       description: Describe what's happening that shouldn't be
       placeholder: |
-        When I run `clix integrate`, the CLI shows an error...
+        When I run `clix install`, the CLI shows an error...
     validations:
       required: true
 
@@ -52,9 +52,9 @@ body:
         Please provide clear, numbered steps that anyone can follow to reproduce the issue.
         Include any necessary context or configuration.
       placeholder: |
-        1. Run `clix` to start interactive mode
-        2. Type `/integrate`
-        3. Select iOS platform
+        1. Run `clix install`
+        2. Complete preparation steps
+        3. CLI hands off to the selected agent
         4. Error appears: "..."
     validations:
       required: true
@@ -73,20 +73,23 @@ body:
       required: true
 
   - type: dropdown
-    id: skill
+    id: command
     attributes:
-      label: Related Skill/Command
-      description: Which skill or command was involved?
+      label: Related Command
+      description: Which command was involved?
       options:
-        - Interactive Chat (default)
-        - /integrate (SDK Integration)
-        - /track (Event Tracking)
-        - /user (User Management)
-        - /personalize (Personalization)
-        - /doctor (SDK Doctor)
-        - /debug (Debugging Assistant)
-        - install-mcp
-        - config
+        - install
+        - doctor
+        - mcp
+        - skills
+        - agent
+        - login
+        - logout
+        - whoami
+        - update
+        - uninstall
+        - setup
+        - help
         - Other
     validations:
       required: false

@@ -7,6 +7,8 @@
  * - DEBUG=config - enable config-related debug output
  * - DEBUG=* - enable all debug output
  *
+ * Debug logs are also written to `.clix/debug.log` file (npm-style).
+ *
  * @example
  * ```typescript
  * import { logger } from '../debug/logger';
@@ -17,6 +19,9 @@
  * logger.error('Failed to execute', { error: err.message });
  * ```
  */
+
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -184,6 +189,51 @@ export class Logger {
       throw error;
     }
   }
+
+  /**
+   * Write debug info to .clix/debug.log file (npm-style).
+   * Always writes regardless of DEBUG environment variable.
+   *
+   * @param message - Log message
+   * @param data - Additional data to log
+   * @param projectRoot - Project root directory (optional, uses cwd if not provided)
+   */
+  writeToFile(message: string, data?: unknown, projectRoot?: string): void {
+    const safeStringify = (value: unknown): string => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '[unserializable]';
+      }
+    };
+
+    // Try multiple locations to ensure logging works
+    const locations = [
+      projectRoot,
+      process.cwd(),
+      process.env.HOME ? join(process.env.HOME, '.clix') : null,
+    ].filter((loc): loc is string => loc !== null && loc !== undefined);
+
+    for (const root of locations) {
+      try {
+        const clixDir = root.endsWith('.clix') ? root : join(root, '.clix');
+        const logFile = join(clixDir, 'debug.log');
+
+        mkdirSync(clixDir, { recursive: true });
+
+        const timestamp = new Date().toISOString();
+        const serialized = data !== undefined ? safeStringify(data) : '';
+        const line = `${timestamp} ${this.namespace} ${message}${data !== undefined ? ` ${serialized}` : ''}\n`;
+        appendFileSync(logFile, line);
+        return; // Success, exit loop
+      } catch {
+        // Try next location
+      }
+    }
+    // All locations failed, log to stderr as last resort
+    const fallback = data !== undefined ? safeStringify(data) : '';
+    console.error(`[${this.namespace}] ${message}`, fallback);
+  }
 }
 
 /**
@@ -197,3 +247,8 @@ export const logger = new Logger('clix');
 export function createLogger(namespace: string): Logger {
   return new Logger(namespace);
 }
+
+/**
+ * OAuth logger for debugging authentication flows.
+ */
+export const oauthLogger = createLogger('oauth');

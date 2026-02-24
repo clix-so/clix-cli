@@ -18,7 +18,7 @@ export interface ApnsPushKey {
 }
 
 /**
- * Push setup wizard context.
+ * Push setup task context.
  */
 export interface PushSetupContext {
   // Project info
@@ -30,9 +30,9 @@ export interface PushSetupContext {
 }
 
 /**
- * Push setup wizard phases.
+ * Push setup task phases.
  */
-export type PushSetupPhase =
+export type PushSetupTaskPhase =
   | 'detecting' // Analyzing project
   | 'status' // Showing current status
   | 'key_source' // Asking if user has existing key
@@ -47,9 +47,9 @@ export type PushSetupPhase =
   | 'error'; // Error state
 
 /**
- * Push setup result.
+ * Push setup task result.
  */
-export interface PushSetupResult {
+export interface PushSetupTaskResult {
   success: boolean;
   message: string;
   context?: PushSetupContext;

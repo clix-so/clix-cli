@@ -47,13 +47,81 @@ export const ProjectOrganizationSchema = z.object({
 /**
  * Schema for project information in project config.
  */
+export const ProjectPublicApiKeySchema = z.union([
+  z.string(),
+  z.object({
+    key: z.string(),
+    restrictions: z.array(z.unknown()).optional(),
+  }),
+]);
+
 export const ProjectInfoSchema = z.object({
   /** Project ID */
   id: z.string(),
   /** Project name */
   name: z.string(),
-  /** Project public key (for SDK integration) */
-  publicKey: z.string().optional(),
+  /** Project public API key (for SDK integration), matches Internal API response key */
+  public_api_key: ProjectPublicApiKeySchema.optional(),
+  /** Legacy project public key field (backward compatibility) */
+  publicKey: ProjectPublicApiKeySchema.optional(),
+});
+
+/**
+ * Schema for iOS setup status.
+ */
+export const IosSetupSchema = z.object({
+  /** iOS Bundle ID */
+  bundleId: z.string().optional(),
+  /** Apple Team ID */
+  teamId: z.string().optional(),
+  /** App Group ID for sharing data between app and extensions */
+  appGroupId: z.string().optional(),
+  /** Whether entitlements have been configured */
+  entitlementsConfigured: z.boolean(),
+  /** Whether Notification Service Extension has been configured */
+  nseConfigured: z.boolean(),
+  /** ISO timestamp when iOS setup was completed */
+  completedAt: z.string().datetime().optional(),
+});
+
+/**
+ * Schema for Firebase setup status.
+ */
+export const FirebaseSetupSchema = z.object({
+  /** Firebase project ID */
+  projectId: z.string().optional(),
+  /** Whether Android config (google-services.json) is configured */
+  androidConfigured: z.boolean(),
+  /** Whether iOS config (GoogleService-Info.plist) is configured */
+  iosConfigured: z.boolean(),
+  /** ISO timestamp when Firebase setup was completed */
+  completedAt: z.string().datetime().optional(),
+});
+
+/**
+ * Schema for APNS setup status.
+ */
+export const ApnsSetupSchema = z.object({
+  /** APNS Key ID */
+  keyId: z.string().optional(),
+  /** Apple Team ID for APNS */
+  teamId: z.string().optional(),
+  /** Whether APNS key has been registered with Firebase */
+  registeredWithFirebase: z.boolean(),
+  /** ISO timestamp when APNS setup was completed */
+  completedAt: z.string().datetime().optional(),
+});
+
+/**
+ * Schema for setup status tracking.
+ */
+export const SetupStatusSchema = z.object({
+  /** iOS setup status */
+  ios: IosSetupSchema.optional(),
+  /** Firebase setup status */
+  firebase: FirebaseSetupSchema.optional(),
+  /** APNS setup status */
+  apns: ApnsSetupSchema.optional(),
 });
 
 /**
@@ -62,7 +130,7 @@ export const ProjectInfoSchema = z.object({
  */
 export const ProjectConfigSchema = z.object({
   /** Configuration schema version */
-  version: z.literal(1),
+  version: z.number(),
   /** Logged-in member information */
   member: ProjectMemberSchema,
   /** Selected organization */
@@ -73,6 +141,8 @@ export const ProjectConfigSchema = z.object({
   projectType: ProjectTypeSchema.optional(),
   /** ISO timestamp when this config was created/linked */
   linkedAt: z.string().datetime(),
+  /** Setup status tracking for install preparation */
+  setup: SetupStatusSchema.optional(),
 });
 
 /**
@@ -81,6 +151,11 @@ export const ProjectConfigSchema = z.object({
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>;
 export type ProjectOrganization = z.infer<typeof ProjectOrganizationSchema>;
 export type ProjectInfo = z.infer<typeof ProjectInfoSchema>;
+export type ProjectPublicApiKey = z.infer<typeof ProjectPublicApiKeySchema>;
+export type IosSetup = z.infer<typeof IosSetupSchema>;
+export type FirebaseSetup = z.infer<typeof FirebaseSetupSchema>;
+export type ApnsSetup = z.infer<typeof ApnsSetupSchema>;
+export type SetupStatus = z.infer<typeof SetupStatusSchema>;
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 
 /**
@@ -119,4 +194,33 @@ export function validateProjectConfig(data: unknown): ProjectConfig {
 export function safeValidateProjectConfig(data: unknown): ProjectConfig | null {
   const result = ProjectConfigSchema.safeParse(data);
   return result.success ? result.data : null;
+}
+
+/**
+ * Ensure config is at the latest version.
+ * Migrates older versions if necessary.
+ *
+ * @param config - Config of any supported version
+ * @returns Config at latest version
+ */
+export function ensureLatestVersion(config: ProjectConfig): ProjectConfig {
+  const publicApiKey = config.project.public_api_key ?? config.project.publicKey;
+
+  if (!publicApiKey && !config.project.public_api_key && !config.project.publicKey) {
+    return config;
+  }
+
+  if (config.project.public_api_key && !config.project.publicKey) {
+    return config;
+  }
+
+  return {
+    ...config,
+    version: CURRENT_PROJECT_CONFIG_VERSION,
+    project: {
+      id: config.project.id,
+      name: config.project.name,
+      ...(publicApiKey && { public_api_key: publicApiKey }),
+    },
+  };
 }

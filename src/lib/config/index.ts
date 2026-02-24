@@ -8,7 +8,14 @@ export { ConfigManager, getConfigManager, resetConfigManager } from './manager';
 // Project-local configuration
 export { getProjectConfigManager, ProjectConfigManager } from './project-config-manager';
 export {
+  type ApnsSetup,
+  ApnsSetupSchema,
   CURRENT_PROJECT_CONFIG_VERSION,
+  ensureLatestVersion,
+  type FirebaseSetup,
+  FirebaseSetupSchema,
+  type IosSetup,
+  IosSetupSchema,
   PROJECT_CONFIG_DIR,
   PROJECT_CONFIG_FILENAME,
   type ProjectConfig,
@@ -23,6 +30,8 @@ export {
   type ProjectTargetPlatform,
   type ProjectType,
   ProjectTypeSchema,
+  type SetupStatus,
+  SetupStatusSchema,
   safeValidateProjectConfig,
   validateProjectConfig,
 } from './project-config-schema';

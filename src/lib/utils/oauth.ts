@@ -5,7 +5,9 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { oauthLogger } from '@/lib/debug/logger';
+import { findProjectRoot } from './path';
 
 // ============================================================================
 // Shared OAuth Callback Configuration
@@ -101,14 +103,14 @@ const DEFAULT_SUCCESS_HTML = `<!DOCTYPE html>
       align-items: center;
       min-height: 100vh;
       margin: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #000000;
     }
     .container {
       text-align: center;
       padding: 40px;
       background: white;
       border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 40px rgba(255,255,255,0.1);
     }
     .icon { font-size: 64px; margin-bottom: 20px; }
     h1 { color: #333; margin: 0 0 10px; }
@@ -138,16 +140,16 @@ function defaultErrorHtml(message: string): string {
       align-items: center;
       min-height: 100vh;
       margin: 0;
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      background: #000000;
     }
     .container {
       text-align: center;
       padding: 40px;
       background: white;
       border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 40px rgba(255,255,255,0.1);
     }
-    .icon { font-size: 64px; margin-bottom: 20px; }
+    .icon { font-size: 64px; margin-bottom: 20px; color: #f5576c; }
     h1 { color: #333; margin: 0 0 10px; }
     p { color: #666; margin: 0; }
   </style>
@@ -188,6 +190,12 @@ export class OAuthCallbackServer {
   private server: Server | null = null;
   private options: Required<CallbackServerOptions>;
   private actualPort: number = 0;
+  private pendingCallback: {
+    resolve: (result: OAuthCallbackResult) => void;
+    reject: (error: Error) => void;
+    timeout: ReturnType<typeof setTimeout>;
+    requestHandler: (req: IncomingMessage, res: ServerResponse) => void;
+  } | null = null;
 
   constructor(options: CallbackServerOptions = {}) {
     this.options = {
@@ -237,12 +245,17 @@ export class OAuthCallbackServer {
         return;
       }
 
+      if (this.pendingCallback) {
+        reject(new Error('OAuth callback already in progress'));
+        return;
+      }
+
       const timeout = setTimeout(() => {
+        this.rejectPendingCallback(new Error('OAuth callback timeout'));
         this.stop();
-        reject(new Error('OAuth callback timeout'));
       }, this.options.timeoutMs);
 
-      this.server.on('request', (req, res) => {
+      const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
         const url = new URL(req.url || '/', `http://localhost:${this.actualPort}`);
 
         if (url.pathname !== this.options.callbackPath) {
@@ -258,12 +271,12 @@ export class OAuthCallbackServer {
 
         // Handle OAuth error
         if (error) {
-          const errorMsg = errorDescription || error;
+          const errorMsg = errorDescription ? `${error}: ${errorDescription}` : error;
+          this.logOAuthCallbackError(error, errorDescription, req.url);
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml(errorMsg));
-          clearTimeout(timeout);
+          this.rejectPendingCallback(new Error(errorMsg));
           this.stop();
-          reject(new Error(`OAuth error: ${errorMsg}`));
           return;
         }
 
@@ -271,9 +284,8 @@ export class OAuthCallbackServer {
         if (this.options.expectedState && state !== this.options.expectedState) {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml('Invalid OAuth state'));
-          clearTimeout(timeout);
+          this.rejectPendingCallback(new Error('OAuth state mismatch'));
           this.stop();
-          reject(new Error('OAuth state mismatch'));
           return;
         }
 
@@ -281,26 +293,42 @@ export class OAuthCallbackServer {
         if (!code) {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end(this.options.errorHtml('No authorization code received'));
-          clearTimeout(timeout);
+          this.rejectPendingCallback(new Error('No authorization code received'));
           this.stop();
-          reject(new Error('No authorization code received'));
           return;
         }
 
         // Success
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(this.options.successHtml);
-        clearTimeout(timeout);
+        this.resolvePendingCallback({ code, state });
         this.stop();
-        resolve({ code, state });
-      });
+      };
+
+      this.pendingCallback = {
+        resolve,
+        reject: (error: Error) => reject(error),
+        timeout,
+        requestHandler,
+      };
+
+      this.server.on('request', requestHandler);
     });
+  }
+
+  /**
+   * Cancel waiting for OAuth callback.
+   */
+  cancel(reason = 'OAuth authentication cancelled'): void {
+    this.rejectPendingCallback(new Error(reason));
+    this.stop();
   }
 
   /**
    * Stop the callback server.
    */
   stop(): void {
+    this.clearPendingCallback();
     if (this.server) {
       this.server.close();
       this.server = null;
@@ -312,5 +340,56 @@ export class OAuthCallbackServer {
    */
   getPort(): number {
     return this.actualPort;
+  }
+
+  private clearPendingCallback(): void {
+    if (!this.pendingCallback) {
+      return;
+    }
+
+    clearTimeout(this.pendingCallback.timeout);
+    this.server?.off('request', this.pendingCallback.requestHandler);
+    this.pendingCallback = null;
+  }
+
+  private rejectPendingCallback(error: Error): void {
+    if (!this.pendingCallback) {
+      return;
+    }
+
+    const { reject } = this.pendingCallback;
+    this.clearPendingCallback();
+    reject(error);
+  }
+
+  private resolvePendingCallback(result: OAuthCallbackResult): void {
+    if (!this.pendingCallback) {
+      return;
+    }
+
+    const { resolve } = this.pendingCallback;
+    this.clearPendingCallback();
+    resolve(result);
+  }
+
+  private logOAuthCallbackError(
+    error: string,
+    errorDescription: string | null,
+    rawUrl: string | undefined,
+  ): void {
+    const sanitizedUrl = (rawUrl ?? '')
+      .replace(/code=[^&]+/g, 'code=[redacted]')
+      .replace(/state=[^&]+/g, 'state=[redacted]');
+
+    oauthLogger.writeToFile(
+      'OAuth callback error',
+      {
+        type: 'oauth_callback_error',
+        error,
+        error_description: errorDescription,
+        full_url: sanitizedUrl,
+      },
+      findProjectRoot(),
+    );
   }
 }

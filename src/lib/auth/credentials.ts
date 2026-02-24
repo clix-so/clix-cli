@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { ensureClixGitignore } from '../utils/gitignore';
 import { findProjectRoot } from '../utils/path';
 import { AUTH_ENV_VARS, getAuth0Config } from './config';
 import { AuthError } from './errors';
@@ -70,6 +71,7 @@ export class CredentialsManager {
       await stat(this.stateDirPath);
     } catch {
       await mkdir(this.stateDirPath, { recursive: true, mode: 0o755 });
+      await ensureClixGitignore(dirname(this.stateDirPath));
     }
   }
 
@@ -362,16 +364,13 @@ export class CredentialsManager {
 
   /**
    * Clear only Firebase tokens (keep Clix credentials).
+   * Does not delete the credentials file, only removes the firebase field.
    */
   async clearFirebaseTokens(): Promise<void> {
     const current = await this.load();
-    if (current) {
+    if (current?.firebase) {
       const { firebase: _, ...rest } = current;
-      if (rest.clix) {
-        await this.save({ ...rest, version: CREDENTIALS_VERSION });
-      } else {
-        await this.delete();
-      }
+      await this.save({ ...rest, version: CREDENTIALS_VERSION });
     }
   }
 

@@ -28,6 +28,7 @@ export interface PodfileModificationResult {
   modified: boolean;
   podfileExists: boolean;
   targetAdded: boolean;
+  clixPodAdded: boolean;
   error?: string;
 }
 
@@ -48,6 +49,33 @@ export function hasExtensionTarget(iosDir: string, extensionName: string): boole
   const content = fs.readFileSync(podfilePath, 'utf-8');
   const targetRegex = new RegExp(`target\\s+['"]${escapeRegex(extensionName)}['"]\\s+do`, 'i');
   return targetRegex.test(content);
+}
+
+function extractTargetBlock(content: string, targetName: string): string | null {
+  const targetRegex = new RegExp(
+    `target\\s+['"]${escapeRegex(targetName)}['"]\\s+do([\\s\\S]*?)\\n\\s*end`,
+    'i',
+  );
+  const match = content.match(targetRegex);
+  return match?.[0] ?? null;
+}
+
+export function hasClixPodInExtensionTarget(
+  iosDir: string,
+  extensionName: string,
+  clixPodSpec = 'Clix',
+): boolean {
+  const podfilePath = path.join(iosDir, 'Podfile');
+  if (!fs.existsSync(podfilePath)) return false;
+
+  const content = fs.readFileSync(podfilePath, 'utf-8');
+  const targetBlock = extractTargetBlock(content, extensionName);
+  if (!targetBlock) {
+    return false;
+  }
+
+  const podRegex = new RegExp(`pod\\s+['"]${escapeRegex(clixPodSpec)}['"]`, 'i');
+  return podRegex.test(targetBlock);
 }
 
 /**
@@ -79,6 +107,7 @@ export async function addClixToExtensionTarget(
     modified: false,
     podfileExists: false,
     targetAdded: false,
+    clixPodAdded: false,
   };
 
   const podfilePath = path.join(options.iosDir, 'Podfile');
@@ -94,28 +123,41 @@ export async function addClixToExtensionTarget(
   try {
     let content = fs.readFileSync(podfilePath, 'utf-8');
 
-    // Check if target already exists
     if (hasExtensionTarget(options.iosDir, options.extensionName)) {
+      if (hasClixPodInExtensionTarget(options.iosDir, options.extensionName, options.clixPodSpec)) {
+        result.success = true;
+        return result;
+      }
+
+      const targetBlock = extractTargetBlock(content, options.extensionName);
+      if (!targetBlock) {
+        result.error = `Failed to locate target block for ${options.extensionName}`;
+        return result;
+      }
+
+      const updatedBlock = targetBlock.replace(
+        /\n(\s*)end$/i,
+        `\n$1  pod '${options.clixPodSpec || 'Clix'}'\n$1end`,
+      );
+      content = content.replace(targetBlock, updatedBlock);
+
+      fs.writeFileSync(podfilePath, content);
       result.success = true;
+      result.modified = true;
+      result.clixPodAdded = true;
       return result;
     }
 
-    // Generate target block
     const targetBlock = generateTargetBlock(options.extensionName, options.clixPodSpec);
-
-    // Find insertion point
-    // Strategy: Insert before post_install hook, or at the end of the file
     const postInstallMatch = content.match(/^post_install\s+do/m);
 
     if (postInstallMatch && postInstallMatch.index !== undefined) {
-      // Insert before post_install
       content =
         content.slice(0, postInstallMatch.index) +
         targetBlock +
         '\n\n' +
         content.slice(postInstallMatch.index);
     } else {
-      // Append at the end
       content = `${content.trimEnd()}\n\n${targetBlock}\n`;
     }
 
@@ -124,6 +166,7 @@ export async function addClixToExtensionTarget(
     result.success = true;
     result.modified = true;
     result.targetAdded = true;
+    result.clixPodAdded = true;
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
   }

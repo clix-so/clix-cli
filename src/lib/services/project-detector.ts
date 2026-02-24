@@ -223,3 +223,45 @@ export function formatProjectType(type: ProjectType): string {
 
   return `${type.framework} (${targetLabel})`;
 }
+
+/**
+ * Detect Android package name from project files.
+ *
+ * Checks build.gradle namespace (AGP 7+) first, then AndroidManifest.xml package attribute.
+ * Supports both cross-platform (android/app/) and native Android (app/) layouts.
+ */
+export async function detectAndroidPackageName(projectPath: string): Promise<string | undefined> {
+  const gradlePaths = [
+    path.join(projectPath, 'android/app/build.gradle'),
+    path.join(projectPath, 'android/app/build.gradle.kts'),
+    path.join(projectPath, 'app/build.gradle'),
+    path.join(projectPath, 'app/build.gradle.kts'),
+  ];
+
+  for (const gradlePath of gradlePaths) {
+    try {
+      const content = await fs.readFile(gradlePath, 'utf-8');
+      const match = content.match(/namespace\s*[=]?\s*["']([^"']+)["']/);
+      if (match?.[1]) return match[1];
+    } catch {
+      // file not found
+    }
+  }
+
+  const manifestPaths = [
+    path.join(projectPath, 'android/app/src/main/AndroidManifest.xml'),
+    path.join(projectPath, 'app/src/main/AndroidManifest.xml'),
+  ];
+
+  for (const manifestPath of manifestPaths) {
+    try {
+      const content = await fs.readFile(manifestPath, 'utf-8');
+      const match = content.match(/package\s*=\s*["']([^"']+)["']/);
+      if (match?.[1]) return match[1];
+    } catch {
+      // file not found
+    }
+  }
+
+  return undefined;
+}

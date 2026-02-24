@@ -64,16 +64,10 @@ Platform-specific configs to verify:
 - Remind user to replace with actual credentials
 - Verify placeholder replacement before completion
 
-## Available Slash Commands
-- /install - Autonomous SDK installation with automatic file modifications
-- /integration - SDK integration guide with step-by-step instructions
-- /event-tracking - Event tracking setup
-- /user-management - User management
-- /personalization - Personalization templates
-- /api-triggered-campaigns - API-triggered campaign setup
-- /doctor - Check SDK integration status
-- /debug - Debug and investigate user-reported problems
-- /install-mcp - Install Clix MCP Server for AI agents
+## Available Commands
+- install - Install workflow: required setup, project build, and SDK integration
+- doctor - Check SDK integration status
+- mcp - Install Clix MCP Server for AI agents
 
 ## Response Style
 - Clear, concise with bullet points

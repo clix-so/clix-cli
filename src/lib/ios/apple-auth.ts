@@ -115,12 +115,24 @@ export async function promptAppleIdAsync(
 ): Promise<string> {
   const lastAppleId = await getCachedUsernameAsync();
 
+  if (lastAppleId) {
+    console.log(`› Cached Apple ID detected: ${lastAppleId}`);
+  }
   console.log('› Log in to your Apple Developer account to continue');
 
-  let username = await promptFn('Apple ID:', lastAppleId ?? undefined);
-
-  // Remove any unprintable control characters (ASCII 0-31)
-  username = removeControlCharacters(username);
+  let username = '';
+  while (!username.trim()) {
+    const input = await promptFn('Apple ID:', lastAppleId ?? undefined);
+    username = removeControlCharacters(input);
+    if (!username.trim() && lastAppleId) {
+      username = lastAppleId;
+    }
+    if (!username.trim()) {
+      console.log(
+        '› Apple ID cannot be empty. Enter your Apple ID email or press Ctrl+C to cancel.',
+      );
+    }
+  }
 
   if (username && username !== lastAppleId) {
     await cacheUsernameAsync(username);
@@ -145,7 +157,13 @@ export async function promptPasswordAsync(
 
   console.log('› The password is only used to authenticate with Apple and never stored on servers');
 
-  const password = await promptFn(`Password (for ${username}):`);
+  let password = '';
+  while (!password) {
+    password = await promptFn(`Password (for ${username}):`);
+    if (!password) {
+      console.log('› Password cannot be empty. Enter your password or press Ctrl+C to cancel.');
+    }
+  }
 
   await cachePasswordAsync(username, password);
   return password;

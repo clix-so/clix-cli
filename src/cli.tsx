@@ -1,61 +1,43 @@
 import meow from 'meow';
 import { agentCommand } from './commands/agent';
-import { chatCommand } from './commands/chat';
-import { debugCommand } from './commands/debug';
-import { firebaseCommand } from './commands/firebase';
-import { installMCPCommand } from './commands/install-mcp';
-import { runIosSetupCommand } from './commands/ios-setup/index';
+import { doctorCommand } from './commands/doctor';
+import { installCommand } from './commands/install';
 import { loginCommand } from './commands/login';
 import { logoutCommand } from './commands/logout';
-import { resumeCommand } from './commands/resume';
+import { mcpCommand } from './commands/mcp';
 import { setupCommand } from './commands/setup';
-import { skillCommand } from './commands/skill/index';
+import { skillsCommand } from './commands/skills';
 import { uninstallCommand } from './commands/uninstall';
 import { updateCommand } from './commands/update';
 import { whoamiCommand } from './commands/whoami';
+import { setExitCode } from './lib/exit';
 import { checkFirstRun, shouldRunSetup } from './lib/services/first-run-service';
-import {
-  getValidMCPAgents,
-  isValidMCPAgent,
-  type MCPTargetAgent,
-} from './lib/services/mcp-install-service';
-import { getAvailableSkills, getAvailableSkillTypes } from './lib/skills';
 
 /**
- * Generate help text dynamically based on available skills.
+ * Generate CLI help text.
  */
 function generateHelpText(): string {
-  const skills = getAvailableSkills();
-  const localSkills = skills.filter((s) => s.isLocal);
-
-  // Generate local skill commands (command-line mode only)
-  const localSkillCommands = localSkills
-    .map((s) => `    ${s.type.padEnd(17)} ${s.description}`)
-    .join('\n');
-
   return `
   Usage
     $ clix [command] [options]
 
   Commands
-    (default)         Start interactive chat with AI agent
+    (default)         Show this help message
     help              Show this help message
     login             Log in to Clix via browser
     logout            Log out from Clix
     whoami            Show current logged-in user
     agent [name]      List or switch AI agents
-${localSkillCommands}
-    firebase          Check and configure Firebase credentials
-    debug <problem>   Interactive debugging assistant
-    install-mcp [agent]  Install Clix MCP Server
-    resume            Resume a previous session
+    install           Install Clix SDK (step-by-step setup + interactive agent handoff)
+    doctor            Check Clix SDK integration status
+    mcp               Install Clix MCP Server
+    skills            Install Clix Skills
     uninstall         Uninstall Clix CLI from your system
     update            Check for available updates
 
   Options
     --help            Show this help message
     --version         Show version number
-    --platform <val>  Target platform (ios, android, react-native, flutter)
 
   Examples
     $ clix
@@ -65,13 +47,10 @@ ${localSkillCommands}
     $ clix whoami
     $ clix agent
     $ clix agent claude
-    $ clix resume
     $ clix install
     $ clix doctor
-    $ clix firebase
-    $ clix debug "Push notifications not working on iOS"
-    $ clix install-mcp
-    $ clix install-mcp claude
+    $ clix mcp
+    $ clix skills
 `;
 }
 
@@ -80,12 +59,8 @@ const cli = meow(generateHelpText(), {
   // Use build-time embedded version if available (for binary builds)
   ...(process.env.CLIX_VERSION && { version: process.env.CLIX_VERSION }),
   flags: {
-    platform: {
+    startTask: {
       type: 'string',
-    },
-    interactive: {
-      type: 'boolean',
-      default: false,
     },
     keepConfig: {
       type: 'boolean',
@@ -104,34 +79,11 @@ const cli = meow(generateHelpText(), {
       shortFlag: 'f',
       default: false,
     },
-    // iOS setup flags
-    apiKey: {
-      type: 'string',
-    },
-    keyId: {
-      type: 'string',
-    },
-    issuerId: {
-      type: 'string',
-    },
-    bundleId: {
-      type: 'string',
-    },
-    skipPortal: {
-      type: 'boolean',
-      default: false,
-    },
-    pushEnv: {
-      type: 'string',
-    },
   },
 });
 
 async function main() {
   const command = cli.input[0];
-
-  // Get available skill types dynamically
-  const skillTypes = getAvailableSkillTypes();
 
   try {
     // Check if first-run setup is needed
@@ -162,29 +114,29 @@ async function main() {
         break;
       }
 
-      case 'debug': {
-        const problem = cli.input.slice(1).join(' ');
-        await debugCommand({ problem });
+      case 'install': {
+        const startTask = cli.flags.startTask;
+        await installCommand({ startTask });
         break;
       }
 
-      case 'resume': {
-        await resumeCommand();
+      case 'doctor': {
+        await doctorCommand();
         break;
       }
 
-      case 'install-mcp': {
-        const agentInput = cli.input[1];
-        const validAgents = getValidMCPAgents();
-        if (agentInput && !isValidMCPAgent(agentInput)) {
-          console.error(`Unknown agent: ${agentInput}`);
-          console.error(`Supported agents: ${validAgents.join(', ')}`);
-          process.exit(1);
+      case 'mcp':
+        if (cli.input[1]) {
+          console.error('mcp command does not accept positional arguments.');
+          setExitCode(1);
+          break;
         }
-        const agent = agentInput as MCPTargetAgent | undefined;
-        await installMCPCommand({ agent });
+        await mcpCommand();
         break;
-      }
+
+      case 'skills':
+        await skillsCommand();
+        break;
 
       case 'update':
       case 'upgrade':
@@ -203,10 +155,6 @@ async function main() {
         });
         break;
 
-      case 'firebase':
-        await firebaseCommand();
-        break;
-
       case 'setup': {
         const status = await checkFirstRun();
         if (status.needsSetup) {
@@ -217,52 +165,24 @@ async function main() {
         break;
       }
 
-      case 'ios-setup':
-      case 'capabilities':
-      case 'ios-capabilities': {
-        const pushEnvRaw = cli.flags.pushEnv;
-        if (pushEnvRaw && !['development', 'production'].includes(pushEnvRaw)) {
-          console.error(`Invalid --push-env value: ${pushEnvRaw}`);
-          console.error('Expected: development | production');
-          process.exit(1);
-        }
-        const pushEnv = pushEnvRaw as 'development' | 'production' | undefined;
-        await runIosSetupCommand({
-          apiKeyPath: cli.flags.apiKey,
-          keyId: cli.flags.keyId,
-          issuerId: cli.flags.issuerId,
-          bundleId: cli.flags.bundleId,
-          skipPortal: cli.flags.skipPortal,
-          pushEnvironment: pushEnv,
-        });
-        break;
-      }
-
       default:
-        // Check if command is a skill type (dynamically)
-        if (skillTypes.includes(command ?? '')) {
-          const platform = cli.flags.platform as
-            | 'ios'
-            | 'android'
-            | 'react-native'
-            | 'flutter'
-            | undefined;
-          await skillCommand({ action: command, platform });
-        } else if (command) {
+        if (command) {
           // Unknown command - show error message
           console.error(`Unknown command: ${command}`);
           console.error(`Run 'clix help' to see available commands.`);
-          process.exit(1);
+          setExitCode(1);
         } else {
-          // No command provided - start interactive chat TUI
-          await chatCommand();
+          // No command provided - show command help
+          cli.showHelp();
         }
         break;
     }
   } catch (error) {
     console.error('Error:', error instanceof Error ? error.message : 'Unknown error');
-    process.exit(1);
+    setExitCode(1);
   }
 }
 
-main();
+main().finally(() => {
+  process.exit(process.exitCode ?? 0);
+});

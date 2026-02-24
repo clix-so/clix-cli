@@ -1,3 +1,4 @@
+import { setExitCode } from '../lib/exit';
 import { safeRender } from '../ui/utils/safeRender';
 import { WhoamiUI } from '../ui/WhoamiUI';
 
@@ -13,7 +14,7 @@ export async function whoamiCommand(): Promise<void> {
         onComplete={(result) => {
           unmount();
           if (result.status === 'error') {
-            process.exitCode = 1;
+            setExitCode(1);
           }
           resolve();
         }}
