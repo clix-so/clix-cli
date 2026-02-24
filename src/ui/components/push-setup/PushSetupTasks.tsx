@@ -14,7 +14,7 @@ import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { openBrowser } from '@/lib/auth/browser';
 import { PROJECT_CONFIG_DIR } from '@/lib/config/project-config-schema';
-import { analyzeIosProject } from '@/lib/ios';
+import { analyzeIosProject, type UserAuthContext } from '@/lib/ios';
 import {
   APNS_KEY_CREATION_STEPS,
   FIREBASE_UPLOAD_STEPS,
@@ -27,7 +27,7 @@ import {
 import { FirebaseDownloader, type FirebaseProject, FirebaseService } from '@/lib/services/firebase';
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
 import { detectProjectType } from '@/lib/services/project-detector';
-import { isCtrlCInput, useCancelInput } from '@/ui/hooks';
+import { useCancelInput } from '@/ui/hooks';
 import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
 import { AppleLoginUI } from '../AppleLoginUI';
 import { normalizeInputFilePath } from '../file-input-utils';
@@ -48,6 +48,8 @@ interface DetectionTaskOptions {
 export interface ApnsKeyAcquisitionResult {
   pushKey: NonNullable<PushSetupContext['pushKey']>;
   p8FilePath: string | null;
+  /** Apple auth context for reuse by downstream tasks (e.g., portal sync). */
+  authContext?: UserAuthContext;
 }
 
 interface ErrorPhaseProps {
@@ -497,6 +499,7 @@ function P8InputPhase({
   const [error, setError] = useState<string | null>(null);
   const [extractedKeyId, setExtractedKeyId] = useState<string | null>(null);
   const [prefilledTeamId] = useState<string | null>(suggestedTeamId || null);
+  const p8PathRef = useRef('');
 
   useEffect(() => {
     const files = findP8Files();
@@ -506,11 +509,43 @@ function P8InputPhase({
     }
   }, []);
 
-  useInput((input, key) => {
-    if (key.escape || isCtrlCInput(input, key)) {
-      onCancel();
-    }
+  // Disable ESC during text input stages to prevent false triggers from
+  // escape sequences in pasted text (e.g., macOS file drag-and-drop).
+  useCancelInput(onCancel, {
+    handleEsc: stage === 'p8_select',
   });
+
+  // Custom input handler for file path. ink-text-input's TextInput has a race
+  // condition with multi-chunk paste: it calculates new values against stale
+  // React props, so only the last chunk survives. Using a ref to accumulate
+  // input avoids this because refs update synchronously across chunks.
+  useInput(
+    (input, key) => {
+      if (key.return) {
+        handleP8PathSubmit();
+        return;
+      }
+      if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow || key.tab) return;
+
+      if (key.backspace || key.delete) {
+        if (p8PathRef.current.length > 0) {
+          p8PathRef.current = p8PathRef.current.slice(0, -1);
+          setP8Path(p8PathRef.current);
+        }
+        return;
+      }
+
+      if (input) {
+        // Strip ANSI CSI sequences (e.g., bracketed paste markers [200~, [201~)
+        const cleaned = input.replace(/\[\d+[~^$]/g, '');
+        if (cleaned) {
+          p8PathRef.current += cleaned;
+          setP8Path(p8PathRef.current);
+        }
+      }
+    },
+    { isActive: stage === 'p8_path' },
+  );
 
   const handleFileSelect = useCallback((item: { label: string; value: string }) => {
     if (item.value === 'manual') {
@@ -535,18 +570,20 @@ function P8InputPhase({
   }, []);
 
   const handleP8PathSubmit = useCallback(() => {
-    if (!p8Path.trim()) {
+    const currentPath = p8PathRef.current;
+    if (!currentPath.trim()) {
       setError('P8 file path is required');
       return;
     }
 
-    const normalizedP8Path = normalizeInputFilePath(p8Path);
+    const normalizedP8Path = normalizeInputFilePath(currentPath);
     const result = validateP8File(normalizedP8Path);
     if (!result.valid) {
       setError(result.error || 'Invalid P8 file');
       return;
     }
 
+    p8PathRef.current = normalizedP8Path;
     setP8Path(normalizedP8Path);
     setError(null);
     if (result.suggestedKeyId) {
@@ -554,7 +591,7 @@ function P8InputPhase({
       setKeyId(result.suggestedKeyId);
     }
     setStage('key_id');
-  }, [p8Path]);
+  }, []);
 
   const handleKeyIdSubmit = useCallback(() => {
     const keyIdError = getKeyIdError(keyId.trim());
@@ -630,12 +667,17 @@ function P8InputPhase({
           </Box>
           <Box>
             <Text color="blue">{'>'} </Text>
-            <TextInput
-              value={p8Path}
-              onChange={setP8Path}
-              placeholder="Drag .p8 file here, or enter path manually"
-              onSubmit={handleP8PathSubmit}
-            />
+            {p8Path ? (
+              <Text>
+                {p8Path}
+                <Text inverse> </Text>
+              </Text>
+            ) : (
+              <Text dimColor>
+                <Text inverse>D</Text>
+                {'rag .p8 file here, or enter path manually'}
+              </Text>
+            )}
           </Box>
         </>
       )}
@@ -712,7 +754,7 @@ function P8InputPhase({
         <Text dimColor>
           {stage === 'p8_select'
             ? '↑↓ navigate · Enter select · Esc/Ctrl+C cancel'
-            : 'Enter to continue · Esc/Ctrl+C to cancel'}
+            : 'Enter to continue · Ctrl+C to cancel'}
         </Text>
       </Box>
     </Box>
@@ -732,6 +774,7 @@ export const ApnsKeyAcquisitionTask: React.FC<{
 
   const handleAppleLoginSuccess = useCallback(
     (result: {
+      authContext: UserAuthContext;
       pushKey: { apnsKeyId: string; apnsKeyP8: string; teamId: string; teamName?: string };
     }) => {
       const p8FileName = `AuthKey_${result.pushKey.apnsKeyId}.p8`;
@@ -770,6 +813,7 @@ export const ApnsKeyAcquisitionTask: React.FC<{
           teamId: result.pushKey.teamId,
         },
         p8FilePath: savedPath,
+        authContext: result.authContext,
       });
     },
     [onComplete, projectPath],

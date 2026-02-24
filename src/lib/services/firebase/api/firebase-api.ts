@@ -14,6 +14,7 @@ import type {
   CreateIosAppRequest,
   FirebaseProject,
   IosApp,
+  UpdateIosAppRequest,
 } from './types';
 
 type FirebaseApi = firebase_v1beta1.Firebase;
@@ -146,6 +147,8 @@ export class FirebaseApiClient {
             displayName: a.displayName ?? undefined,
             bundleId: a.bundleId ?? '',
             projectId: a.projectId ?? projectId,
+            teamId: a.teamId ?? undefined,
+            appStoreId: a.appStoreId ?? undefined,
           });
         }
         pageToken = res.data.nextPageToken ?? undefined;
@@ -211,6 +214,34 @@ export class FirebaseApiClient {
       displayName: app.displayName ?? undefined,
       bundleId: app.bundleId ?? '',
       projectId: app.projectId ?? projectId,
+      teamId: app.teamId ?? undefined,
+      appStoreId: app.appStoreId ?? undefined,
+    };
+  }
+
+  async patchIosApp(
+    projectId: string,
+    appId: string,
+    request: UpdateIosAppRequest,
+  ): Promise<IosApp> {
+    await this.updateCredentials();
+    const updateMask = Object.keys(request)
+      .filter((key) => request[key as keyof UpdateIosAppRequest] !== undefined)
+      .join(',');
+    const res = await this.fb.projects.iosApps.patch({
+      name: `projects/${projectId}/iosApps/${appId}`,
+      updateMask,
+      requestBody: request,
+    });
+    const app = res.data;
+    return {
+      name: app.name ?? '',
+      appId: app.appId ?? '',
+      displayName: app.displayName ?? undefined,
+      bundleId: app.bundleId ?? '',
+      projectId: app.projectId ?? projectId,
+      teamId: app.teamId ?? undefined,
+      appStoreId: app.appStoreId ?? undefined,
     };
   }
 

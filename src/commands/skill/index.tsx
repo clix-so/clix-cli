@@ -3,6 +3,7 @@ import type React from 'react';
 import { useCallback } from 'react';
 import type { AgentInfo } from '../../lib/agents';
 import { getConfigManager } from '../../lib/config/index';
+import { setExitCode } from '../../lib/exit';
 import { buildAgentHandoffInvocation, runAgentHandoff } from '../../lib/services/agent-handoff';
 import { AgentSelectionService } from '../../lib/services/agent-selection-service';
 import { getSkillPrompt } from '../../lib/skills';
@@ -207,18 +208,21 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     if (!installTaskIds.includes(startTask as InstallTaskId)) {
       console.error(`Invalid --start-task value: ${startTask}`);
       console.error(`Allowed values: ${installTaskIds.join(', ')}`);
-      process.exit(1);
+      setExitCode(1);
+      return;
     }
 
     if (skillType !== 'install') {
       console.error('--start-task is only supported with the install command.');
-      process.exit(1);
+      setExitCode(1);
+      return;
     }
 
     if (process.env.CLIX_DEV_ENABLE_TASK_OVERRIDE !== '1') {
       console.error('--start-task is a development-only option.');
       console.error('Set CLIX_DEV_ENABLE_TASK_OVERRIDE=1 to enable task override.');
-      process.exit(1);
+      setExitCode(1);
+      return;
     }
 
     startTaskId = startTask as InstallTaskId;
@@ -235,11 +239,13 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     const context = await gatherPreparationContext(projectPath);
     if (!context) {
       console.error('Project not linked. Run "clix login" first.');
-      process.exit(1);
+      setExitCode(1);
+      return;
     }
     const result = await runDoctorPrecheck(context);
     if (result === 'cancelled') {
-      process.exit(context.ready ? 0 : 1);
+      setExitCode(context.ready ? 0 : 1);
+      return;
     }
     preparationContext = context;
   }
@@ -271,5 +277,5 @@ export async function skillCommand(options: SkillCommandOptions): Promise<void> 
     throw new Error(`Failed to launch ${agent.displayName}: ${message}`);
   }
 
-  process.exit(exitCode);
+  setExitCode(exitCode);
 }

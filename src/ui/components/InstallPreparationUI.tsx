@@ -71,6 +71,8 @@ import {
   FirebaseConfigNoProjectsTask,
   FirebaseConfigProjectSelectorTask,
   FirebaseConfigStatusTask,
+  FirebaseIosAppUpdateConfirmation,
+  FirebaseIosAppUpdateTask,
   platformNeedsAndroidWithUnknown as firebaseConfigNeedsAndroid,
   platformNeedsIosWithUnknown as firebaseConfigNeedsIos,
   hasValidFirebaseConfigFiles as hasValidFirebaseConfigTaskFiles,
@@ -139,6 +141,8 @@ type InstallLeafTaskId =
   | 'apns_input'
   | 'apns_select_firebase_project'
   | 'apns_registering'
+  | 'apns_confirm_update_firebase_ios_app'
+  | 'apns_updating_firebase_ios_app'
   | 'firebase_service_account_detecting'
   | 'firebase_service_account_checking_sender_config'
   | 'firebase_service_account_registered'
@@ -231,6 +235,7 @@ interface FirebaseConfigState {
   androidApps: AndroidApp[];
   iosApps: IosApp[];
   selectedAndroidApp: AndroidApp | null;
+  selectedIosApp: IosApp | null;
   downloadingPlatform: 'android' | 'ios' | 'both';
   noAppsContext: FirebaseConfigNoAppsContext | null;
   creatingAppPlatform: 'android' | 'ios';
@@ -704,6 +709,7 @@ function createInitialFirebaseConfigState(): FirebaseConfigState {
     androidApps: [],
     iosApps: [],
     selectedAndroidApp: null,
+    selectedIosApp: null,
     downloadingPlatform: 'both',
     noAppsContext: null,
     creatingAppPlatform: 'android',
@@ -1065,10 +1071,23 @@ export function InstallPreparationUI({
 
   const resetTaskRuntimeState = useCallback((preparationContext?: PreparationContext) => {
     setActiveLeafTaskId(null);
-    setFirebaseConfigState(createInitialFirebaseConfigState());
+    setFirebaseConfigState((prev) => {
+      const fresh = createInitialFirebaseConfigState();
+      // Preserve selected project/iOS app for post-APNS teamId mismatch detection
+      return {
+        ...fresh,
+        selectedProject: prev.selectedProject,
+        selectedIosApp: prev.selectedIosApp,
+      };
+    });
     setFirebaseServiceAccountState(createInitialFirebaseServiceAccountState());
     setNotificationExtensionState(createInitialNotificationExtensionState());
-    setApnsState(preparationContext ? createInitialApnsState(preparationContext) : null);
+    setApnsState((prev) => {
+      if (!preparationContext) return null;
+      const fresh = createInitialApnsState(preparationContext);
+      // Preserve acquisition result (including authContext) across task transitions
+      return prev?.acquisition ? { ...fresh, acquisition: prev.acquisition } : fresh;
+    });
   }, []);
 
   const beginTask = useCallback(
@@ -1260,7 +1279,11 @@ export function InstallPreparationUI({
 
       const downloadingPlatform: 'android' | 'ios' | 'both' =
         androidApp && iosApp ? 'both' : androidApp ? 'android' : 'ios';
-      setFirebaseConfigState((prev) => ({ ...prev, downloadingPlatform }));
+      setFirebaseConfigState((prev) => ({
+        ...prev,
+        downloadingPlatform,
+        selectedIosApp: iosApp ?? prev.selectedIosApp,
+      }));
       setActiveLeafTaskId('firebase_config_downloading');
 
       try {
@@ -1563,11 +1586,13 @@ export function InstallPreparationUI({
           (await firebaseConfigDownloader.createIosApp(selectedProject.projectId, {
             bundleId: normalizedIdentifier,
             displayName,
+            teamId: context?.ios.teamId,
           }));
 
         setFirebaseConfigState((prev) => ({
           ...prev,
           iosApps: existingIosApp ? iosApps : [...iosApps, iosApp],
+          selectedIosApp: iosApp,
         }));
 
         await startFirebaseConfigDownload(
@@ -1769,7 +1794,7 @@ export function InstallPreparationUI({
           await handleFirebaseConfigCreateApp(
             isCreateIosAction ? 'ios' : 'android',
             targetIdentifier,
-            undefined,
+            isCreateIosAction ? context?.ios.appName : undefined,
             targetProject,
           );
           return;
@@ -1806,6 +1831,7 @@ export function InstallPreparationUI({
   }, [
     activeLeafTaskId,
     activeTaskId,
+    context?.ios.appName,
     context?.ios.bundleId,
     context?.firebase.actualAndroidPackageName,
     firebaseConfigDownloader,
@@ -2716,6 +2742,7 @@ export function InstallPreparationUI({
             <FirebaseConfigCreateAppInputTask
               platform="ios"
               defaultIdentifier={context.ios.bundleId}
+              defaultDisplayName={context.ios.appName}
               onSubmit={(identifier, displayName) => {
                 void handleFirebaseConfigCreateApp('ios', identifier, displayName);
               }}
@@ -2845,6 +2872,20 @@ export function InstallPreparationUI({
                 context={registrationContext}
                 selectedProject={currentApnsState.selectedProject}
                 onComplete={() => {
+                  const apnsTeamId = registrationContext.pushKey?.teamId;
+                  const firebaseIosApp = firebaseConfigState.selectedIosApp;
+                  const firebaseProject = firebaseConfigState.selectedProject;
+
+                  if (
+                    apnsTeamId &&
+                    firebaseIosApp &&
+                    firebaseProject &&
+                    firebaseIosApp.teamId !== apnsTeamId
+                  ) {
+                    setActiveLeafTaskId('apns_confirm_update_firebase_ios_app');
+                    return;
+                  }
+
                   void applyTaskCompletion({
                     apns: {
                       needed: context.apns.needed,
@@ -2861,6 +2902,56 @@ export function InstallPreparationUI({
                 <Text color="red">✗ APNS key data is missing. Retry this step.</Text>
               </Box>
             ))}
+
+          {activeLeafTaskId === 'apns_confirm_update_firebase_ios_app' && (
+            <FirebaseIosAppUpdateConfirmation
+              currentTeamId={firebaseConfigState.selectedIosApp?.teamId}
+              newTeamId={registrationContext.pushKey?.teamId ?? ''}
+              appBundleId={firebaseConfigState.selectedIosApp?.bundleId ?? ''}
+              onConfirm={() => setActiveLeafTaskId('apns_updating_firebase_ios_app')}
+              onSkip={() => {
+                void applyTaskCompletion({
+                  apns: {
+                    needed: context.apns.needed,
+                    registeredWithFirebase: true,
+                    keyId: registrationContext.pushKey?.apnsKeyId,
+                    teamId: registrationContext.pushKey?.teamId,
+                  },
+                });
+              }}
+            />
+          )}
+
+          {activeLeafTaskId === 'apns_updating_firebase_ios_app' &&
+            firebaseConfigState.selectedProject &&
+            firebaseConfigState.selectedIosApp && (
+              <FirebaseIosAppUpdateTask
+                downloader={firebaseConfigDownloader}
+                projectId={firebaseConfigState.selectedProject.projectId}
+                appId={firebaseConfigState.selectedIosApp.appId}
+                newTeamId={registrationContext.pushKey?.teamId ?? ''}
+                onComplete={() => {
+                  void applyTaskCompletion({
+                    apns: {
+                      needed: context.apns.needed,
+                      registeredWithFirebase: true,
+                      keyId: registrationContext.pushKey?.apnsKeyId,
+                      teamId: registrationContext.pushKey?.teamId,
+                    },
+                  });
+                }}
+                onError={() => {
+                  void applyTaskCompletion({
+                    apns: {
+                      needed: context.apns.needed,
+                      registeredWithFirebase: true,
+                      keyId: registrationContext.pushKey?.apnsKeyId,
+                      teamId: registrationContext.pushKey?.teamId,
+                    },
+                  });
+                }}
+              />
+            )}
         </Box>
       );
     }
@@ -2947,6 +3038,7 @@ export function InstallPreparationUI({
             subtitle="Configure required iOS entitlements for push notifications."
           />
           <IosEntitlementsTask
+            appleAuthContext={apnsState?.acquisition?.authContext}
             onComplete={(result: IosEntitlementsTaskResult) => {
               if (!result.success) {
                 handleTaskBackToStatus(result.error || undefined);

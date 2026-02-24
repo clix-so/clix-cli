@@ -1,7 +1,9 @@
-import { createInterface } from 'node:readline';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Auth } from '@expo/apple-utils';
+import { Box, Text, useApp, useInput, useStdin } from 'ink';
+import Spinner from 'ink-spinner';
+import TextInput from 'ink-text-input';
 import type React from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type AgentContext,
   analyzeIosProject,
@@ -18,7 +20,11 @@ import {
   syncCapabilities,
   updateEntitlementsForClix,
 } from '@/lib/ios';
-import { getRequestContext, loginWithUserCredentialsAsync } from '@/lib/ios/apple-auth';
+import {
+  getRequestContext,
+  loginWithUserCredentialsAsync,
+  type UserAuthContext,
+} from '@/lib/ios/apple-auth';
 import { FirebaseService } from '@/lib/services/firebase';
 import type { GoogleServiceInfoPlist, GoogleServicesJson } from '@/lib/services/firebase/types';
 import { detectProjectType } from '@/lib/services/project-detector';
@@ -28,7 +34,10 @@ import { useCancelInput } from '@/ui/hooks';
 
 type SetupPhase =
   | 'analyzing'
-  | 'authenticating'
+  | 'auth_apple_id_input'
+  | 'auth_restoring_session'
+  | 'auth_password_input'
+  | 'auth_logging_in'
   | 'syncing'
   | 'updating_entitlements'
   | 'complete'
@@ -67,7 +76,15 @@ export interface IosSetupResult {
 
 interface IosSetupUIProps {
   options: IosSetupOptions;
+  /** Pre-authenticated Apple context from a previous step (e.g., APNS key acquisition). */
+  appleAuthContext?: UserAuthContext;
   onComplete?: (result: IosSetupResult) => void;
+}
+
+interface AnalysisResult {
+  project: IosProjectInfo;
+  bundleId: string;
+  appGroupId: string;
 }
 
 interface SetupState {
@@ -80,83 +97,10 @@ interface SetupState {
   mainTargetEntitlementsLink: MainTargetEntitlementsLinkResult | null;
   updatedFiles: string[];
   errorMessage: string;
-}
-
-function promptTerminalInput(message: string, defaultValue?: string): Promise<string> {
-  const stdin = process.stdin;
-  const canToggleRawMode = typeof stdin.isTTY === 'boolean' && stdin.isTTY && 'setRawMode' in stdin;
-  const wasRawModeEnabled =
-    canToggleRawMode && typeof stdin.isRaw === 'boolean' ? stdin.isRaw : false;
-
-  if (canToggleRawMode && wasRawModeEnabled) {
-    (stdin as NodeJS.ReadStream).setRawMode(false);
-  }
-
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  return new Promise((resolve) => {
-    const prompt = defaultValue ? `${message} [${defaultValue}] ` : `${message} `;
-    rl.question(prompt, (answer) => {
-      rl.close();
-      if (canToggleRawMode && wasRawModeEnabled) {
-        (stdin as NodeJS.ReadStream).setRawMode(true);
-      }
-      resolve(answer || defaultValue || '');
-    });
-  });
-}
-
-function promptTerminalConfirm(message: string): Promise<boolean> {
-  return promptTerminalInput(`${message} (y/N)`).then(
-    (answer) => answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes',
-  );
-}
-
-/**
- * Sync capabilities with Apple Developer Portal via Apple ID login.
- * If the user cancels login, returns null and portal sync is skipped.
- */
-async function syncWithPortal(
-  bundleId: string,
-  appGroupId: string,
-  setPhase: (phase: SetupPhase) => void,
-  setAuthStatusMessage: (message: string) => void,
-  setPortalSkipReason: (message: string | null) => void,
-): Promise<CapabilitySyncResult | null> {
-  const isBundleIdMismatchReason = (message: string): boolean => {
-    const normalized = message.toLowerCase();
-    return (
-      normalized.includes('not available') &&
-      (normalized.includes('identifier') || normalized.includes('bundle id')) &&
-      normalized.includes('apple team')
-    );
-  };
-
-  setPhase('authenticating');
-  setPortalSkipReason(null);
-  setAuthStatusMessage('Waiting for Apple ID/password input in terminal prompt...');
-  try {
-    const userAuth = await loginWithUserCredentialsAsync(
-      promptTerminalInput,
-      promptTerminalInput,
-      promptTerminalConfirm,
-    );
-    const context = getRequestContext(userAuth);
-
-    setPhase('syncing');
-    setAuthStatusMessage('Authenticated. Syncing Apple capabilities...');
-    return await syncCapabilities(context, bundleId, appGroupId);
-  } catch (error) {
-    const reason =
-      error instanceof Error ? getAppleApiErrorMessage(error) : 'Authentication was not completed';
-    if (isBundleIdMismatchReason(reason)) {
-      throw new Error(reason);
-    }
-    setPortalSkipReason(reason);
-    setAuthStatusMessage(`Portal sync skipped: ${reason}`);
-    // Portal sync is best-effort: login cancelled, auth failed, or API error
-    // all result in skipping portal sync and continuing with entitlements.
-    return null;
-  }
+  appleId: string;
+  password: string;
+  authError: string | null;
+  analysisResult: AnalysisResult | null;
 }
 
 interface EntitlementsUpdateResult {
@@ -165,8 +109,46 @@ interface EntitlementsUpdateResult {
   iosDir: string;
 }
 
+function isBundleIdMismatchReason(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('not available') &&
+    (normalized.includes('identifier') || normalized.includes('bundle id')) &&
+    normalized.includes('apple team')
+  );
+}
+
 /**
- * Update local entitlements files
+ * Run project analysis (Phase 1 of setup).
+ */
+async function runAnalysis(options: IosSetupOptions): Promise<AnalysisResult> {
+  const analysisResult = await analyzeIosProject(process.cwd());
+
+  if (!analysisResult.success || !analysisResult.project) {
+    throw new Error(analysisResult.error || 'Failed to analyze iOS project');
+  }
+
+  const project = analysisResult.project;
+  const bundleId = options.bundleId || project.bundleId;
+  const appGroupId = generateAppGroupId(bundleId);
+
+  return { project, bundleId, appGroupId };
+}
+
+/**
+ * Sync capabilities with Apple Developer Portal using authenticated context.
+ */
+async function runPortalSync(
+  authContext: UserAuthContext,
+  bundleId: string,
+  appGroupId: string,
+): Promise<CapabilitySyncResult> {
+  const context = getRequestContext(authContext);
+  return await syncCapabilities(context, bundleId, appGroupId);
+}
+
+/**
+ * Update local entitlements files.
  */
 async function updateEntitlements(
   project: IosProjectInfo,
@@ -197,12 +179,18 @@ async function updateEntitlements(
 }
 
 /**
- * Run the iOS setup process
+ * Run post-auth setup: portal sync (optional) + entitlements + build settings.
  */
-async function runSetup(
+async function runPostAuth(
+  analysis: AnalysisResult,
+  portalSync: CapabilitySyncResult | null,
+  portalSkipped: boolean,
+  portalSkipReason: string | null,
   options: IosSetupOptions,
   setState: React.Dispatch<React.SetStateAction<SetupState>>,
 ): Promise<IosSetupResult> {
+  const { project, bundleId, appGroupId } = analysis;
+
   const result: IosSetupResult = {
     success: false,
     entitlementsUpdated: [],
@@ -211,40 +199,18 @@ async function runSetup(
       skippedChecks: [],
       warnings: [],
     },
+    projectInfo: project,
   };
 
-  // Phase 1: Analyze iOS project
-  setState((s) => ({ ...s, phase: 'analyzing' }));
-  const analysisResult = await analyzeIosProject(process.cwd());
-
-  if (!analysisResult.success || !analysisResult.project) {
-    throw new Error(analysisResult.error || 'Failed to analyze iOS project');
-  }
-
-  const project = analysisResult.project;
-  setState((s) => ({ ...s, projectInfo: project }));
-  result.projectInfo = project;
-
-  const bundleId = options.bundleId || project.bundleId;
-  const appGroupId = generateAppGroupId(bundleId);
-
-  // Phase 2: Sync with Apple Developer Portal via Apple ID login
-  const syncResult = await syncWithPortal(
-    bundleId,
-    appGroupId,
-    (phase) => setState((s) => ({ ...s, phase })),
-    (message) => setState((s) => ({ ...s, authStatusMessage: message })),
-    (message) => setState((s) => ({ ...s, portalSkipReason: message })),
-  );
-  if (syncResult) {
-    setState((s) => ({ ...s, portalResult: syncResult }));
-    result.portalSync = syncResult;
-  } else {
-    setState((s) => ({ ...s, portalSkipped: true }));
+  if (portalSync) {
+    setState((s) => ({ ...s, portalResult: portalSync }));
+    result.portalSync = portalSync;
+  } else if (portalSkipped) {
+    setState((s) => ({ ...s, portalSkipped: true, portalSkipReason }));
     result.changeSummary?.skippedChecks.push('Apple Developer Portal sync');
   }
 
-  // Phase 3: Update local entitlements files
+  // Update local entitlements files
   setState((s) => ({ ...s, phase: 'updating_entitlements' }));
   const entitlementsResult = await updateEntitlements(project, bundleId, options);
 
@@ -259,7 +225,7 @@ async function runSetup(
   result.entitlementsUpdated = files;
   result.changeSummary?.changedFiles.push(...files);
 
-  // Phase 4: Ensure main app target links the entitlements file in build settings.
+  // Ensure main app target links the entitlements file in build settings.
   const mainTargetLinkResult = await ensureMainTargetEntitlementsLink({
     projectPath: project.projectPath,
     entitlementsPath: entitlementsResult.entitlementsPath,
@@ -290,7 +256,6 @@ async function runSetup(
 
   // Detect Firebase project ID and Team ID for push setup integration
   result.bundleId = bundleId;
-  // Use Team ID from Xcode project settings (DEVELOPMENT_TEAM) if available
   result.teamId = project.teamId || null;
   try {
     const projectType = await detectProjectType(process.cwd());
@@ -300,14 +265,11 @@ async function runSetup(
     const androidContent = firebaseDetection.android?.content as GoogleServicesJson | undefined;
     result.firebaseProjectId =
       iosContent?.PROJECT_ID || androidContent?.project_info?.project_id || null;
-    // Override Team ID from Firebase config if available (more likely to be correct)
     if (iosContent?.TEAM_ID) {
       result.teamId = iosContent.TEAM_ID;
     }
   } catch {
-    // Firebase detection is optional, don't fail if it errors
     result.firebaseProjectId = null;
-    // Keep the teamId from project settings if Firebase detection fails
   }
 
   result.success = true;
@@ -315,8 +277,13 @@ async function runSetup(
   return result;
 }
 
-export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) => {
+export const IosSetupUI: React.FC<IosSetupUIProps> = ({
+  options,
+  appleAuthContext,
+  onComplete,
+}) => {
   const { exit } = useApp();
+  const { isRawModeSupported, setRawMode } = useStdin();
   const [state, setState] = useState<SetupState>({
     phase: 'analyzing',
     projectInfo: null,
@@ -327,8 +294,13 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     mainTargetEntitlementsLink: null,
     updatedFiles: [],
     errorMessage: '',
+    appleId: '',
+    password: '',
+    authError: null,
+    analysisResult: null,
   });
   const [result, setResult] = useState<IosSetupResult | null>(null);
+  const authContextRef = useRef<UserAuthContext | null>(appleAuthContext ?? null);
 
   const {
     phase,
@@ -340,10 +312,46 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     mainTargetEntitlementsLink,
     updatedFiles,
     errorMessage,
+    analysisResult,
   } = state;
 
-  // Allow ESC/Ctrl+C to cancel during authenticating phase
-  useCancelInput(() => exit(), { isActive: phase === 'authenticating' });
+  // Re-enable raw mode when entering input phases (expo/apple-utils can leave stdin in cooked mode)
+  useEffect(() => {
+    if (!isRawModeSupported) return;
+    const needsInput = phase === 'auth_apple_id_input' || phase === 'auth_password_input';
+    if (needsInput) setRawMode(true);
+  }, [isRawModeSupported, phase, setRawMode]);
+
+  // Allow ESC/Ctrl+C to skip portal sync during auth phases
+  const isAuthPhase =
+    phase === 'auth_apple_id_input' ||
+    phase === 'auth_restoring_session' ||
+    phase === 'auth_password_input' ||
+    phase === 'auth_logging_in';
+
+  const handleSkipPortalSync = useCallback(
+    (reason: string) => {
+      if (!analysisResult) return;
+      setState((s) => ({
+        ...s,
+        portalSkipped: true,
+        portalSkipReason: reason,
+        phase: 'updating_entitlements',
+      }));
+      // Run post-auth without portal sync
+      runPostAuth(analysisResult, null, true, reason, options, setState)
+        .then((r) => setResult(r))
+        .catch((error) => {
+          const message = error instanceof Error ? getAppleApiErrorMessage(error) : String(error);
+          setState((s) => ({ ...s, errorMessage: message, phase: 'error' }));
+        });
+    },
+    [analysisResult, options],
+  );
+
+  useCancelInput(() => handleSkipPortalSync('Authentication cancelled by user'), {
+    isActive: isAuthPhase,
+  });
 
   // Handle user input for complete/error phases
   const handleContinue = useCallback(() => {
@@ -362,11 +370,56 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     }
   });
 
+  // Perform portal sync with given auth context, then run post-auth
+  const performSyncAndPostAuth = useCallback(
+    async (authCtx: UserAuthContext, analysis: AnalysisResult) => {
+      setState((s) => ({
+        ...s,
+        phase: 'syncing',
+        authStatusMessage: 'Authenticated. Syncing Apple capabilities...',
+      }));
+      try {
+        const syncResult = await runPortalSync(authCtx, analysis.bundleId, analysis.appGroupId);
+        const r = await runPostAuth(analysis, syncResult, false, null, options, setState);
+        setResult(r);
+      } catch (error) {
+        const reason =
+          error instanceof Error ? getAppleApiErrorMessage(error) : 'Portal sync failed';
+        if (isBundleIdMismatchReason(reason)) {
+          setState((s) => ({ ...s, errorMessage: reason, phase: 'error' }));
+          return;
+        }
+        // Portal sync is best-effort; continue with entitlements on failure
+        const r = await runPostAuth(analysis, null, true, reason, options, setState);
+        setResult(r);
+      }
+    },
+    [options],
+  );
+
+  // Phase 1: Run analysis, then decide auth path
   useEffect(() => {
     const execute = async () => {
       try {
-        const setupResult = await runSetup(options, setState);
-        setResult(setupResult);
+        const analysis = await runAnalysis(options);
+        setState((s) => ({
+          ...s,
+          projectInfo: analysis.project,
+          analysisResult: analysis,
+        }));
+
+        // If pre-authenticated context is provided, try using it directly
+        if (appleAuthContext) {
+          try {
+            await performSyncAndPostAuth(appleAuthContext, analysis);
+            return;
+          } catch {
+            // Auth context expired or invalid; fall through to Ink-based login
+          }
+        }
+
+        // No auth context or expired: show Apple login UI
+        setState((s) => ({ ...s, phase: 'auth_apple_id_input' }));
       } catch (error) {
         const message = error instanceof Error ? getAppleApiErrorMessage(error) : String(error);
         setState((s) => ({ ...s, errorMessage: message, phase: 'error' }));
@@ -374,7 +427,104 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
     };
 
     execute();
-  }, [options]);
+  }, [options, appleAuthContext, performSyncAndPostAuth]);
+
+  // Handle Apple ID submission
+  const handleAppleIdSubmit = useCallback(async () => {
+    const trimmedAppleId = state.appleId.trim();
+    if (!trimmedAppleId) {
+      setState((s) => ({ ...s, authError: 'Apple ID is required' }));
+      return;
+    }
+
+    setState((s) => ({
+      ...s,
+      authError: null,
+      phase: 'auth_restoring_session',
+      authStatusMessage: 'Checking existing session...',
+    }));
+
+    Auth.resetInMemoryData();
+
+    try {
+      const restoredSession = await Auth.tryRestoringAuthStateFromUserCredentialsAsync(
+        { username: trimmedAppleId },
+        { autoResolveProvider: true },
+      );
+
+      if (restoredSession?.context.teamId && analysisResult) {
+        // Session restored — build auth context via loginWithUserCredentialsAsync
+        const promptAppleIdFn = async () => trimmedAppleId;
+        const promptPasswordFn = async () => '';
+        const promptConfirmFn = async () => false;
+
+        try {
+          const authCtx = await loginWithUserCredentialsAsync(
+            promptAppleIdFn,
+            promptPasswordFn,
+            promptConfirmFn,
+            {},
+          );
+          authContextRef.current = authCtx;
+          await performSyncAndPostAuth(authCtx, analysisResult);
+          return;
+        } catch {
+          // Session restore via loginWithUserCredentials failed; fall through to password
+        }
+      }
+
+      // No valid session; need password
+      setState((s) => ({ ...s, phase: 'auth_password_input' }));
+    } catch {
+      setState((s) => ({ ...s, phase: 'auth_password_input' }));
+    }
+  }, [state.appleId, analysisResult, performSyncAndPostAuth]);
+
+  // Handle password submission
+  const handlePasswordSubmit = useCallback(async () => {
+    if (!state.password) {
+      setState((s) => ({ ...s, authError: 'Password is required' }));
+      return;
+    }
+
+    const trimmedAppleId = state.appleId.trim();
+    setState((s) => ({
+      ...s,
+      authError: null,
+      phase: 'auth_logging_in',
+      authStatusMessage: 'Authenticating with Apple...',
+    }));
+
+    try {
+      const promptAppleIdFn = async () => trimmedAppleId;
+      const promptPasswordFn = async () => state.password;
+      const promptConfirmFn = async () => false;
+
+      const authCtx = await loginWithUserCredentialsAsync(
+        promptAppleIdFn,
+        promptPasswordFn,
+        promptConfirmFn,
+        {},
+      );
+      authContextRef.current = authCtx;
+
+      if (analysisResult) {
+        await performSyncAndPostAuth(authCtx, analysisResult);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Authentication failed';
+      if (message === 'ABORTED') {
+        handleSkipPortalSync('Authentication cancelled by user');
+        return;
+      }
+      setState((s) => ({
+        ...s,
+        authError: message,
+        password: '',
+        phase: 'auth_password_input',
+      }));
+    }
+  }, [state.appleId, state.password, analysisResult, performSyncAndPostAuth, handleSkipPortalSync]);
 
   return (
     <Box flexDirection="column" padding={1}>
@@ -383,18 +533,119 @@ export const IosSetupUI: React.FC<IosSetupUIProps> = ({ options, onComplete }) =
       {/* Phase: Analyzing */}
       {phase === 'analyzing' && <StatusMessage type="loading" message="Analyzing iOS project..." />}
 
-      {/* Phase: Authenticating */}
-      {phase === 'authenticating' && (
+      {/* Phase: Apple ID Input */}
+      {phase === 'auth_apple_id_input' && (
         <Box flexDirection="column">
           <ProjectInfoStatus projectInfo={projectInfo} />
-          <StatusMessage type="loading" message="Logging in to Apple Developer account..." />
-          {authStatusMessage ? (
-            <Box marginLeft={2}>
-              <Text dimColor>• {authStatusMessage}</Text>
+          <Box
+            flexDirection="column"
+            borderStyle="round"
+            borderColor="blue"
+            paddingX={1}
+            marginX={1}
+            marginY={1}
+          >
+            <Box marginBottom={1}>
+              <Text bold>Apple Developer Account Login</Text>
             </Box>
-          ) : null}
-          <Box marginTop={1} marginLeft={2} flexDirection="column">
-            <Text dimColor>• Press Ctrl+C to cancel</Text>
+            <Box marginBottom={1}>
+              <Text dimColor>Log in to sync capabilities with Apple Developer Portal.</Text>
+            </Box>
+            {state.authError && (
+              <Box marginBottom={1}>
+                <Text color="red">✗ {state.authError}</Text>
+              </Box>
+            )}
+            <Box marginBottom={1}>
+              <Text>Apple ID (email): </Text>
+            </Box>
+            <Box>
+              <Text color="blue">{'> '}</Text>
+              <TextInput
+                value={state.appleId}
+                onChange={(v) => setState((s) => ({ ...s, appleId: v }))}
+                placeholder="your@email.com"
+                onSubmit={handleAppleIdSubmit}
+              />
+            </Box>
+            <Box marginTop={1}>
+              <Text dimColor>Enter to continue · Esc/Ctrl+C to skip portal sync</Text>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* Phase: Restoring Session */}
+      {phase === 'auth_restoring_session' && (
+        <Box flexDirection="column">
+          <ProjectInfoStatus projectInfo={projectInfo} />
+          <Box marginLeft={2}>
+            <Text color="cyan">
+              <Spinner type="dots" />
+            </Text>
+            <Text> {authStatusMessage}</Text>
+          </Box>
+        </Box>
+      )}
+
+      {/* Phase: Password Input */}
+      {phase === 'auth_password_input' && (
+        <Box flexDirection="column">
+          <ProjectInfoStatus projectInfo={projectInfo} />
+          <Box
+            flexDirection="column"
+            borderStyle="round"
+            borderColor="blue"
+            paddingX={1}
+            marginX={1}
+            marginY={1}
+          >
+            <Box marginBottom={1}>
+              <Text bold>Apple Developer Account Login</Text>
+            </Box>
+            <Box marginBottom={1}>
+              <Text dimColor>Apple ID: {state.appleId.trim()}</Text>
+            </Box>
+            {state.authError && (
+              <Box marginBottom={1}>
+                <Text color="red">✗ {state.authError}</Text>
+              </Box>
+            )}
+            <Box marginBottom={1}>
+              <Text>Password: </Text>
+            </Box>
+            <Box>
+              <Text color="blue">{'> '}</Text>
+              <TextInput
+                value={state.password}
+                onChange={(v) => setState((s) => ({ ...s, password: v }))}
+                placeholder="••••••••"
+                mask="*"
+                onSubmit={handlePasswordSubmit}
+              />
+            </Box>
+            <Box marginTop={1}>
+              <Text dimColor>Your password is stored securely in your local Keychain</Text>
+            </Box>
+            <Box marginTop={1}>
+              <Text dimColor>Enter to continue · Esc/Ctrl+C to skip portal sync</Text>
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* Phase: Logging In */}
+      {phase === 'auth_logging_in' && (
+        <Box flexDirection="column">
+          <ProjectInfoStatus projectInfo={projectInfo} />
+          <Box marginLeft={2}>
+            <Text color="cyan">
+              <Spinner type="dots" />
+            </Text>
+            <Text> {authStatusMessage}</Text>
+          </Box>
+          <Box marginTop={1} marginLeft={2}>
+            <Text dimColor>If prompted, check your device for 2FA code</Text>
           </Box>
         </Box>
       )}

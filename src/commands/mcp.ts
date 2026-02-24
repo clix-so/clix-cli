@@ -1,4 +1,5 @@
 import { AgentError } from '../lib/errors';
+import { setExitCode } from '../lib/exit';
 import { runCommandHandoff } from '../lib/services/agent-handoff';
 
 const ADD_MCP_PACKAGE = 'add-mcp';
@@ -12,7 +13,7 @@ interface MCPCommandDependencies {
 
 export async function mcpCommand(dependencies: MCPCommandDependencies = {}): Promise<void> {
   const runHandoff = dependencies.runHandoff ?? runCommandHandoff;
-  const exitProcess = dependencies.exitProcess ?? ((code: number) => process.exit(code));
+  const exitProcess = dependencies.exitProcess ?? setExitCode;
 
   console.log('Adding Clix MCP Server...');
 

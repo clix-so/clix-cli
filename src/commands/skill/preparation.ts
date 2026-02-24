@@ -94,6 +94,8 @@ export interface IosStatus {
   bundleId?: string;
   /** Team ID if detected */
   teamId?: string;
+  /** App name extracted from Xcode project */
+  appName?: string;
   /** App Group ID if configured */
   appGroupId?: string;
   /** Whether entitlements are configured */
@@ -448,6 +450,7 @@ export async function checkFirebaseStatus(
 interface IosFileStatus {
   bundleId?: string;
   teamId?: string;
+  appName?: string;
   appGroupId?: string;
   entitlementsConfigured: boolean;
   nseConfigured: boolean;
@@ -560,6 +563,7 @@ async function detectIosStatusFromFiles(
   return {
     bundleId: project.bundleId,
     teamId: project.teamId,
+    appName: project.appName,
     appGroupId: detectedAppGroupId ?? setup?.appGroupId,
     entitlementsConfigured: hasEntitlements,
     nseConfigured: hasNse,

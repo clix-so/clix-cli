@@ -1,4 +1,5 @@
 import { AgentError } from '../lib/errors';
+import { setExitCode } from '../lib/exit';
 import { runCommandHandoff } from '../lib/services/agent-handoff';
 
 const DEFAULT_SKILLS_REPOSITORY = 'clix-so/skills';
@@ -10,7 +11,7 @@ interface SkillsCommandDependencies {
 
 export async function skillsCommand(dependencies: SkillsCommandDependencies = {}): Promise<void> {
   const runHandoff = dependencies.runHandoff ?? runCommandHandoff;
-  const exitProcess = dependencies.exitProcess ?? ((code: number) => process.exit(code));
+  const exitProcess = dependencies.exitProcess ?? setExitCode;
 
   console.log('Adding Clix Skills...');
 

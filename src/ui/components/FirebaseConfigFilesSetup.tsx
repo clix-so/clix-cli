@@ -3,13 +3,14 @@ import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type {
   AndroidApp,
   FirebaseDetectionResult,
   FirebaseProject,
   IosApp,
 } from '@/lib/services/firebase';
+import type { FirebaseDownloader } from '@/lib/services/firebase/downloader';
 import { OAUTH_CALLBACK_CONFIG } from '@/lib/utils/oauth';
 import { useCancelInput } from '@/ui/hooks';
 import { formatTerminalHyperlink } from '@/ui/utils/terminalHyperlink';
@@ -424,16 +425,18 @@ function NoAppsFoundPhase({
 function CreateAppInputPhase({
   platform,
   defaultIdentifier,
+  defaultDisplayName,
   onSubmit,
   onCancel,
 }: {
   platform: 'android' | 'ios';
   defaultIdentifier?: string;
+  defaultDisplayName?: string;
   onSubmit: (identifier: string, displayName?: string) => void;
   onCancel: () => void;
 }): React.ReactElement {
   const [identifier, setIdentifier] = useState(defaultIdentifier ?? '');
-  const [displayName, setDisplayName] = useState('');
+  const [displayName, setDisplayName] = useState(defaultDisplayName ?? '');
   const [stage, setStage] = useState<'identifier' | 'display_name'>('identifier');
 
   useCancelInput(onCancel);
@@ -644,6 +647,8 @@ export {
   DetectingPhase as FirebaseConfigDetectingTask,
   DownloadingPhase as FirebaseConfigDownloadingTask,
   ErrorPhase as FirebaseConfigErrorTask,
+  IosAppUpdateConfirmationPhase as FirebaseIosAppUpdateConfirmation,
+  IosAppUpdatePhase as FirebaseIosAppUpdateTask,
   NoAppsFoundPhase as FirebaseConfigNoAppsFoundTask,
   NoProjectsPhase as FirebaseConfigNoProjectsTask,
   ProjectSelectorPhase as FirebaseConfigProjectSelectorTask,
@@ -697,6 +702,123 @@ function ErrorPhase({
       )}
       <Box>
         <Text dimColor>Press Enter to retry, Esc/Ctrl+C to cancel</Text>
+      </Box>
+    </Box>
+  );
+}
+
+function IosAppUpdateConfirmationPhase({
+  currentTeamId,
+  newTeamId,
+  appBundleId,
+  onConfirm,
+  onSkip,
+}: {
+  currentTeamId?: string;
+  newTeamId: string;
+  appBundleId: string;
+  onConfirm: () => void;
+  onSkip: () => void;
+}): React.ReactElement {
+  useCancelInput(onSkip);
+
+  const items = [
+    { label: 'Update', value: 'update' },
+    { label: 'Skip', value: 'skip' },
+  ];
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="yellow"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold color="yellow">
+          Firebase iOS App Team ID Mismatch
+        </Text>
+      </Box>
+      <Box flexDirection="column" marginBottom={1}>
+        <Text>The Firebase iOS app ({appBundleId}) has a different Team ID than the APNS key.</Text>
+        <Text dimColor>Current: {currentTeamId || '(none)'}</Text>
+        <Text dimColor>APNS Key: {newTeamId}</Text>
+      </Box>
+      <Box marginBottom={1}>
+        <Text>Update Firebase iOS app Team ID to match?</Text>
+      </Box>
+      <SelectInput
+        items={items}
+        onSelect={(item) => {
+          if (item.value === 'update') {
+            onConfirm();
+          } else {
+            onSkip();
+          }
+        }}
+      />
+      <Box marginTop={1}>
+        <Text dimColor>↑↓ to navigate · Enter to select · Esc/Ctrl+C to skip</Text>
+      </Box>
+    </Box>
+  );
+}
+
+function IosAppUpdatePhase({
+  downloader,
+  projectId,
+  appId,
+  newTeamId,
+  onComplete,
+  onError,
+}: {
+  downloader: FirebaseDownloader;
+  projectId: string;
+  appId: string;
+  newTeamId: string;
+  onComplete: () => void;
+  onError: (error: string) => void;
+}): React.ReactElement {
+  useEffect(() => {
+    let cancelled = false;
+
+    const update = async () => {
+      try {
+        await downloader.patchIosApp(projectId, appId, { teamId: newTeamId });
+        if (!cancelled) onComplete();
+      } catch (err) {
+        if (!cancelled) {
+          onError(err instanceof Error ? err.message : 'Failed to update Firebase iOS app');
+        }
+      }
+    };
+
+    void update();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appId, downloader, newTeamId, onComplete, onError, projectId]);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="blue"
+      paddingX={1}
+      marginX={1}
+      marginY={1}
+    >
+      <Box marginBottom={1}>
+        <Text bold>Updating Firebase iOS App</Text>
+      </Box>
+      <Box>
+        <Text dimColor>
+          <Spinner type="dots" />
+        </Text>
+        <Text> Updating Team ID to {newTeamId}...</Text>
       </Box>
     </Box>
   );

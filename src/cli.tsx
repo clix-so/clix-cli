@@ -10,6 +10,7 @@ import { skillsCommand } from './commands/skills';
 import { uninstallCommand } from './commands/uninstall';
 import { updateCommand } from './commands/update';
 import { whoamiCommand } from './commands/whoami';
+import { setExitCode } from './lib/exit';
 import { checkFirstRun, shouldRunSetup } from './lib/services/first-run-service';
 
 /**
@@ -127,7 +128,8 @@ async function main() {
       case 'mcp':
         if (cli.input[1]) {
           console.error('mcp command does not accept positional arguments.');
-          process.exit(1);
+          setExitCode(1);
+          break;
         }
         await mcpCommand();
         break;
@@ -168,7 +170,7 @@ async function main() {
           // Unknown command - show error message
           console.error(`Unknown command: ${command}`);
           console.error(`Run 'clix help' to see available commands.`);
-          process.exit(1);
+          setExitCode(1);
         } else {
           // No command provided - show command help
           cli.showHelp();
@@ -177,8 +179,10 @@ async function main() {
     }
   } catch (error) {
     console.error('Error:', error instanceof Error ? error.message : 'Unknown error');
-    process.exit(1);
+    setExitCode(1);
   }
 }
 
-main();
+main().finally(() => {
+  process.exit(process.exitCode ?? 0);
+});

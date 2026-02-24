@@ -26,6 +26,8 @@ export interface IosApp {
   displayName?: string;
   bundleId: string;
   projectId: string;
+  teamId?: string;
+  appStoreId?: string;
 }
 
 export interface CreateAndroidAppRequest {
@@ -35,6 +37,14 @@ export interface CreateAndroidAppRequest {
 
 export interface CreateIosAppRequest {
   bundleId: string;
+  displayName?: string;
+  teamId?: string;
+  appStoreId?: string;
+}
+
+export interface UpdateIosAppRequest {
+  teamId?: string;
+  appStoreId?: string;
   displayName?: string;
 }
 

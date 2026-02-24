@@ -16,6 +16,7 @@ import type {
   FirebaseProject,
   IosApp,
   ServiceAccountJson,
+  UpdateIosAppRequest,
 } from './api';
 import { type ApiClientCredentials, FirebaseApiClient } from './api';
 import { getExpectedPaths } from './detector';
@@ -217,6 +218,26 @@ export class FirebaseDownloader {
     }
     const api = await this.ensureApiClient();
     return api.createIosApp(projectId, request);
+  }
+
+  /**
+   * Update an existing iOS app in a Firebase project.
+   *
+   * @param projectId - Firebase project ID
+   * @param appId - iOS app ID
+   * @param request - Fields to update (teamId, appStoreId, displayName)
+   * @returns Updated iOS app
+   */
+  async patchIosApp(
+    projectId: string,
+    appId: string,
+    request: UpdateIosAppRequest,
+  ): Promise<IosApp> {
+    if (!(await this.isAuthenticated())) {
+      throw new Error('Not authenticated. Run OAuth flow first.');
+    }
+    const api = await this.ensureApiClient();
+    return api.patchIosApp(projectId, appId, request);
   }
 
   /**

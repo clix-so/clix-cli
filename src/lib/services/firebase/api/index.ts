@@ -12,4 +12,5 @@ export type {
   FirebaseProject,
   IosApp,
   ServiceAccountJson,
+  UpdateIosAppRequest,
 } from './types';
