@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   check-version:
@@ -171,7 +172,7 @@ jobs:
       - name: Setup Node.js (for npm publish)
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
@@ -200,15 +201,13 @@ jobs:
 
       - name: Publish to npm
         run: |
-          npm publish --access public --tag ${{ steps.npm_tag.outputs.tag }} 2>&1 | tee npm-publish.log || {
+          npm publish --provenance --access public --tag ${{ steps.npm_tag.outputs.tag }} 2>&1 | tee npm-publish.log || {
             if grep -q "You cannot publish over the previously published versions" npm-publish.log; then
               echo "Version already published, skipping..."
             else
               exit 1
             fi
           }
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Calculate SHA256
         id: sha256
