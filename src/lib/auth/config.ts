@@ -8,6 +8,8 @@ export const AUTH_ENV_VARS = {
   ACCESS_TOKEN: 'CLIX_ACCESS_TOKEN',
   /** Console base URL */
   CONSOLE_URL: 'CLIX_CONSOLE_URL',
+  /** Management API base URL */
+  MANAGEMENT_API_URL: 'CLIX_MANAGEMENT_API_URL',
   /** Auth0 domain override */
   AUTH0_DOMAIN: 'CLIX_AUTH0_DOMAIN',
   /** Auth0 client ID override */
@@ -34,7 +36,7 @@ const DEFAULT_AUTH0_CONFIG: Auth0Config = {
 /**
  * Default Console URL for API proxy.
  */
-const DEFAULT_CONSOLE_URL = 'https://console.clix.so';
+export const DEFAULT_CONSOLE_URL = 'https://console.clix.so';
 
 /**
  * Get Auth0 configuration with environment variable overrides.

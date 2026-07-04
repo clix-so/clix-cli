@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { AUTH_ENV_VARS } from '@/lib/auth';
 import { InternalApiClient } from '../internal-client';
 
 const originalFetch = globalThis.fetch;
+const originalConsoleUrl = process.env[AUTH_ENV_VARS.CONSOLE_URL];
+const originalManagementApiUrl = process.env[AUTH_ENV_VARS.MANAGEMENT_API_URL];
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -15,6 +18,9 @@ describe('InternalApiClient', () => {
 
   beforeEach(() => {
     requests.length = 0;
+    delete process.env[AUTH_ENV_VARS.CONSOLE_URL];
+    delete process.env[AUTH_ENV_VARS.MANAGEMENT_API_URL];
+
     globalThis.fetch = mock(async (input: string | URL | Request) => {
       const url = String(input);
       requests.push(url);
@@ -51,7 +57,46 @@ describe('InternalApiClient', () => {
   });
 
   afterEach(() => {
+    if (originalConsoleUrl === undefined) {
+      delete process.env[AUTH_ENV_VARS.CONSOLE_URL];
+    } else {
+      process.env[AUTH_ENV_VARS.CONSOLE_URL] = originalConsoleUrl;
+    }
+
+    if (originalManagementApiUrl === undefined) {
+      delete process.env[AUTH_ENV_VARS.MANAGEMENT_API_URL];
+    } else {
+      process.env[AUTH_ENV_VARS.MANAGEMENT_API_URL] = originalManagementApiUrl;
+    }
+
     globalThis.fetch = originalFetch;
+  });
+
+  test('uses the production management API by default', async () => {
+    const client = new InternalApiClient();
+
+    await client.getMe({ authToken: 'token-1' });
+
+    expect(requests).toEqual(['https://management-api.clix.so/api/v1/members/me']);
+  });
+
+  test('derives management reads from the console override', async () => {
+    process.env[AUTH_ENV_VARS.CONSOLE_URL] = 'http://localhost:3000';
+    const client = new InternalApiClient();
+
+    await client.getMe({ authToken: 'token-1' });
+
+    expect(requests).toEqual(['http://localhost:3000/api/clix/management/api/v1/members/me']);
+  });
+
+  test('uses the explicit management API override when configured', async () => {
+    process.env[AUTH_ENV_VARS.CONSOLE_URL] = 'http://localhost:3000';
+    process.env[AUTH_ENV_VARS.MANAGEMENT_API_URL] = 'https://management.example';
+    const client = new InternalApiClient();
+
+    await client.getMe({ authToken: 'token-1' });
+
+    expect(requests).toEqual(['https://management.example/api/v1/members/me']);
   });
 
   test('reads member, organizations, and org projects from management-api', async () => {

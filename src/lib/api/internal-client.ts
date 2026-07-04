@@ -1,4 +1,4 @@
-import { getConsoleUrl, getCredentialsManager } from '../auth';
+import { AUTH_ENV_VARS, DEFAULT_CONSOLE_URL, getConsoleUrl, getCredentialsManager } from '../auth';
 import { AuthError } from '../auth/errors';
 import { NetworkError } from '../errors/types';
 import type { Member, Organization, Project, SenderConfig } from './types';
@@ -31,9 +31,16 @@ export class InternalApiClient {
   private internalBaseUrl: string;
   private managementBaseUrl: string;
 
-  constructor(consoleUrl?: string, managementApiUrl = DEFAULT_MANAGEMENT_API_URL) {
-    this.internalBaseUrl = (consoleUrl ?? getConsoleUrl()) + INTERNAL_API_PROXY_PREFIX;
-    this.managementBaseUrl = managementApiUrl;
+  constructor(consoleUrl?: string, managementApiUrl?: string) {
+    const resolvedConsoleUrl = (consoleUrl ?? getConsoleUrl()).replace(/\/+$/, '');
+
+    this.internalBaseUrl = resolvedConsoleUrl + INTERNAL_API_PROXY_PREFIX;
+    this.managementBaseUrl =
+      managementApiUrl ??
+      process.env[AUTH_ENV_VARS.MANAGEMENT_API_URL] ??
+      (resolvedConsoleUrl === DEFAULT_CONSOLE_URL
+        ? DEFAULT_MANAGEMENT_API_URL
+        : `${resolvedConsoleUrl}/api/clix/management`);
   }
 
   private async resolveAccessToken(authToken?: string): Promise<string> {
