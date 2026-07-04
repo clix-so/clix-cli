@@ -201,6 +201,7 @@ jobs:
 
       - name: Publish to npm
         run: |
+          set -o pipefail
           npm publish --provenance --access public --tag ${{ steps.npm_tag.outputs.tag }} 2>&1 | tee npm-publish.log || {
             if grep -q "You cannot publish over the previously published versions" npm-publish.log; then
               echo "Version already published, skipping..."
@@ -208,6 +209,8 @@ jobs:
               exit 1
             fi
           }
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Calculate SHA256
         id: sha256
@@ -215,7 +218,7 @@ jobs:
           sleep 10
           VERSION="${{ needs.check-version.outputs.current }}"
           TARBALL_URL="https://registry.npmjs.org/@clix-so/clix-cli/-/clix-cli-${VERSION}.tgz"
-          curl -sL "$TARBALL_URL" -o package.tgz
+          curl --fail --silent --show-error --location "$TARBALL_URL" -o package.tgz
           SHA256=$(shasum -a 256 package.tgz | cut -d ' ' -f 1)
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
 
