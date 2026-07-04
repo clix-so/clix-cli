@@ -156,6 +156,7 @@ export async function runAgentHandoff(
       displayName: invocation.agent.displayName,
     },
     spawnProcess,
+    spawnProcess === defaultSpawner,
   );
 }
 
@@ -172,14 +173,16 @@ export async function runCommandHandoff(
       displayName: invocation.displayName ?? invocation.command,
     },
     spawnProcess,
+    spawnProcess === defaultSpawner,
   );
 }
 
 async function runHandoffInvocation(
   invocation: HandoffExecutionInvocation,
   spawnProcess: HandoffSpawner,
+  allowExecve: boolean,
 ): Promise<number> {
-  const execve = getExecve();
+  const execve = allowExecve ? getExecve() : null;
   if (execve) {
     try {
       execve(invocation.command, [invocation.command, ...invocation.args], invocation.env);
