@@ -1,28 +1,25 @@
 # GitHub Actions Setup
 
-This document explains how to configure the required secrets for the automated release workflow.
+This document explains how to configure the automated release workflow.
 
-## Required Secrets
+## npm Trusted Publishing
 
-The release workflow requires the following secret:
+The release workflow publishes `@clix-so/clix-cli` to npm through OpenID Connect
+(OIDC). No `NPM_TOKEN` GitHub Actions secret is required.
 
-### NPM_TOKEN
+Configure the package on npm with a Trusted Publisher:
 
-An npm access token with publish permissions for `@clix-so/clix-cli`.
+1. Go to the `@clix-so/clix-cli` package settings on [npmjs.com](https://www.npmjs.com/)
+2. Open **Trusted Publisher**
+3. Select **GitHub Actions**
+4. Set the organization or user to `clix-so`
+5. Set the repository to `clix-cli`
+6. Set the workflow filename to `release.yml`
+7. Allow `npm publish`
 
-**How to create:**
-1. Go to [npmjs.com](https://www.npmjs.com/) and log in
-2. Click your profile icon > Access Tokens
-3. Generate New Token > Classic Token
-4. Select "Automation" type
-5. Copy the token
-
-**How to add to GitHub:**
-1. Go to your repository Settings > Secrets and variables > Actions
-2. Click "New repository secret"
-3. Name: `NPM_TOKEN`
-4. Value: paste your npm token
-5. Click "Add secret"
+The workflow must keep `id-token: write` permissions and use npm `11.5.1` or
+newer. Trusted Publishing automatically generates npm provenance for public
+packages published from public GitHub repositories.
 
 ## Homebrew Formula Update
 
@@ -32,7 +29,7 @@ The Homebrew formula in `clix-so/homebrew-clix-cli` is automatically updated usi
 
 ## Verification
 
-After setting up the secrets, you can verify the workflow by:
+After setting up Trusted Publishing, you can verify the workflow by:
 
 1. Update the version in `package.json`:
    ```bash
@@ -51,8 +48,10 @@ After setting up the secrets, you can verify the workflow by:
 ## Troubleshooting
 
 ### npm publish fails
-- Verify `NPM_TOKEN` is correct and has publish permissions
-- Ensure you're logged into the npm organization
+- Verify the npm Trusted Publisher points to `clix-so/clix-cli` and `release.yml`
+- Verify the workflow has `id-token: write` permission
+- Verify the publish job uses npm `11.5.1` or newer
+- If npm returns `ENEEDAUTH` or `E404`, check the Trusted Publisher fields exactly
 
 ### Homebrew formula update fails
 - Verify `GITHUB_TOKEN` has write access to `homebrew-clix-cli` repository
