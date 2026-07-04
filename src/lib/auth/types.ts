@@ -6,6 +6,8 @@ export interface Auth0Config {
   domain: string;
   /** Client ID */
   clientId: string;
+  /** Auth0 organization ID */
+  organizationId?: string;
   /** API audience */
   audience: string;
   /** OAuth scopes */

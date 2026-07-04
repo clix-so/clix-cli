@@ -72,6 +72,10 @@ export class PKCEFlowService {
       state: this.state,
     });
 
+    if (this.config.organizationId) {
+      params.set('organization', this.config.organizationId);
+    }
+
     const authUrl = `${this.baseUrl}/authorize?${params.toString()}`;
     return { authUrl, port };
   }

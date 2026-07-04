@@ -3,7 +3,13 @@
 // Auth Flows
 export { openBrowser } from './browser';
 // Config
-export { AUTH_ENV_VARS, getAuth0Config, getConsoleUrl, getIssuerUrl } from './config';
+export {
+  AUTH_ENV_VARS,
+  DEFAULT_CONSOLE_URL,
+  getAuth0Config,
+  getConsoleUrl,
+  getIssuerUrl,
+} from './config';
 // Credentials Manager
 export {
   CredentialsManager,

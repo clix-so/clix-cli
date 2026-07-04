@@ -1,12 +1,10 @@
-import { getConsoleUrl, getCredentialsManager } from '../auth';
+import { AUTH_ENV_VARS, DEFAULT_CONSOLE_URL, getConsoleUrl, getCredentialsManager } from '../auth';
 import { AuthError } from '../auth/errors';
 import { NetworkError } from '../errors/types';
 import type { Member, Organization, Project, SenderConfig } from './types';
 
-/**
- * Internal API proxy prefix on Console.
- */
-const API_PROXY_PREFIX = '/api/clix/internal';
+const INTERNAL_API_PROXY_PREFIX = '/api/clix/internal';
+const DEFAULT_MANAGEMENT_API_URL = 'https://management-api.clix.so';
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 interface InternalApiRequestOptions {
@@ -30,10 +28,19 @@ interface InternalApiRequestOptions {
  * ```
  */
 export class InternalApiClient {
-  private baseUrl: string;
+  private internalBaseUrl: string;
+  private managementBaseUrl: string;
 
-  constructor(consoleUrl?: string) {
-    this.baseUrl = (consoleUrl ?? getConsoleUrl()) + API_PROXY_PREFIX;
+  constructor(consoleUrl?: string, managementApiUrl?: string) {
+    const resolvedConsoleUrl = (consoleUrl ?? getConsoleUrl()).replace(/\/+$/, '');
+
+    this.internalBaseUrl = resolvedConsoleUrl + INTERNAL_API_PROXY_PREFIX;
+    this.managementBaseUrl =
+      managementApiUrl ??
+      process.env[AUTH_ENV_VARS.MANAGEMENT_API_URL] ??
+      (resolvedConsoleUrl === DEFAULT_CONSOLE_URL
+        ? DEFAULT_MANAGEMENT_API_URL
+        : `${resolvedConsoleUrl}/api/clix/management`);
   }
 
   private async resolveAccessToken(authToken?: string): Promise<string> {
@@ -64,6 +71,7 @@ export class InternalApiClient {
    * @throws NetworkError if request fails
    */
   private async request<T>(
+    baseUrl: string,
     endpoint: string,
     options: RequestInit = {},
     requestOptions: InternalApiRequestOptions = {},
@@ -71,7 +79,7 @@ export class InternalApiClient {
     const token = await this.resolveAccessToken(requestOptions.authToken);
     const timeoutMs = requestOptions.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     const maxRetries = requestOptions.maxRetries ?? 0;
-    const url = `${this.baseUrl}${endpoint}`;
+    const url = `${baseUrl}${endpoint}`;
     let attempt = 0;
 
     while (true) {
@@ -129,8 +137,13 @@ export class InternalApiClient {
    *
    * @returns Current member
    */
-  async getMe(): Promise<Member> {
-    const response = await this.request<{ member: Member }>('/api/v1/members/me');
+  async getMe(options?: InternalApiRequestOptions): Promise<Member> {
+    const response = await this.request<{ member: Member }>(
+      this.managementBaseUrl,
+      '/api/v1/members/me',
+      {},
+      options,
+    );
     return response.member;
   }
 
@@ -141,6 +154,7 @@ export class InternalApiClient {
    */
   async listOrganizations(options?: InternalApiRequestOptions): Promise<Organization[]> {
     const response = await this.request<{ organizations: Organization[] }>(
+      this.managementBaseUrl,
       '/api/v1/organizations',
       {},
       options,
@@ -159,6 +173,7 @@ export class InternalApiClient {
     options?: InternalApiRequestOptions,
   ): Promise<Project[]> {
     const response = await this.request<{ projects: Project[] }>(
+      this.managementBaseUrl,
       `/api/v1/organizations/${organizationId}/projects`,
       {},
       options,
@@ -174,6 +189,7 @@ export class InternalApiClient {
    */
   async getProject(projectId: string, options?: InternalApiRequestOptions): Promise<Project> {
     const response = await this.request<{ project: Project }>(
+      this.internalBaseUrl,
       `/api/v1/projects/${projectId}`,
       {},
       options,
@@ -194,6 +210,7 @@ export class InternalApiClient {
     options?: InternalApiRequestOptions,
   ): Promise<SenderConfig> {
     const response = await this.request<{ sender_config: SenderConfig }>(
+      this.internalBaseUrl,
       `/api/v1/projects/${projectId}/sender-configs`,
       {
         method: 'POST',
